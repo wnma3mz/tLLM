@@ -1,3 +1,5 @@
+import argparse
+import json
 import time
 import uuid
 from typing import *
@@ -34,7 +36,7 @@ class LLM:
         self.pipeline_parallel = pipeline_parallel
         self.config = config
 
-    def init_client(self, tp_url_list: List[str], state_dict_path: str):
+    def init_client(self, tp_url_list: List[str], state_dict_path: str, layer_state_dict_dir: str):
         if self.load_model_flag:
             print(f"Model has been initialized")
             return
@@ -63,7 +65,7 @@ class LLM:
                     "layer_idx_end": (pp_idx + 1) * step,
                     "tp_url_list": tp_url_list,
                     "tp_size": self.tensor_parallel,
-                    "state_dict_path": state_dict_path,
+                    "layer_state_dict_dir": layer_state_dict_dir,
                 }
             )
 
@@ -102,37 +104,38 @@ class LLM:
         return CausalLMOutputWithPast(logits=logits)
 
 
-if __name__ == "__main__":
-    pipeline_parallel_url_list = ["http://localhost:8000", "http://localhost:8001"]
-    tensor_parallel_url_list = ["http://localhost:8002", "http://localhost:8003"]
-    tensor_parallel, pipeline_parallel = len(tensor_parallel_url_list), len(pipeline_parallel_url_list)
-    # tensor_parallel, tensor_parallel_url_list = 1, ["http://localhost:8002"]
-    # pipeline_parallel, pipeline_parallel_url_list = 1, ["http://localhost:8000"]
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config-path", type=str, required=True)
+    parser.add_argument("--prompt", type=str, default="Hello, how are you?", required=False)
+    parser.add_argument("--max-tokens", type=int, default=2, required=False)
+    return parser.parse_args()
 
-    model_name = "TinyLlama-1.1B-Chat-v1.0"
-    model_path = f"/Users/lujianghu/Documents/{model_name}"
-    server = Server(pipeline_parallel_url_list)
-    config = AutoConfig.from_pretrained(model_path)
-    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
 
-    llm = LLM(config, server, tensor_parallel=tensor_parallel, pipeline_parallel=pipeline_parallel)
-
-    state_dict_path = "./weights/TinyLlama-1.1B-Chat-v1.0.pth"
-    llm.init_client(tensor_parallel_url_list, state_dict_path)
-
+def test(llm, text: str, max_tokens: int = 2):
     uuid_str = str(uuid.uuid4())
-    input_ids = tokenizer.encode("Hello, how are you?", return_tensors="pt")
+    input_ids = tokenizer.encode(text, return_tensors="pt")
     print("input_ids: ", input_ids)
-    idx = 1
-    s1 = time.time()
-    output = llm.forward(uuid_str, input_ids)
-    print(f"cost time {idx}: {time.time() - s1:.2f} s")
 
-    generate_id = torch.argmax(output.logits[0, -1], 0)
-    print(f"generate_id {idx}:", generate_id, tokenizer.decode(generate_id.tolist()))
-    input_ids = torch.cat((input_ids, generate_id.unsqueeze(0).unsqueeze(0)), dim=1)
-    idx += 1
-    output = llm.forward(uuid_str, input_ids)
-    generate_id = torch.argmax(output.logits[0, -1], 0)
-    print(f"cost time {idx}: {time.time() - s1:.2f} s")
-    print(f"generate_id {idx}:", generate_id, tokenizer.decode(generate_id.tolist()))
+    for idx in range(1, max_tokens + 1):
+        s1 = time.time()
+        output = llm.forward(uuid_str, input_ids)
+        print(f"cost time {idx}: {time.time() - s1:.2f} s")
+
+        generate_id = torch.argmax(output.logits[0, -1], 0)
+        print(f"generate_id {idx}:", generate_id, tokenizer.decode(generate_id.tolist()))
+        input_ids = torch.cat((input_ids, generate_id.unsqueeze(0).unsqueeze(0)), dim=1)
+
+
+if __name__ == "__main__":
+    args = parse_args()
+    with open(args.config_path, "r") as f:
+        config = json.load(f)
+
+    server = Server(config["pipeline_parallel_url_list"])
+    config = AutoConfig.from_pretrained(config["model_path"])
+    tokenizer = AutoTokenizer.from_pretrained(config["model_path"], trust_remote_code=True, use_fast=False)
+    llm = LLM(config, server, tensor_parallel=config["tensor_parallel"], pipeline_parallel=config["pipeline_parallel"])
+    llm.init_client(config["tensor_parallel_url_list"], config["state_dict_path"], config["layer_state_dict_dir"])
+
+    test(llm, args.text, args.max_tokens)

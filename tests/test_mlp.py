@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 
 import torch
+from server import Server
 
 from models.llama.layers import TensorParallelLlamaMLP
-from server import Server
 
 
 @dataclass

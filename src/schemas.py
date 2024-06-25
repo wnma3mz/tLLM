@@ -9,8 +9,7 @@ class LayerConfig(BaseModel):
     layer_idx_end: int
     tp_url_list: List[str]
     tp_size: int
-    state_dict_path: str
-    layer_state_dict_path: Optional[str] = None
+    layer_state_dict_dir: str
 
 
 class ForwardData(BaseModel):

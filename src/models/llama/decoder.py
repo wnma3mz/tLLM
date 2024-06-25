@@ -9,8 +9,8 @@ from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.models.llama.modeling_llama import LlamaDecoderLayer
 
 from cache_manager import CacheManager
-from models.llama.layers import TensorParallelLlamaDecoderLayer
 from communication.server import Server
+from models.llama.layers import TensorParallelLlamaDecoderLayer
 from schemas import ForwardData, LayerConfig
 from utils import tensor_to_list
 
@@ -21,8 +21,7 @@ class Decoder:
         self.layer_idx_end = config.layer_idx_end
         self.tp_url_list = config.tp_url_list
         self.tp_size = config.tp_size
-        state_dict_path = config.state_dict_path
-        # layer_state_dict_path = config.layer_state_dict_path
+        self.layer_state_dict_dir = config.layer_state_dict_dir
 
         config = PretrainedConfig.from_dict(config.config)
         config._attn_implementation = "sdpa"
@@ -31,14 +30,13 @@ class Decoder:
         if self.tp_size >= 1:
             server = Server(self.tp_url_list)
 
-        state_dict = torch.load(state_dict_path, "cpu")
         layer_list = []
         for i, layer_idx in enumerate(range(self.offset, self.layer_idx_end)):
             print(f"offload layer idx: {layer_idx}")
             if self.tp_size >= 1:
                 layer = self._init_layer_tp(config, layer_idx, i, server)
             else:
-                layer = self._init_layer_general(config, layer_idx, i, state_dict)
+                layer = self._init_layer_general(config, layer_idx, i)
             layer_list.append(layer)
 
         self.decoder = nn.ModuleList(layer_list)
@@ -51,27 +49,24 @@ class Decoder:
             config, server=server, layer_idx=i, tp_size=self.tp_size, offset=self.offset
         )
 
-        state_dict_path = f"./weights/TinyLlama-1.1B-chat-v1.0-pp1_layer_{layer_idx}.pth"
-        layer_state_dict = torch.load(state_dict_path, "cpu")
+        layer_state_dict_path = os.path.join(self.layer_state_dict_dir, f"layer_{layer_idx}.pth")
+        layer_state_dict = torch.load(layer_state_dict_path, "cpu")
         layer_state_dict = {k.split(f"model.layers.{layer_idx}.")[-1]: v for k, v in layer_state_dict.items()}
-        layer.self_attn._post_init(state_dict_path)
+        layer.self_attn._post_init(layer_state_dict_path)
         if not layer.self_attn.load_model_flag:
             raise ValueError("load self attention model failed")
-        layer.mlp._post_init(state_dict_path)
+        layer.mlp._post_init(layer_state_dict_path)
         if not layer.mlp.load_model_flag:
             raise ValueError("load mlp model failed")
         layer.input_layernorm.load_state_dict({"weight": layer_state_dict[f"input_layernorm.weight"]})
         layer.post_attention_layernorm.load_state_dict({"weight": layer_state_dict[f"post_attention_layernorm.weight"]})
         return layer
 
-    def _init_layer_general(self, config: PretrainedConfig, layer_idx: int, i: int, state_dict: Dict) -> nn.Module:
+    def _init_layer_general(self, config: PretrainedConfig, layer_idx: int, i: int) -> nn.Module:
         layer = LlamaDecoderLayer(config, layer_idx=i)
 
-        layer_state_dict = {}
-        for k, v in state_dict.items():
-            prefix_str = f"model.layers.{layer_idx}."
-            if prefix_str in k:
-                layer_state_dict[k.split(prefix_str)[-1]] = v
+        layer_state_dict = torch.load(os.path.join(self.layer_state_dict_dir, f"layer_{layer_idx}.pth"), "cpu")
+        layer_state_dict = {k.split(f"model.layers.{layer_idx}.")[-1]: v for k, v in layer_state_dict.items()}
         layer.load_state_dict(layer_state_dict)
         return layer
 
@@ -122,36 +117,3 @@ class Decoder:
         return {
             "last_hidden_state": tensor_to_list(output.last_hidden_state),
         }
-
-
-if __name__ == "__main__":
-    import pickle
-
-    from utils import list_to_tensor, tensor_to_list
-
-    with open("inputs_embeds.pkl", "rb") as f:
-        inputs_embeds = tensor_to_list(pickle.load(f))
-    with open("pkv.pkl", "rb") as f:
-        pp_past_key_values = pickle.load(f)
-    past_key_values = pp_past_key_values[0]
-
-    data = ForwardData(hidden_states=inputs_embeds, key_cache=past_key_values[0], value_cache=past_key_values[1])
-
-    from transformers import AutoConfig
-
-    model_name = "TinyLlama-1.1B-Chat-v1.0"
-    model_path = f"/Users/lujianghu/Documents/{model_name}"
-    config = AutoConfig.from_pretrained(model_path)
-
-    model = Decoder()
-    model.post_init(config, 0, 22)
-    # pipeline_parallel = 1
-    # fname = f"./weights/{model_name}-pp{pipeline_parallel}/decoder_pp0.pth"
-    # model.load_state_dict(torch.load(fname, "cpu"))
-
-    input_data = model._prepare_forward_data(data)
-
-    # assert False
-    output = model.forward(**input_data)
-    print(output)
-    # output = model.forward(hidden_states)

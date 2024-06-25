@@ -21,7 +21,7 @@ def init_model(data: LayerConfig):
     if app.init_model_flag:
         return {"msg": "Model already initialized", "status": 200}
 
-    if not os.path.isfile(data.state_dict_path):
+    if not os.path.isdir(data.layer_state_dict_dir):
         return {"msg": "Model not found", "status": 404}
 
     s1 = time.time()

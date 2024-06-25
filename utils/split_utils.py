@@ -42,7 +42,7 @@ def split_model_by_layer(model_path: str):
 
 
 if __name__ == "__main__":
-    model_path = "/Users/lujianghu/Documents/TinyLlama-1.1B-Chat-v1.0"
+    model_path = ...
     pipeline_parallel = 1
     save_dir = "./weights/TinyLlama-1.1B-chat-v1.0-pp1"
     # split_model(model_path, save_dir, pipeline_parallel, tensor_parallel=1)
