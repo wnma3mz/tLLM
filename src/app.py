@@ -8,7 +8,7 @@ from transformers import AutoConfig, AutoTokenizer
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.models.llama.modeling_llama import LlamaRMSNorm
 
-from server import Server
+from communication.server import Server
 from utils import list_to_tensor, tensor_to_list
 
 

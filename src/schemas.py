@@ -1,8 +1,6 @@
 from typing import *
 
-import torch
 from pydantic import BaseModel
-from transformers.cache_utils import Cache
 
 
 class LayerConfig(BaseModel):

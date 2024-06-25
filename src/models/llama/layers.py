@@ -13,7 +13,7 @@ from transformers.models.llama.modeling_llama import (
     repeat_kv,
 )
 
-from server import Server
+from communication.server import Server
 from utils import tensor_to_list
 
 

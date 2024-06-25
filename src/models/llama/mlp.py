@@ -3,7 +3,7 @@ from typing import Dict, List
 import torch
 import torch.nn as nn
 
-from tllm_schemas import MLPConfig, MLPForwardData
+from schemas import MLPConfig, MLPForwardData
 from utils import tensor_to_list
 
 

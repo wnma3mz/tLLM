@@ -10,8 +10,8 @@ from transformers.models.llama.modeling_llama import LlamaDecoderLayer
 
 from cache_manager import CacheManager
 from models.llama.layers import TensorParallelLlamaDecoderLayer
-from server import Server
-from tllm_schemas import ForwardData, LayerConfig
+from communication.server import Server
+from schemas import ForwardData, LayerConfig
 from utils import tensor_to_list
 
 
