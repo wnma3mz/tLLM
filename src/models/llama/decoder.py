@@ -27,13 +27,13 @@ class Decoder:
         config._attn_implementation = "sdpa"
 
         server = None
-        if self.tp_size >= 1:
+        if self.tp_size > 1:
             server = Server(self.tp_url_list)
 
         layer_list = []
         for i, layer_idx in enumerate(range(self.offset, self.layer_idx_end)):
             print(f"offload layer idx: {layer_idx}")
-            if self.tp_size >= 1:
+            if self.tp_size > 1:
                 layer = self._init_layer_tp(config, layer_idx, i, server)
             else:
                 layer = self._init_layer_general(config, layer_idx, i)

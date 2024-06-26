@@ -7,7 +7,7 @@ from fastapi import FastAPI
 
 from models.llama.decoder import Decoder
 from models.llama.mlp import MLP
-from src.schemas import ForwardData, LayerConfig, MLPConfig, MLPForwardData
+from schemas import ForwardData, LayerConfig, MLPConfig, MLPForwardData
 
 app = FastAPI()
 

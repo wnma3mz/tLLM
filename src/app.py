@@ -112,7 +112,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def test(llm, text: str, max_tokens: int = 2):
+def test(llm, tokenizer, text: str, max_tokens: int = 2):
     uuid_str = str(uuid.uuid4())
     input_ids = tokenizer.encode(text, return_tensors="pt")
     print("input_ids: ", input_ids)
@@ -133,9 +133,13 @@ if __name__ == "__main__":
         config = json.load(f)
 
     server = Server(config["pipeline_parallel_url_list"])
-    config = AutoConfig.from_pretrained(config["model_path"])
     tokenizer = AutoTokenizer.from_pretrained(config["model_path"], trust_remote_code=True, use_fast=False)
-    llm = LLM(config, server, tensor_parallel=config["tensor_parallel"], pipeline_parallel=config["pipeline_parallel"])
+    llm = LLM(
+        AutoConfig.from_pretrained(config["model_path"]),
+        server,
+        tensor_parallel=config["tensor_parallel"],
+        pipeline_parallel=config["pipeline_parallel"],
+    )
     llm.init_client(config["tensor_parallel_url_list"], config["state_dict_path"], config["layer_state_dict_dir"])
 
-    test(llm, args.text, args.max_tokens)
+    test(llm, tokenizer, args.prompt, args.max_tokens)

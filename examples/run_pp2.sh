@@ -7,4 +7,6 @@ do
     python src/communication/client.py --port $port > "server-$port.log" 2>&1 &
 done
 
-python app.py --config pp2_config.json
+echo $PYTHONPATH
+export PYTHONPATH="./src":$PYTHONPATH
+python src/app.py --config-path examples/pp2_config.json
