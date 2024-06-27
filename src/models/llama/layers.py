@@ -3,17 +3,14 @@ from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
-from transformers.models.llama.modeling_llama import (
-    ACT2FN,
-    LlamaConfig,
-    LlamaDecoderLayer,
-    LlamaRMSNorm,
-    LlamaRotaryEmbedding,
-    apply_rotary_pos_emb,
-    repeat_kv,
-)
+from transformers.models.llama.modeling_llama import (ACT2FN, LlamaConfig,
+                                                      LlamaDecoderLayer,
+                                                      LlamaRMSNorm,
+                                                      LlamaRotaryEmbedding,
+                                                      apply_rotary_pos_emb,
+                                                      repeat_kv)
 
-from communication.server import Server
+from http_comm.server import Server
 from utils import tensor_to_list
 
 
@@ -61,7 +58,7 @@ class TensorParallelLlamaMLP(nn.Module):
         response_dict = self.server.post_thread_url_dict("/init_mlp", proj_requests_dict)
         for tp_idx in range(self.tp_size):
             for response in response_dict[tp_idx]:
-                assert response.status_code == 200
+                assert response.status == 200
         self.load_model_flag = True
 
     def _prepare_forward_data(self, proj_name: str, tp_idx: int, hidden_states: torch.Tensor) -> Dict:
@@ -166,7 +163,7 @@ class TensorParallelLlamaSdpaAttention(nn.Module):
         response_dict = self.server.post_thread_url_dict("/init_mlp", proj_requests_dict)
         for tp_idx in range(self.tp_size):
             for response in response_dict[tp_idx]:
-                assert response.status_code == 200
+                assert response.status == 200
         self.load_model_flag = True
 
     def _prepare_forward_data(self, proj_name: str, tp_idx: int, hidden_states: torch.Tensor) -> Dict:

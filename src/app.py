@@ -10,7 +10,9 @@ from transformers import AutoConfig, AutoTokenizer
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.models.llama.modeling_llama import LlamaRMSNorm
 
-from communication.server import Server
+from http_comm.server import Server
+from rpc_comm.server import RPCServer
+from rpc_comm.convert import protobuf_to_list
 from utils import list_to_tensor, tensor_to_list
 
 
@@ -71,7 +73,7 @@ class LLM:
 
         response_list = self.server.post_thread("/init_model", params_list)
         for response in response_list:
-            assert response.status_code == 200, "Model init failed"
+            assert response.status == 200, "Model init failed"
         print(f"Model initialized cost time: {time.time() - s1:.2f} s")
         self.load_model_flag = True
 
@@ -93,11 +95,12 @@ class LLM:
             outputs = self.server.post_sync(
                 pp_idx, "/forward", data=self._prepare_forward_data(uuid_str, hidden_states)
             )
-            if outputs.status_code != 200:
+            if outputs.status != 200:
                 raise Exception("Forward failed")
-            output_data = outputs.json()["output"]
-            # 只需要更新 hidden_states
-            hidden_states = output_data["last_hidden_state"]
+            hidden_states = protobuf_to_list(outputs.output)
+            # output_data = outputs.json()["output"]
+            # # 只需要更新 hidden_states
+            # hidden_states = output_data["last_hidden_state"]
 
         hidden_states = self.norm(list_to_tensor(hidden_states).to(self.norm.weight.device))
         logits = self.lm_head(hidden_states)
@@ -107,6 +110,7 @@ class LLM:
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config-path", type=str, required=True)
+    parser.add_argument("--comm", type=str, default="rpc", choices=["rpc", "http"])
     parser.add_argument("--prompt", type=str, default="Hello, how are you?", required=False)
     parser.add_argument("--max-tokens", type=int, default=2, required=False)
     return parser.parse_args()
@@ -132,7 +136,12 @@ if __name__ == "__main__":
     with open(args.config_path, "r") as f:
         config = json.load(f)
 
-    server = Server(config["pipeline_parallel_url_list"])
+    if args.comm == "rpc":
+        server = RPCServer(config["pipeline_parallel_url_list"])
+    elif args.comm == "http":
+        server = Server(config["pipeline_parallel_url_list"])
+    else:
+        raise Exception("Comm type not supported")
     tokenizer = AutoTokenizer.from_pretrained(config["model_path"], trust_remote_code=True, use_fast=False)
     llm = LLM(
         AutoConfig.from_pretrained(config["model_path"]),

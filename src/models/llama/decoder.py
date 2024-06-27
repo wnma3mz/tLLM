@@ -9,7 +9,7 @@ from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.models.llama.modeling_llama import LlamaDecoderLayer
 
 from cache_manager import CacheManager
-from communication.server import Server
+from http_comm.server import Server
 from models.llama.layers import TensorParallelLlamaDecoderLayer
 from schemas import ForwardData, LayerConfig
 from utils import tensor_to_list
@@ -95,6 +95,11 @@ class Decoder:
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
     ):
+        import pickle
+
+        with open("input_hidden_states.pkl", "wb") as f:
+            pickle.dump(hidden_states, f)
+        print("input_hidden_states shape: ", hidden_states.shape)
         # 默认 use_cache=True, 存储 kv cache
         next_decoder_cache = None
         for layer in self.decoder:
@@ -109,6 +114,9 @@ class Decoder:
             # 所有层的 kv cache 放到一起了，所以这里只需要取最后一层的 kv cache
             next_decoder_cache = layer_outputs[1]
         next_cache = next_decoder_cache
+        with open("output_hidden_states.pkl", "wb") as f:
+            pickle.dump(hidden_states, f)
+        print("output_hidden_states shape: ", hidden_states.shape)
         return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=next_cache)
 
     def _prepare_output_data(self, data: ForwardData, output: BaseModelOutputWithPast) -> Dict[str, Any]:
