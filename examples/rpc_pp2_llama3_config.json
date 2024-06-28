@@ -1,0 +1,9 @@
+{
+    "pipeline_parallel_url_list": ["localhost:50051", "192.168.18.166:50052"],
+    "tensor_parallel_url_list": [""],
+    "state_dict_path": "./weights/llama3-8b/other.pth",
+    "tensor_parallel": 1,
+    "pipeline_parallel": 2,
+    "model_path": "/Users/lujianghu/Documents/Meta-Llama-3-8B-Instruct",
+    "layer_state_dict_dir": "./weights/llama3-8b"
+}

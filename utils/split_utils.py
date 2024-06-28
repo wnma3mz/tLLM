@@ -20,7 +20,7 @@ def split_model(model_path: str, save_dir: str, pipeline_parallel: int, tensor_p
         torch.save({k: v.clone() for k, v in params_state_dict.items()}, os.path.join(save_dir, f"decoder_pp{i}.pth"))
 
 
-def split_model_by_layer(model_path: str):
+def split_model_by_layer(model_path: str, save_fname: str):
     model = LlamaForCausalLM.from_pretrained(model_path, trust_remote_code=True)
 
     state_dict = model.state_dict()
@@ -28,23 +28,29 @@ def split_model_by_layer(model_path: str):
     proj_name_list2 = ["gate_proj", "up_proj", "down_proj"]
     norm_name_list = ["input_layernorm", "post_attention_layernorm"]
     for i, layer in enumerate(model.model.layers):
+        print("Layer", i)
         layer_state_dict = {}
         for proj_name in proj_name_list1:
             key_name = f"model.layers.{i}.self_attn.{proj_name}.weight"
             layer_state_dict[key_name] = state_dict[key_name]
+            state_dict.pop(key_name)
         for proj_name in proj_name_list2:
             key_name = f"model.layers.{i}.mlp.{proj_name}.weight"
             layer_state_dict[key_name] = state_dict[key_name]
+            state_dict.pop(key_name)
         for norm_name in norm_name_list:
             key_name = f"model.layers.{i}.{norm_name}.weight"
             layer_state_dict[key_name] = state_dict[key_name]
-        torch.save(layer_state_dict, f"./weights/TinyLlama-1.1B-chat-v1.0-pp1_layer_{i}.pth")
-
+            state_dict.pop(key_name)
+        torch.save(layer_state_dict, save_fname.format(i))
+    torch.save(state_dict, os.path.join(os.path.dirname(save_fname), "other.pth"))
 
 if __name__ == "__main__":
-    model_path = ...
+    # model_path = ...
     pipeline_parallel = 1
     save_dir = "./weights/TinyLlama-1.1B-chat-v1.0-pp1"
     # split_model(model_path, save_dir, pipeline_parallel, tensor_parallel=1)
 
-    split_model_by_layer(model_path)
+    model_path = "/Users/lujianghu/Documents/Meta-Llama-3-8B-Instruct"
+    os.makedirs("./weights/llama3-8b", exist_ok=True)
+    split_model_by_layer(model_path, "./weights/llama3-8b/layer_{}.pth")

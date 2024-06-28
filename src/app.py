@@ -6,12 +6,13 @@ from typing import *
 
 import torch
 import torch.nn as nn
-from transformers import AutoConfig, AutoTokenizer
+from transformers import AutoConfig
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.models.llama.modeling_llama import LlamaRMSNorm
 
+from generate.decode_utils import DecodeUtils
+from generate.token_utils import TokenizerUtils
 from http_comm.server import Server
-from rpc_comm.convert import protobuf_to_list
 from rpc_comm.server import RPCServer
 from utils import list_to_tensor, tensor_to_list
 
@@ -111,9 +112,12 @@ def parse_args():
     return parser.parse_args()
 
 
-def test(llm, tokenizer, text: str, max_tokens: int = 2):
+def test(llm, tok_path: str, text: str, max_tokens: int = 2):
     uuid_str = str(uuid.uuid4())
-    input_ids = tokenizer.encode(text, return_tensors="pt")
+
+    tok_util = TokenizerUtils(tok_path)
+    decode_util = DecodeUtils("greedy")
+    input_ids = tok_util.preprocess(text)
     print("input_ids: ", input_ids)
 
     for idx in range(1, max_tokens + 1):
@@ -121,10 +125,9 @@ def test(llm, tokenizer, text: str, max_tokens: int = 2):
         output = llm.forward(uuid_str, input_ids)
         print(f"cost time {idx}: {time.time() - s1:.2f} s")
 
-        generate_id = torch.argmax(output.logits[0, -1], 0)
-        print(f"generate_id {idx}:", generate_id, tokenizer.decode(generate_id.tolist()))
-        input_ids = torch.cat((input_ids, generate_id.unsqueeze(0).unsqueeze(0)), dim=1)
-
+        generate_id = decode_util.decode(output.logits)[0]  # batch size = 1
+        print(f"generate_id {idx}:", generate_id, tok_util.decode(generate_id))
+        input_ids = torch.cat((input_ids, torch.LongTensor([[generate_id]])), dim=1)
 
 if __name__ == "__main__":
     args = parse_args()
@@ -137,7 +140,6 @@ if __name__ == "__main__":
         server = Server(config["pipeline_parallel_url_list"])
     else:
         raise Exception("Comm type not supported")
-    tokenizer = AutoTokenizer.from_pretrained(config["model_path"], trust_remote_code=True, use_fast=False)
     llm = LLM(
         AutoConfig.from_pretrained(config["model_path"]),
         server,
@@ -146,4 +148,4 @@ if __name__ == "__main__":
     )
     llm.init_client(config["tensor_parallel_url_list"], config["state_dict_path"], config["layer_state_dict_dir"])
 
-    test(llm, tokenizer, args.prompt, args.max_tokens)
+    test(llm, config["model_path"], args.prompt, args.max_tokens)
