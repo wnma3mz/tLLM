@@ -119,9 +119,7 @@ class Decoder:
         print("output_hidden_states shape: ", hidden_states.shape)
         return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=next_cache)
 
-    def _prepare_output_data(self, data: ForwardData, output: BaseModelOutputWithPast) -> Dict[str, Any]:
+    def _prepare_output_data(self, data: ForwardData, output: BaseModelOutputWithPast) -> List:
         self.cache_manager.set(data.uuid, output.past_key_values)
         self.cache_manager.check_alive()
-        return {
-            "last_hidden_state": tensor_to_list(output.last_hidden_state),
-        }
+        return tensor_to_list(output.last_hidden_state)

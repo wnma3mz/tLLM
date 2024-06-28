@@ -11,8 +11,8 @@ from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.models.llama.modeling_llama import LlamaRMSNorm
 
 from http_comm.server import Server
-from rpc_comm.server import RPCServer
 from rpc_comm.convert import protobuf_to_list
+from rpc_comm.server import RPCServer
 from utils import list_to_tensor, tensor_to_list
 
 
@@ -72,8 +72,7 @@ class LLM:
             )
 
         response_list = self.server.post_thread("/init_model", params_list)
-        for response in response_list:
-            assert response.status == 200, "Model init failed"
+        assert self.server.is_success(response_list), "Model init failed"
         print(f"Model initialized cost time: {time.time() - s1:.2f} s")
         self.load_model_flag = True
 
@@ -95,12 +94,8 @@ class LLM:
             outputs = self.server.post_sync(
                 pp_idx, "/forward", data=self._prepare_forward_data(uuid_str, hidden_states)
             )
-            if outputs.status != 200:
-                raise Exception("Forward failed")
-            hidden_states = protobuf_to_list(outputs.output)
-            # output_data = outputs.json()["output"]
-            # # 只需要更新 hidden_states
-            # hidden_states = output_data["last_hidden_state"]
+            assert self.server.is_success(outputs), "Forward failed"
+            hidden_states = self.server.fetch_list_output(outputs)
 
         hidden_states = self.norm(list_to_tensor(hidden_states).to(self.norm.weight.device))
         logits = self.lm_head(hidden_states)

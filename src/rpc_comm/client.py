@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 import os
 import time
 from concurrent import futures
@@ -13,9 +14,9 @@ from models.llama.mlp import MLP
 from rpc_comm import schemas_pb2, schemas_pb2_grpc
 from rpc_comm.convert import list_to_protobuf, protobuf_to_list
 from schemas import ForwardData, LayerConfig, MLPConfig, MLPForwardData
-import logging
 
 logging.basicConfig(level=logging.INFO)
+
 
 class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
     def __init__(self):
@@ -72,7 +73,7 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
         return_output = self.model._prepare_output_data(request, output)
         logging.info(f"Forward pass cost time: {time.time() - s1:.2f} s")
         return schemas_pb2.ForwardResponse(
-            msg="Forward pass completed", status=200, output=list_to_protobuf(return_output["last_hidden_state"])
+            msg="Forward pass completed", status=200, output=list_to_protobuf(return_output)
         )
 
     def InitMLP(self, request, context):
@@ -108,7 +109,7 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
         return_output = layer._prepare_output_data(output)
         logging.info(f"Forward MLP {data.name} cost time: {time.time() - s1:.2f} s")
         return schemas_pb2.ForwardResponse(
-            msg="Forward MLP completed", status=200, output=list_to_protobuf(return_output["last_hidden_state"])
+            msg="Forward MLP completed", status=200, output=list_to_protobuf(return_output)
         )
 
     def Health(self, request, context):

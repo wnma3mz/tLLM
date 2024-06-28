@@ -3,12 +3,15 @@ from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
-from transformers.models.llama.modeling_llama import (ACT2FN, LlamaConfig,
-                                                      LlamaDecoderLayer,
-                                                      LlamaRMSNorm,
-                                                      LlamaRotaryEmbedding,
-                                                      apply_rotary_pos_emb,
-                                                      repeat_kv)
+from transformers.models.llama.modeling_llama import (
+    ACT2FN,
+    LlamaConfig,
+    LlamaDecoderLayer,
+    LlamaRMSNorm,
+    LlamaRotaryEmbedding,
+    apply_rotary_pos_emb,
+    repeat_kv,
+)
 
 from http_comm.server import Server
 from utils import tensor_to_list

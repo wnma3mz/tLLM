@@ -1,6 +1,6 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, List
+from typing import *
 
 import requests
 
@@ -76,5 +76,12 @@ class Server:
     def _get(self, url, path):
         return requests.get(f"{url}{path}")
 
-    def fetch_list_output(self, response_list: List[requests.Response]) -> List:
-        return [response.json()["output"] for response in response_list]
+    def fetch_list_output(self, response_list: Union[List[requests.Response], requests.Response]) -> List:
+        if isinstance(response_list, list):
+            return [response.json()["output"] for response in response_list]
+        return response_list.json()["output"]
+
+    def is_success(self, response_list: Union[List[requests.Response], requests.Response]) -> bool:
+        if isinstance(response_list, list):
+            return all(response.status_code == 200 for response in response_list)
+        return response_list.status_code == 200

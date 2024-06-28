@@ -144,5 +144,12 @@ class RPCServer:
         stub = self.stub_list[url_idx]
         return self.func_dict[path](stub, data)
 
-    def fetch_list_output(self, response_list: List) -> List:
-        return [protobuf_to_list(response.output) for response in response_list]
+    def fetch_list_output(self, response_list) -> List:
+        if isinstance(response_list, list):
+            return [protobuf_to_list(response.output) for response in response_list]
+        return protobuf_to_list(response_list.output)
+
+    def is_success(self, response_list) -> bool:
+        if isinstance(response_list, list):
+            return all([response.status == 200 for response in response_list])
+        return response_list.status == 200
