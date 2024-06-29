@@ -16,6 +16,7 @@ from http_comm.server import Server
 from rpc_comm.server import RPCServer
 from utils import tensor_to_list
 
+cost_time_dict = {}
 
 class LLM:
     """
@@ -90,20 +91,27 @@ class LLM:
         input_ids: torch.LongTensor = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
     ):
+        s1 = time.time()
         if inputs_embeds is None:
             inputs_embeds = self.embedding(input_ids)
+        cost_time_dict["embedding"] = time.time() - s1
 
         hidden_states = inputs_embeds
         for pp_idx in range(self.pipeline_parallel):
+            s1 = time.time()
             # tp could request in parallel
             outputs = self.server.post_sync(
                 pp_idx, "/forward", data=self._prepare_forward_data(uuid_str, hidden_states)
             )
             assert self.server.is_success(outputs), "Forward failed"
             hidden_states = self.server.fetch_list_output(outputs)
+            cost_time_dict[f"forward {pp_idx}"] = time.time() - s1
+            cost_time_dict[f"forward {pp_idx} calc"] = self.server.fetch_list_cost_time(outputs)
 
+        s1 = time.time()
         hidden_states = self.norm(torch.tensor(hidden_states).to(inputs_embeds.dtype).to(self.norm.weight.device))
         logits = self.lm_head(hidden_states)
+        cost_time_dict["lm_head"] = time.time() - s1
         return CausalLMOutputWithPast(logits=logits)
 
 
@@ -128,6 +136,10 @@ def test(llm, tok_path: str, text: str, max_tokens: int = 2):
         s1 = time.time()
         output = llm.forward(uuid_str, input_ids)
         print(f"cost time {idx}: {time.time() - s1:.2f} s")
+        print("="*5 + f" cost time (detailed) " + "="*5)
+        for k, v in cost_time_dict.items():
+            print(f"{k}: {v:.2f} s")
+        print("="*5 + f" cost time (detailed) " + "="*5)
 
         generate_id = decode_util.decode(output.logits)[0]  # batch size = 1
         print(f"generate_id {idx}:", generate_id, tok_util.decode(generate_id))

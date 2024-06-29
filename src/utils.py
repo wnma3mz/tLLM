@@ -1,6 +1,11 @@
+import socket
 from typing import List, Optional
 
 import torch
+
+
+def get_ip_address() -> str:
+    return socket.gethostbyname(socket.gethostname())
 
 
 def create_decoder_attention_mask(size: int) -> torch.Tensor:

@@ -1,6 +1,7 @@
 {
     "pipeline_parallel_url_list": ["localhost:50051", "localhost:50052"],
-    "bak)pipeline_parallel_url_list": ["localhost:50051", "192.168.18.166:50052"],
+    "bak2_pipeline_parallel_url_list": ["localhost:50051", "192.168.18.166:50052"],
+    "bak3_pipeline_parallel_url_list": ["localhost:50051", "100.79.209.18:50052"],
     "tensor_parallel_url_list": [""],
     "state_dict_path": "./weights/llama3-8b/other.pth",
     "tensor_parallel": 1,

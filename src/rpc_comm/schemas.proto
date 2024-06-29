@@ -65,6 +65,7 @@ message MLPForwardData {
     int32 layer_idx = 3;
     MultiDimensionalArray hidden_states = 4;
     string name = 5;
+    float cost_time = 6;
 }
 
 message StatusResponse {
@@ -76,6 +77,7 @@ message ForwardResponse {
     string msg = 1;
     int32 status = 2;
     MultiDimensionalArray output = 3;
+    float cost_time = 4;
 }
 
 message HealthResponse {

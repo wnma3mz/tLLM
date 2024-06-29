@@ -85,3 +85,8 @@ class Server:
         if isinstance(response_list, list):
             return all(response.status_code == 200 for response in response_list)
         return response_list.status_code == 200
+
+    def fetch_list_cost_time(self, response_list: Union[List[requests.Response], requests.Response]) -> List:
+        if isinstance(response_list, list):
+            return [response.json()["cost_time"] for response in response_list]
+        return response_list.json()["cost_time"]

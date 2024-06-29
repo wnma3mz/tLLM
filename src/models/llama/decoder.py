@@ -97,8 +97,6 @@ class Decoder:
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
     ):
-        print(hidden_states.dtype)
-        print(self.decoder[0])
         # 默认 use_cache=True, 存储 kv cache
         next_decoder_cache = None
         for layer in self.decoder:
@@ -113,7 +111,6 @@ class Decoder:
             # 所有层的 kv cache 放到一起了，所以这里只需要取最后一层的 kv cache
             next_decoder_cache = layer_outputs[1]
         next_cache = next_decoder_cache
-        print("output_hidden_states shape: ", hidden_states.shape)
         return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=next_cache)
 
     def _prepare_output_data(self, data: ForwardData, output: BaseModelOutputWithPast) -> List:
