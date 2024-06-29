@@ -14,7 +14,7 @@ from generate.decode_utils import DecodeUtils
 from generate.token_utils import TokenizerUtils
 from http_comm.server import Server
 from rpc_comm.server import RPCServer
-from utils import list_to_tensor, tensor_to_list
+from utils import tensor_to_list
 
 
 class LLM:
@@ -32,6 +32,10 @@ class LLM:
         self.embedding = nn.Embedding(config.vocab_size, config.hidden_size)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.embedding.to(dtype=config.torch_dtype)
+        self.lm_head.to(dtype=config.torch_dtype)
+        self.norm.to(dtype=config.torch_dtype)
+
         self.load_model_flag = False
 
         self.server = server
@@ -98,7 +102,7 @@ class LLM:
             assert self.server.is_success(outputs), "Forward failed"
             hidden_states = self.server.fetch_list_output(outputs)
 
-        hidden_states = self.norm(list_to_tensor(hidden_states).to(self.norm.weight.device))
+        hidden_states = self.norm(torch.tensor(hidden_states).to(inputs_embeds.dtype).to(self.norm.weight.device))
         logits = self.lm_head(hidden_states)
         return CausalLMOutputWithPast(logits=logits)
 
@@ -128,6 +132,7 @@ def test(llm, tok_path: str, text: str, max_tokens: int = 2):
         generate_id = decode_util.decode(output.logits)[0]  # batch size = 1
         print(f"generate_id {idx}:", generate_id, tok_util.decode(generate_id))
         input_ids = torch.cat((input_ids, torch.LongTensor([[generate_id]])), dim=1)
+
 
 if __name__ == "__main__":
     args = parse_args()

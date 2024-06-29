@@ -3,12 +3,15 @@ from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
-from transformers.models.llama.modeling_llama import (ACT2FN, LlamaConfig,
-                                                      LlamaDecoderLayer,
-                                                      LlamaRMSNorm,
-                                                      LlamaRotaryEmbedding,
-                                                      apply_rotary_pos_emb,
-                                                      repeat_kv)
+from transformers.models.llama.modeling_llama import (
+    ACT2FN,
+    LlamaConfig,
+    LlamaDecoderLayer,
+    LlamaRMSNorm,
+    LlamaRotaryEmbedding,
+    apply_rotary_pos_emb,
+    repeat_kv,
+)
 
 from http_comm.server import Server
 from utils import tensor_to_list
@@ -81,8 +84,8 @@ class TensorParallelLlamaMLP(nn.Module):
         response_dict = self.server.post_thread_url_dict("/forward_mlp", proj_requests_dict)
         for tp_idx in range(self.tp_size):
             gate_proj_slice, up_proj_slice = self.server.fetch_list_output(response_dict[tp_idx])
-            gate_proj_list.append(torch.tensor(gate_proj_slice).to(x.device))
-            up_proj_list.append(torch.tensor(up_proj_slice).to(x.device))
+            gate_proj_list.append(torch.tensor(gate_proj_slice, dtype=x.dtype).to(x.device))
+            up_proj_list.append(torch.tensor(up_proj_slice, dtype=x.dtype).to(x.device))
         # concat data
         concat_gate_proj_out = torch.cat(gate_proj_list, dim=-1)
         concat_up_proj_out = torch.cat(up_proj_list, dim=-1)
@@ -96,7 +99,10 @@ class TensorParallelLlamaMLP(nn.Module):
         ]
         down_proj_slice_list = self.server.post_thread("/forward_mlp", x_list)
         down_proj = sum(
-            map(lambda out: torch.tensor(out).to(x.device), self.server.fetch_list_output(down_proj_slice_list))
+            map(
+                lambda out: torch.tensor(out, dtype=x.dtype).to(x.device),
+                self.server.fetch_list_output(down_proj_slice_list),
+            )
         )
         return down_proj
 
@@ -200,9 +206,9 @@ class TensorParallelLlamaSdpaAttention(nn.Module):
         proj_response_dict = self.server.post_thread_url_dict("/forward_mlp", proj_requests_dict)
         for tp_idx in range(self.tp_size):
             query, key, value = self.server.fetch_list_output(proj_response_dict[tp_idx])
-            query_list.append(torch.tensor(query).to(hidden_states.device))
-            key_list.append(torch.tensor(key).to(hidden_states.device))
-            value_list.append(torch.tensor(value).to(hidden_states.device))
+            query_list.append(torch.tensor(query, dtype=hidden_states.dtype).to(hidden_states.device))
+            key_list.append(torch.tensor(key, dtype=hidden_states.dtype).to(hidden_states.device))
+            value_list.append(torch.tensor(value, dtype=hidden_states.dtype).to(hidden_states.device))
 
         # concat data
         query_states = torch.cat(query_list, dim=-1)
@@ -259,7 +265,10 @@ class TensorParallelLlamaSdpaAttention(nn.Module):
         attn_output_list = self.server.post_thread("/forward_mlp", data_list)
 
         attn_output = sum(
-            map(lambda out: torch.tensor(out).to(hidden_states.device), self.server.fetch_list_output(attn_output_list))
+            map(
+                lambda out: torch.tensor(out, dtype=hidden_states.dtype).to(hidden_states.device),
+                self.server.fetch_list_output(attn_output_list),
+            )
         )
         return attn_output, None, past_key_value
 

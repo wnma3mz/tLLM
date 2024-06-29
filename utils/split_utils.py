@@ -45,6 +45,7 @@ def split_model_by_layer(model_path: str, save_fname: str):
         torch.save(layer_state_dict, save_fname.format(i))
     torch.save(state_dict, os.path.join(os.path.dirname(save_fname), "other.pth"))
 
+
 if __name__ == "__main__":
     # model_path = ...
     pipeline_parallel = 1

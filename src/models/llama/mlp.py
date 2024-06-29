@@ -36,7 +36,7 @@ class MLP(nn.Module):
             raise ValueError("Invalid data")
 
     def _prepare_forward_data(self, data: MLPForwardData) -> torch.Tensor:
-        return torch.tensor(data.hidden_states)
+        return torch.tensor(data.hidden_states, dtype=self.mlp.weight.dtype)
 
     def forward(self, x):
         return self.mlp(x)

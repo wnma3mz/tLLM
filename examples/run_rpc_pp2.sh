@@ -10,4 +10,4 @@ done
 sleep 1
 echo $PYTHONPATH
 export PYTHONPATH="./src":$PYTHONPATH
-python src/app.py --config-path examples/rpc_pp2_config.json --comm rpc
+python src/app.py --config-path examples/rpc_pp2_llama3_config.json --comm rpc

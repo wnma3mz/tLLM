@@ -16,7 +16,7 @@ def tensor_to_list(tensor: Optional[torch.Tensor]) -> List:
         return None
     if not isinstance(tensor, torch.Tensor):
         return tensor
-    return tensor.cpu().detach().numpy().tolist()
+    return tensor.float().cpu().detach().numpy().tolist()
 
 
 def list_to_tensor(lst: Optional[List]) -> torch.Tensor:

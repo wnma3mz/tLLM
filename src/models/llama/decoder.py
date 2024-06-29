@@ -25,6 +25,7 @@ class Decoder:
 
         config = PretrainedConfig.from_dict(config.config)
         config._attn_implementation = "sdpa"
+        self.config = config
 
         server = None
         if self.tp_size > 1:
@@ -40,6 +41,7 @@ class Decoder:
             layer_list.append(layer)
 
         self.decoder = nn.ModuleList(layer_list)
+        self.decoder.to(dtype=config.torch_dtype)
         self.cache_manager = CacheManager()
         # self.cache_manager.cache_dict[uuid]["past_key_values"]
         # key_cache/value_cache: (layer_idx, batch_size, num_heads, seq_len, head_dim)
@@ -71,7 +73,7 @@ class Decoder:
         return layer
 
     def _prepare_forward_data(self, data: ForwardData) -> torch.Tensor:
-        hidden_states = torch.tensor(data.hidden_states)
+        hidden_states = torch.tensor(data.hidden_states, dtype=self.config.torch_dtype)
         # 客户端自行生成 position_ids
         if data.uuid in self.cache_manager.cache_dict:
             kv_cache_seq_len = self.cache_manager.cache_dict[data.uuid]["past_key_values"].key_cache[0].shape[-2]
@@ -95,11 +97,8 @@ class Decoder:
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
     ):
-        import pickle
-
-        with open("input_hidden_states.pkl", "wb") as f:
-            pickle.dump(hidden_states, f)
-        print("input_hidden_states shape: ", hidden_states.shape)
+        print(hidden_states.dtype)
+        print(self.decoder[0])
         # 默认 use_cache=True, 存储 kv cache
         next_decoder_cache = None
         for layer in self.decoder:
@@ -114,8 +113,6 @@ class Decoder:
             # 所有层的 kv cache 放到一起了，所以这里只需要取最后一层的 kv cache
             next_decoder_cache = layer_outputs[1]
         next_cache = next_decoder_cache
-        with open("output_hidden_states.pkl", "wb") as f:
-            pickle.dump(hidden_states, f)
         print("output_hidden_states shape: ", hidden_states.shape)
         return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=next_cache)
 
