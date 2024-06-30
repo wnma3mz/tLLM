@@ -84,7 +84,7 @@ if __name__ == "__main__":
     # os.makedirs("./weights/llama3-8b", exist_ok=True)
     # split_model_by_layer(model_path, "./weights/llama3-8b/layer_{}.pth")
 
-    # model_path = "/Users/lujianghu/Documents/Meta-Llama-3-8B-Instruct"
-    model_path = "/Users/lujianghu/Documents/TinyLlama-1.1B-Chat-v1.0"
-    os.makedirs("./np_weights/tiny-llama", exist_ok=True)
-    split_model_by_layer_numpy(model_path, "./np_weights/tiny-llama/layer_{}.npy")
+    model_path = "/Users/lujianghu/Documents/Meta-Llama-3-8B-Instruct"
+    # model_path = "/Users/lujianghu/Documents/TinyLlama-1.1B-Chat-v1.0"
+    os.makedirs("./np_weights/llama3-8b", exist_ok=True)
+    split_model_by_layer_numpy(model_path, "./np_weights/llama3-8b/layer_{}.npy")

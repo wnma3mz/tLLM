@@ -145,7 +145,7 @@ class Decoder:
         layer_state_dict = np.load(
             os.path.join(self.layer_state_dict_dir, f"layer_{layer_idx}.npy"), allow_pickle=True
         ).item()
-        layer_state_dict = {k.split(f"model.layers.{layer_idx}.")[-1]: v for k, v in layer_state_dict.items()}
+        layer_state_dict = {k.split(f"model.layers.{layer_idx}.")[-1]: v.astype(self.config.torch_dtype) for k, v in layer_state_dict.items()}
         layer.load_state_dict(layer_state_dict)
         return layer
 

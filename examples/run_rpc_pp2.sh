@@ -1,4 +1,4 @@
-ports=(50051 50052)
+ports=(50051)
 for port in "${ports[@]}"
 do
     echo "Killing processes using port $port..."
