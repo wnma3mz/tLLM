@@ -2,12 +2,15 @@
 
 跨机推理 LLM 框架
 
+- Easy to use
+- Multi-machine
+
 ### RoadMap
 
 #### backend
 
 - [X] transformers
-- [ ] numpy?
+- [x] numpy
 - [ ] cpp
 
 #### communication
@@ -80,3 +83,8 @@ weights
 | 4    |           |     |            |
 | 8    |           |     |            |
 |      |           |     |            |
+
+
+### Reference
+
+numpy implementation: https://github.com/likejazz/llama3.np/tree/main

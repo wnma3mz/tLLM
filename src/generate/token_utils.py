@@ -11,7 +11,7 @@ class TokenizerUtils:
         if message:
             text = self.tokenizer.apply_chat_template(message)
         if text:
-            input_ids = self.tokenizer.encode(text, return_tensors="pt")
+            input_ids = self.tokenizer.encode(text, return_tensors="np")
             return input_ids
         raise ValueError("Please provide text or message")
 

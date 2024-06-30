@@ -4,3 +4,5 @@ __pycache__
 *.pyc
 *.pkl
 weights/
+np_weights/
+distributed-llama/

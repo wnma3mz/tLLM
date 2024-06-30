@@ -1,31 +1,49 @@
 from typing import List
 
-import torch
-import torch.nn.functional as F
+import numpy as np
 
 
-def top_k_sampling(logits: torch.Tensor, k: int = 10):
-    logits = logits.squeeze(0)  # Assuming logits is [1, vocab_size]
-    filtered_logits, top_inds = logits.topk(k)
-    top_probs = F.softmax(filtered_logits, dim=-1)
-    chosen_ind = torch.multinomial(top_probs, 1)
-    return top_inds[chosen_ind].unsqueeze(0)
+def top_k_sampling(logits: np.ndarray, k: int = 10):
+    logits = np.squeeze(logits, axis=0)  # Assuming logits is [1, vocab_size]
+    top_inds = np.argsort(logits)[::-1][:k]
+    filtered_logits = logits[top_inds]
+    top_probs = np.exp(filtered_logits - np.max(filtered_logits))
+    top_probs /= np.sum(top_probs)
+    chosen_ind = np.random.choice(top_inds, p=top_probs)
+    return np.array([chosen_ind])
 
 
-def top_p_sampling(logits: torch.Tensor, p: float = 0.9):
-    logits = logits.squeeze(0)  # Assuming logits is [1, vocab_size]
-    sorted_logits, sorted_indices = torch.sort(logits, descending=True)
-    cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
+def top_p_sampling(logits: np.ndarray, p: float = 0.9):
+    logits = np.squeeze(logits, axis=0)  # Assuming logits is [1, vocab_size]
+
+    # Sort logits in descending order
+    sorted_indices = np.argsort(logits)[::-1]
+    sorted_logits = logits[sorted_indices]
+
+    # Calculate cumulative probabilities
+    sorted_probs = np.exp(sorted_logits - np.max(sorted_logits))
+    cumulative_probs = np.cumsum(sorted_probs) / np.sum(sorted_probs)
+
+    # Find indices to remove based on cumulative probability threshold p
     sorted_indices_to_remove = cumulative_probs > p
-    sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
-    sorted_indices_to_remove[..., 0] = 0
+    sorted_indices_to_remove[1:] = sorted_indices_to_remove[:-1]  # Shift to the right
+    sorted_indices_to_remove[0] = False  # Always keep the highest probability index
+
     indices_to_remove = sorted_indices[sorted_indices_to_remove]
+
+    # Set logits of indices to remove to -inf
     logits[indices_to_remove] = float("-inf")
-    sampled_ind = torch.multinomial(F.softmax(logits, dim=-1), 1)
-    return sampled_ind.unsqueeze(0)
+
+    # Perform multinomial sampling from remaining logits
+    remaining_probs = np.exp(logits - np.max(logits))
+    remaining_probs /= np.sum(remaining_probs)
+    sampled_ind = np.random.choice(np.arange(len(logits)), p=remaining_probs)
+
+    # Return sampled index as numpy array
+    return np.array([sampled_ind])
 
 
-def temperature_scaling(logits: torch.Tensor, temperature: float = 1.0):
+def temperature_scaling(logits: np.ndarray, temperature: float = 1.0):
     scaled_logits = logits / temperature
     return scaled_logits
 
@@ -41,13 +59,13 @@ class DecodeUtils:
         elif self.method == "beam_search":
             return self.beam_search_decode(input_ids)
 
-    def greedy_decode(self, logits: torch.Tensor) -> List[int]:
+    def greedy_decode(self, logits: np.ndarray) -> List[int]:
         # logits shape: [batch_size, sequence_length, vocab_size]
-        return torch.argmax(logits[:, -1], dim=-1).tolist()
+        return np.argmax(logits[:, -1], axis=-1).tolist()
 
     def beam_search_decode(
         self,
-        logits: torch.Tensor,
+        logits: np.ndarray,
         beam_width: int = 3,
         max_len: int = 20,
         top_k: int = 0,
@@ -57,7 +75,7 @@ class DecodeUtils:
         batch_size, sequence_length, vocab_size = logits.size()
 
         # Initialize the beam search
-        beams = [[[torch.tensor([], dtype=torch.long), 0.0]] for _ in range(batch_size)]
+        beams = [[[np.ndarray([], dtype=np.int64), 0.0]] for _ in range(batch_size)]
 
         for _ in range(max_len):
             all_candidates = []
@@ -82,9 +100,9 @@ class DecodeUtils:
                 if top_p < 1.0:
                     scaled_logits = top_p_sampling(scaled_logits, p=top_p)
 
-                next_logits = torch.log_softmax(scaled_logits[:, -1, :], dim=-1)
+                next_logits = np.log_softmax(scaled_logits[:, -1, :], axis=-1)
 
-                top_scores, top_inds = torch.topk(next_logits, beam_width)
+                top_scores, top_inds = np.topk(next_logits, beam_width)
                 for score, ind in zip(top_scores[0], top_inds[0]):
                     score = score.item() + score
                     all_candidates.append((seq, score, ind))

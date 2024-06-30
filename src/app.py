@@ -2,21 +2,26 @@ import argparse
 import json
 import time
 import uuid
+from dataclasses import dataclass
 from typing import *
 
-import torch
-import torch.nn as nn
+import numpy as np
 from transformers import AutoConfig
-from transformers.modeling_outputs import CausalLMOutputWithPast
-from transformers.models.llama.modeling_llama import LlamaRMSNorm
 
 from generate.decode_utils import DecodeUtils
 from generate.token_utils import TokenizerUtils
 from http_comm.server import Server
+from models.common.layers import Embedding, Linear, RMSNorm
 from rpc_comm.server import RPCServer
 from utils import tensor_to_list
 
 cost_time_dict = {}
+
+
+@dataclass
+class CausalLMOutputWithPast:
+    logits: np.ndarray
+
 
 class LLM:
     """
@@ -30,13 +35,9 @@ class LLM:
     """
 
     def __init__(self, config, server, tensor_parallel: int = 1, pipeline_parallel: int = 1):
-        self.embedding = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.embedding.to(dtype=config.torch_dtype)
-        self.lm_head.to(dtype=config.torch_dtype)
-        self.norm.to(dtype=config.torch_dtype)
-
+        self.embedding = Embedding(None)
+        self.norm = RMSNorm(None, eps=config.rms_norm_eps)
+        self.lm_head = Linear(None)
         self.load_model_flag = False
 
         self.server = server
@@ -57,7 +58,7 @@ class LLM:
         print("Model initializing...")
         s1 = time.time()
         # localhost init model
-        state_dict = torch.load(state_dict_path, "cpu")
+        state_dict = np.load(state_dict_path, allow_pickle=True).item()
         self.embedding.load_state_dict({"weight": state_dict["model.embed_tokens.weight"]})
         self.lm_head.load_state_dict({"weight": state_dict["lm_head.weight"]})
         self.norm.load_state_dict({"weight": state_dict["model.norm.weight"]})
@@ -82,14 +83,14 @@ class LLM:
         print(f"Model initialized cost time: {time.time() - s1:.2f} s")
         self.load_model_flag = True
 
-    def _prepare_forward_data(self, uuid_str: str, hidden_states: torch.Tensor) -> Dict:
+    def _prepare_forward_data(self, uuid_str: str, hidden_states: np.ndarray) -> Dict:
         return {"uuid": uuid_str, "hidden_states": tensor_to_list(hidden_states)}
 
     def forward(
         self,
         uuid_str: str,
-        input_ids: torch.LongTensor = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        input_ids: np.ndarray = None,
+        inputs_embeds: Optional[np.ndarray] = None,
     ):
         s1 = time.time()
         if inputs_embeds is None:
@@ -109,7 +110,7 @@ class LLM:
             cost_time_dict[f"forward {pp_idx} calc"] = self.server.fetch_list_cost_time(outputs)
 
         s1 = time.time()
-        hidden_states = self.norm(torch.tensor(hidden_states).to(inputs_embeds.dtype).to(self.norm.weight.device))
+        hidden_states = self.norm(np.array(hidden_states, dtype=inputs_embeds.dtype))
         logits = self.lm_head(hidden_states)
         cost_time_dict["lm_head"] = time.time() - s1
         return CausalLMOutputWithPast(logits=logits)
@@ -136,14 +137,14 @@ def test(llm, tok_path: str, text: str, max_tokens: int = 2):
         s1 = time.time()
         output = llm.forward(uuid_str, input_ids)
         print(f"cost time {idx}: {time.time() - s1:.2f} s")
-        print("="*5 + f" cost time (detailed) " + "="*5)
+        print("=" * 5 + f" cost time (detailed) " + "=" * 5)
         for k, v in cost_time_dict.items():
             print(f"{k}: {v:.2f} s")
-        print("="*5 + f" cost time (detailed) " + "="*5)
+        print("=" * 5 + f" cost time (detailed) " + "=" * 5)
 
         generate_id = decode_util.decode(output.logits)[0]  # batch size = 1
         print(f"generate_id {idx}:", generate_id, tok_util.decode(generate_id))
-        input_ids = torch.cat((input_ids, torch.LongTensor([[generate_id]])), dim=1)
+        input_ids = np.concatenate((input_ids, np.array([[generate_id]])), axis=1)
 
 
 if __name__ == "__main__":

@@ -10,7 +10,8 @@ import grpc
 from google.protobuf import json_format, struct_pb2
 
 from models.llama.decoder import Decoder
-from models.llama.mlp import MLP
+
+# from models.llama.mlp import MLP
 from rpc_comm import schemas_pb2, schemas_pb2_grpc
 from rpc_comm.convert import list_to_protobuf, protobuf_to_list
 from schemas import ForwardData, LayerConfig, MLPConfig, MLPForwardData
@@ -78,7 +79,9 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
         return_output = list_to_protobuf(return_output)
         cost_time = time.time() - s1
         logging.info(f"{self.prefix_log_str} Forward pass cost time: {cost_time:.2f} s")
-        return schemas_pb2.ForwardResponse(msg="Forward pass completed", status=200, output=return_output, cost_time=cost_time)
+        return schemas_pb2.ForwardResponse(
+            msg="Forward pass completed", status=200, output=return_output, cost_time=cost_time
+        )
 
     def InitMLP(self, request, context):
         data = MLPConfig(
@@ -94,7 +97,8 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
         s1 = time.time()
         logging.info(f"{self.prefix_log_str} Init MLP {data.proj_name} Config: {data.input_size}x{data.output_size}")
         try:
-            self.mlp_dict[data.name] = MLP(data)
+            pass
+            # self.mlp_dict[data.name] = MLP(data)
         except Exception as e:
             logging.info(f"{self.prefix_log_str} MLP initialization failed ", e)
             return schemas_pb2.StatusResponse(msg="MLP initialization failed", status=500)
@@ -114,7 +118,9 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
         return_output = list_to_protobuf(return_output)
         cost_time = time.time() - s1
         logging.info(f"{self.prefix_log_str} Forward MLP {data.name} cost time: {cost_time} s")
-        return schemas_pb2.ForwardResponse(msg="Forward MLP completed", status=200, output=return_output, cost_time=cost_time)
+        return schemas_pb2.ForwardResponse(
+            msg="Forward MLP completed", status=200, output=return_output, cost_time=cost_time
+        )
 
     def Health(self, request, context):
         return schemas_pb2.HealthResponse(msg="Healthy", status=200)
