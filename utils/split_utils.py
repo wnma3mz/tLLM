@@ -23,6 +23,7 @@ def split_model(model_path: str, save_dir: str, pipeline_parallel: int, tensor_p
 
 def split_model_by_layer(model_path: str, save_fname: str):
     model = LlamaForCausalLM.from_pretrained(model_path, trust_remote_code=True)
+    model.to(torch.bfloat16)
 
     state_dict = model.state_dict()
     proj_name_list1 = ["q_proj", "k_proj", "v_proj", "o_proj"]
@@ -49,6 +50,8 @@ def split_model_by_layer(model_path: str, save_fname: str):
 
 def split_model_by_layer_numpy(model_path: str, save_fname: str):
     model = LlamaForCausalLM.from_pretrained(model_path, trust_remote_code=True)
+    model.to(torch.bfloat16)
+    target_dtype = torch.float16 # for convert to numpy
 
     state_dict = model.state_dict()
     proj_name_list1 = ["q_proj", "k_proj", "v_proj", "o_proj"]
@@ -59,18 +62,18 @@ def split_model_by_layer_numpy(model_path: str, save_fname: str):
         layer_state_dict = {}
         for proj_name in proj_name_list1:
             key_name = f"model.layers.{i}.self_attn.{proj_name}.weight"
-            layer_state_dict[key_name] = state_dict[key_name].numpy()
+            layer_state_dict[key_name] = state_dict[key_name].to(target_dtype).numpy()
             state_dict.pop(key_name)
         for proj_name in proj_name_list2:
             key_name = f"model.layers.{i}.mlp.{proj_name}.weight"
-            layer_state_dict[key_name] = state_dict[key_name].numpy()
+            layer_state_dict[key_name] = state_dict[key_name].to(target_dtype).numpy()
             state_dict.pop(key_name)
         for norm_name in norm_name_list:
             key_name = f"model.layers.{i}.{norm_name}.weight"
-            layer_state_dict[key_name] = state_dict[key_name].numpy()
+            layer_state_dict[key_name] = state_dict[key_name].to(target_dtype).numpy()
             state_dict.pop(key_name)
         np.save(save_fname.format(i), layer_state_dict)
-    state_dict = {k: v.numpy() for k, v in state_dict.items()}
+    state_dict = {k: v.to(target_dtype).numpy() for k, v in state_dict.items()}
     np.save(os.path.join(os.path.dirname(save_fname), "other.npy"), state_dict)
 
 
@@ -84,7 +87,10 @@ if __name__ == "__main__":
     # os.makedirs("./weights/llama3-8b", exist_ok=True)
     # split_model_by_layer(model_path, "./weights/llama3-8b/layer_{}.pth")
 
-    model_path = "/Users/lujianghu/Documents/Meta-Llama-3-8B-Instruct"
     # model_path = "/Users/lujianghu/Documents/TinyLlama-1.1B-Chat-v1.0"
+    # os.makedirs("./np_weights/tiny-llama", exist_ok=True)
+    # split_model_by_layer_numpy(model_path, "./np_weights/tiny-llama/layer_{}.npy")
+
+    model_path = "/Users/lujianghu/Documents/Meta-Llama-3-8B-Instruct"
     os.makedirs("./np_weights/llama3-8b", exist_ok=True)
     split_model_by_layer_numpy(model_path, "./np_weights/llama3-8b/layer_{}.npy")
