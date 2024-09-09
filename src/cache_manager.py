@@ -1,5 +1,5 @@
 import time
-
+from typing import *
 
 class CacheManager:
     # 管理每个 client 的 past_key_values，即 kv_cache
@@ -8,10 +8,10 @@ class CacheManager:
         self.max_alive_time = max_alive_time
         self.cache_dict = {}
 
-    def get(self, key):
+    def get(self, key) -> Any:
         return self.cache_dict.get(key)
 
-    def set(self, key, value):
+    def set(self, key, value: Any) -> None:
         self.cache_dict[key] = {"past_key_values": value, "ts": time.time()}
 
     def delete(self, key):

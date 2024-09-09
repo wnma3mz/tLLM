@@ -120,7 +120,7 @@ def parse_args():
     parser.add_argument("--config-path", type=str, required=True)
     parser.add_argument("--comm", type=str, default="rpc", choices=["rpc", "http"])
     parser.add_argument("--prompt", type=str, default="Hello, how are you?", required=False)
-    parser.add_argument("--max-tokens", type=int, default=2, required=False)
+    parser.add_argument("--max-tokens", type=int, default=20, required=False)
     return parser.parse_args()
 
 
@@ -129,9 +129,13 @@ def test(llm, tok_path: str, text: str, max_tokens: int = 2):
 
     tok_util = TokenizerUtils(tok_path)
     decode_util = DecodeUtils("greedy")
+    formatted_prompt = "### Human: {}### Assistant:"
+    text = formatted_prompt.format("Hello, how are you?")
     input_ids = tok_util.preprocess(text)
     print("input_ids: ", input_ids)
 
+    output_ids = []
+    output_texts = []
     for idx in range(1, max_tokens + 1):
         s1 = time.time()
         output = llm.forward(uuid_str, input_ids)
@@ -141,10 +145,13 @@ def test(llm, tok_path: str, text: str, max_tokens: int = 2):
             print(f"{k}: {v:.2f} s")
         print("="*5 + f" cost time (detailed) " + "="*5)
 
-        generate_id = decode_util.decode(output.logits)[0]  # batch size = 1
-        print(f"generate_id {idx}:", generate_id, tok_util.decode(generate_id))
-        input_ids = torch.cat((input_ids, torch.LongTensor([[generate_id]])), dim=1)
-
+        generate_ids = decode_util.decode(output.logits)
+        generate_id = generate_ids[0]  # batch size = 1
+        output_ids.append(generate_id)
+        output_texts.append(tok_util.decode(generate_id))
+        print(f"generate_id {idx}:", output_ids[-1], output_texts[-1])
+        input_ids = torch.tensor(generate_ids).unsqueeze(0)
+    print("output_texts: ", tok_util.tokenizer.decode(output_ids))
 
 if __name__ == "__main__":
     args = parse_args()

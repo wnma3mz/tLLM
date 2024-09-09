@@ -17,20 +17,14 @@ class MLP(nn.Module):
             state_dict = torch.load(data.state_dict_path, "cpu")
             if data.proj_name in ["gate_proj", "up_proj", "down_proj"]:
                 layer_name = f"model.layers.{data.layer_idx}.mlp.{data.proj_name}.weight"
-                if data.proj_name == "down_proj":
-                    split_size, split_dim = data.input_size, 1
-                else:
-                    split_size, split_dim = data.output_size, 0
+                chunk_dim = 1 if data.proj_name == "down_proj" else 0
             elif data.proj_name in ["q_proj", "k_proj", "v_proj", "o_proj"]:
                 layer_name = f"model.layers.{data.layer_idx}.self_attn.{data.proj_name}.weight"
-                if data.proj_name[0] == "o":
-                    split_size, split_dim = data.input_size, 1
-                else:
-                    split_size, split_dim = data.output_size, 0
+                chunk_dim = 1 if data.proj_name[0] == "o" else 0
             else:
                 raise ValueError(f"Invalid proj_name: {data.proj_name}")
 
-            proj_state_dict = {"weight": state_dict[layer_name].split(split_size, dim=split_dim)[data.tp_idx].clone()}
+            proj_state_dict = {"weight": state_dict[layer_name].chunk(data.tp_size, dim=chunk_dim)[data.tp_idx].clone()}
             self.mlp.load_state_dict(proj_state_dict)
         else:
             raise ValueError("Invalid data")

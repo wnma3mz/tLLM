@@ -39,7 +39,6 @@ class TensorParallelLlamaMLP(nn.Module):
         for tp_idx in range(self.tp_size):
             proj_list = []
             for proj_key in proj_key_list:
-                # weight_data = proj_dict[proj_key]
                 base_proj_config = {
                     "mlp_bias": self.config.mlp_bias,
                     "proj_name": proj_key,
@@ -47,7 +46,6 @@ class TensorParallelLlamaMLP(nn.Module):
                     "tp_size": self.tp_size,
                     "layer_idx": self.layer_idx + self.offset,
                     "state_dict_path": state_dict_path,
-                    # "weight_data": tensor_to_list(weight_data[tp_idx]),
                 }
                 proj_config = copy.deepcopy(base_proj_config)
                 if proj_key == "gate_proj" or proj_key == "up_proj":
@@ -61,7 +59,7 @@ class TensorParallelLlamaMLP(nn.Module):
         response_dict = self.server.post_thread_url_dict("/init_mlp", proj_requests_dict)
         for tp_idx in range(self.tp_size):
             for response in response_dict[tp_idx]:
-                assert response.status == 200
+                assert response.status_code == 200
         self.load_model_flag = True
 
     def _prepare_forward_data(self, proj_name: str, tp_idx: int, hidden_states: torch.Tensor) -> Dict:
@@ -143,8 +141,6 @@ class TensorParallelLlamaSdpaAttention(nn.Module):
         for tp_idx in range(self.tp_size):
             proj_config_list = []
             for proj_name in proj_key_list:
-                # name = f"{proj_name}_proj_{tp_idx}_layer_idx_{self.layer_idx}"
-                # weight_data = tensor_to_list(proj_dict[proj_name][tp_idx])
                 if proj_name[0] == "q":
                     input_size, output_size = self.hidden_size, self.query_slices
                 elif proj_name[0] == "k" or proj_name[0] == "v":
@@ -158,18 +154,17 @@ class TensorParallelLlamaSdpaAttention(nn.Module):
                     "output_size": output_size,
                     "tp_idx": tp_idx,
                     "tp_size": self.tp_size,
-                    "layer_idx": self.layer_idx + +self.offset,
+                    "layer_idx": self.layer_idx + self.offset,
                     "mlp_bias": self.config.mlp_bias,
                     "proj_name": proj_name,
                     "state_dict_path": state_dict_path,
-                    # "weight_data": weight_data,
                 }
                 proj_config_list.append(proj_config)
             proj_requests_dict[tp_idx] = proj_config_list
         response_dict = self.server.post_thread_url_dict("/init_mlp", proj_requests_dict)
         for tp_idx in range(self.tp_size):
             for response in response_dict[tp_idx]:
-                assert response.status == 200
+                assert response.status_code == 200
         self.load_model_flag = True
 
     def _prepare_forward_data(self, proj_name: str, tp_idx: int, hidden_states: torch.Tensor) -> Dict:
@@ -219,6 +214,7 @@ class TensorParallelLlamaSdpaAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
+        print("position_ids:", position_ids)
         cos, sin = self.rotary_emb(value_states, position_ids)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 

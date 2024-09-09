@@ -7,6 +7,7 @@ from transformers.cache_utils import Cache, DynamicCache
 from transformers.configuration_utils import PretrainedConfig
 from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.models.llama.modeling_llama import LlamaDecoderLayer
+# from mlx_lm.models.llama import TransformerBlock, ModelArgs
 
 from cache_manager import CacheManager
 from http_comm.server import Server
@@ -28,13 +29,13 @@ class Decoder:
         self.config = config
 
         server = None
-        if self.tp_size > 1:
+        if self.tp_size >= 1:
             server = Server(self.tp_url_list)
 
         layer_list = []
         for i, layer_idx in enumerate(range(self.offset, self.layer_idx_end)):
             print(f"offload layer idx: {layer_idx}")
-            if self.tp_size > 1:
+            if self.tp_size >= 1:
                 layer = self._init_layer_tp(config, layer_idx, i, server)
             else:
                 layer = self._init_layer_general(config, layer_idx, i)
@@ -64,22 +65,16 @@ class Decoder:
         layer.post_attention_layernorm.load_state_dict({"weight": layer_state_dict[f"post_attention_layernorm.weight"]})
         return layer
 
-    def _init_layer_general(self, config: PretrainedConfig, layer_idx: int, i: int) -> nn.Module:
-        layer = LlamaDecoderLayer(config, layer_idx=i)
-
-        layer_state_dict = torch.load(os.path.join(self.layer_state_dict_dir, f"layer_{layer_idx}.pth"), "cpu")
-        layer_state_dict = {k.split(f"model.layers.{layer_idx}.")[-1]: v for k, v in layer_state_dict.items()}
-        layer.load_state_dict(layer_state_dict)
-        return layer
-
     def _prepare_forward_data(self, data: ForwardData) -> torch.Tensor:
         hidden_states = torch.tensor(data.hidden_states, dtype=self.config.torch_dtype)
         # 客户端自行生成 position_ids
         if data.uuid in self.cache_manager.cache_dict:
             kv_cache_seq_len = self.cache_manager.cache_dict[data.uuid]["past_key_values"].key_cache[0].shape[-2]
-            request_seq_len = hidden_states.size(1) - 1
-            assert kv_cache_seq_len == request_seq_len, "seq_len not match"
-            position_ids = torch.tensor([request_seq_len], dtype=torch.long).unsqueeze(0)
+            print(f'kv_cache_seq_len: {self.cache_manager.cache_dict[data.uuid]["past_key_values"].key_cache[0].shape}')
+            print(f"hiddens_states_seq_len: {hidden_states.size(1)}")
+            # request_seq_len = hidden_states.size(1) - 1
+            # assert kv_cache_seq_len == request_seq_len, "seq_len not match"
+            position_ids = torch.tensor([kv_cache_seq_len], dtype=torch.long).unsqueeze(0)
             past_key_values = self.cache_manager.get(data.uuid)["past_key_values"]
         else:
             position_ids = torch.arange(hidden_states.size(1), dtype=torch.long).unsqueeze(0)
@@ -111,6 +106,7 @@ class Decoder:
             # 所有层的 kv cache 放到一起了，所以这里只需要取最后一层的 kv cache
             next_decoder_cache = layer_outputs[1]
         next_cache = next_decoder_cache
+        print("next_cache: ", next_cache[0][0].shape)
         return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=next_cache)
 
     def _prepare_output_data(self, data: ForwardData, output: BaseModelOutputWithPast) -> List:
