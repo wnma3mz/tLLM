@@ -5,11 +5,17 @@ import time
 
 
 def load_model_and_tokenizer(model_path: str) -> Tuple[LlamaForCausalLM, AutoTokenizer]:
-    model = LlamaForCausalLM.from_pretrained(model_path, trust_remote_code=True, device_map="cpu")
-    tok = AutoTokenizer.from_pretrained(model_path, use_fast=True, trust_remote_code=True)
+    model = LlamaForCausalLM.from_pretrained(
+        model_path, trust_remote_code=True, device_map="cpu"
+    )
+    tok = AutoTokenizer.from_pretrained(
+        model_path, use_fast=True, trust_remote_code=True
+    )
     return model, tok
 
+
 formatted_prompt = "### Human: {}### Assistant:"
+
 
 def tokenize_message(tok: AutoTokenizer, messages: List[Dict[str, str]]) -> List[int]:
     inputs = formatted_prompt.format(messages[0]["content"])
@@ -21,6 +27,7 @@ def tokenize_message(tok: AutoTokenizer, messages: List[Dict[str, str]]) -> List
         input_ids.pop(0)
     return input_ids
 
+
 if __name__ == "__main__":
     model_path = "/Users/jianghulu/Documents/TinyLlama-1.1B-Chat-v0.1"
     model, tok = load_model_and_tokenizer(model_path)
@@ -28,9 +35,7 @@ if __name__ == "__main__":
     assert False
     model.eval()
 
-    messages = [
-        {"role": "user", "content": "Hello, how are you?"}
-    ]
+    messages = [{"role": "user", "content": "Hello, how are you?"}]
     input_id_list = tokenize_message(tok, messages)
     input_ids = torch.tensor(input_id_list).unsqueeze(0)
     print("input_ids: ", input_ids)
@@ -40,6 +45,6 @@ if __name__ == "__main__":
     s1 = time.time()
     output = model.generate(input_ids, max_new_tokens=20, do_sample=False)
     print(f"Time taken: {time.time() - s1}")
-    print(tok.decode(output[0][input_ids.shape[1]:], skip_special_tokens=True))
+    print(tok.decode(output[0][input_ids.shape[1] :], skip_special_tokens=True))
 
-    # 2.6-3.0s 
+    # 2.6-3.0s

@@ -8,8 +8,10 @@ from pydantic import BaseModel
 
 app = FastAPI()
 
+
 class MLPData(BaseModel):
     x: List[List[float]]
+
 
 class MLP(nn.Module):
     def __init__(self, config: dict):
@@ -22,6 +24,7 @@ class MLP(nn.Module):
 
 app.layer = MLP({"input_size": 4096, "output_size": 4096})
 
+
 @app.post("/forward")
 def forward_mlp(mlp_data: MLPData):
     input_x = torch.tensor(mlp_data.x)
@@ -29,6 +32,8 @@ def forward_mlp(mlp_data: MLPData):
     output = app.layer(input_x)
     return {"output": output.tolist(), "cost_time": time.time() - s1}
 
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8003)

@@ -18,6 +18,7 @@ from utils import tensor_to_list
 
 cost_time_dict = {}
 
+
 class LLM:
     """
     localhost:
@@ -29,7 +30,9 @@ class LLM:
     - de tokenizer
     """
 
-    def __init__(self, config, server, tensor_parallel: int = 1, pipeline_parallel: int = 1):
+    def __init__(
+        self, config, server, tensor_parallel: int = 1, pipeline_parallel: int = 1
+    ):
         self.embedding = nn.Embedding(config.vocab_size, config.hidden_size)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -44,7 +47,13 @@ class LLM:
         self.pipeline_parallel = pipeline_parallel
         self.config = config
 
-    def init_client(self, tp_url_list: List[str], state_dict_path: str, layer_state_dict_dir: str, layer_start_end_list = None):
+    def init_client(
+        self,
+        tp_url_list: List[str],
+        state_dict_path: str,
+        layer_state_dict_dir: str,
+        layer_start_end_list=None,
+    ):
         if self.load_model_flag:
             print(f"Model has been initialized")
             return
@@ -58,7 +67,9 @@ class LLM:
         s1 = time.time()
         # localhost init model
         state_dict = torch.load(state_dict_path, "cpu")
-        self.embedding.load_state_dict({"weight": state_dict["model.embed_tokens.weight"]})
+        self.embedding.load_state_dict(
+            {"weight": state_dict["model.embed_tokens.weight"]}
+        )
         self.lm_head.load_state_dict({"weight": state_dict["lm_head.weight"]})
         self.norm.load_state_dict({"weight": state_dict["model.norm.weight"]})
 
@@ -69,7 +80,7 @@ class LLM:
             if layer_start_end_list is not None:
                 layer_idx_start, layer_start_end = layer_start_end_list[pp_idx]
             else:
-                layer_idx_start, layer_start_end = pp_idx * step, (pp_idx + 1) * step            
+                layer_idx_start, layer_start_end = pp_idx * step, (pp_idx + 1) * step
             params_list.append(
                 {
                     "config": self.config.to_dict(),
@@ -105,15 +116,23 @@ class LLM:
             s1 = time.time()
             # tp could request in parallel
             outputs = self.server.post_sync(
-                pp_idx, "/forward", data=self._prepare_forward_data(uuid_str, hidden_states)
+                pp_idx,
+                "/forward",
+                data=self._prepare_forward_data(uuid_str, hidden_states),
             )
             assert self.server.is_success(outputs), "Forward failed"
             hidden_states = self.server.fetch_list_output(outputs)
             cost_time_dict[f"forward {pp_idx}"] = time.time() - s1
-            cost_time_dict[f"forward {pp_idx} calc"] = self.server.fetch_list_cost_time(outputs)
+            cost_time_dict[f"forward {pp_idx} calc"] = self.server.fetch_list_cost_time(
+                outputs
+            )
 
         s1 = time.time()
-        hidden_states = self.norm(torch.tensor(hidden_states).to(inputs_embeds.dtype).to(self.norm.weight.device))
+        hidden_states = self.norm(
+            torch.tensor(hidden_states)
+            .to(inputs_embeds.dtype)
+            .to(self.norm.weight.device)
+        )
         logits = self.lm_head(hidden_states)
         cost_time_dict["lm_head"] = time.time() - s1
         return CausalLMOutputWithPast(logits=logits)
@@ -123,7 +142,9 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config-path", type=str, required=True)
     parser.add_argument("--comm", type=str, default="rpc", choices=["rpc", "http"])
-    parser.add_argument("--prompt", type=str, default="Hello, how are you?", required=False)
+    parser.add_argument(
+        "--prompt", type=str, default="Hello, how are you?", required=False
+    )
     parser.add_argument("--max-tokens", type=int, default=20, required=False)
     return parser.parse_args()
 
@@ -134,7 +155,13 @@ def test(llm, tok_path: str, text: str, max_tokens: int = 2):
     tok_util = TokenizerUtils(tok_path)
     decode_util = DecodeUtils("greedy")
     text = "Who are you?"
-    message = [{"role": "system", "content": "You are a pirate chatbot who always responds in pirate speak!"}, {"role": "user", "content": text}]
+    message = [
+        {
+            "role": "system",
+            "content": "You are a pirate chatbot who always responds in pirate speak!",
+        },
+        {"role": "user", "content": text},
+    ]
     input_ids = tok_util.preprocess(message=message)
     print("input_ids: ", input_ids)
 
@@ -147,10 +174,10 @@ def test(llm, tok_path: str, text: str, max_tokens: int = 2):
         s1 = time.time()
         output = llm.forward(uuid_str, input_ids)
         print(f"cost time {idx}: {time.time() - s1:.2f} s")
-        print("="*5 + f" cost time (detailed) " + "="*5)
+        print("=" * 5 + f" cost time (detailed) " + "=" * 5)
         for k, v in cost_time_dict.items():
             print(f"{k}: {v:.2f} s")
-        print("="*5 + f" cost time (detailed) " + "="*5)
+        print("=" * 5 + f" cost time (detailed) " + "=" * 5)
 
         generate_ids = decode_util.decode(output.logits)
         generate_id = generate_ids[0]  # batch size = 1
@@ -159,6 +186,7 @@ def test(llm, tok_path: str, text: str, max_tokens: int = 2):
         print(f"generate_id {idx}:", output_ids[-1], output_texts[-1])
         input_ids = torch.tensor(generate_ids).unsqueeze(0)
     print("output_texts: ", tok_util.tokenizer.decode(output_ids))
+
 
 if __name__ == "__main__":
     args = parse_args()
@@ -177,8 +205,20 @@ if __name__ == "__main__":
         tensor_parallel=config["tensor_parallel"],
         pipeline_parallel=config["pipeline_parallel"],
     )
-    if "layer_start_end_list" in config and len(config["layer_start_end_list"]) == config["pipeline_parallel"]:
-        llm.init_client(config["tensor_parallel_url_list"], config["state_dict_path"], config["layer_state_dict_dir"], config["layer_start_end_list"])
+    if (
+        "layer_start_end_list" in config
+        and len(config["layer_start_end_list"]) == config["pipeline_parallel"]
+    ):
+        llm.init_client(
+            config["tensor_parallel_url_list"],
+            config["state_dict_path"],
+            config["layer_state_dict_dir"],
+            config["layer_start_end_list"],
+        )
     else:
-        llm.init_client(config["tensor_parallel_url_list"], config["state_dict_path"], config["layer_state_dict_dir"])
+        llm.init_client(
+            config["tensor_parallel_url_list"],
+            config["state_dict_path"],
+            config["layer_state_dict_dir"],
+        )
     test(llm, config["model_path"], args.prompt, args.max_tokens)

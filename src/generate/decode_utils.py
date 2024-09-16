@@ -65,9 +65,13 @@ class DecodeUtils:
                 seq, score = beam[-1]
                 if len(seq) > 0:
                     input_ids = seq.unsqueeze(0)  # [1, seq_length]
-                    input_logits = logits.new_zeros((1, sequence_length + 1, vocab_size))
+                    input_logits = logits.new_zeros(
+                        (1, sequence_length + 1, vocab_size)
+                    )
                     input_logits[:, :sequence_length, :] = logits
-                    input_logits[:, sequence_length, :] = logits.gather(2, input_ids).squeeze(0)
+                    input_logits[:, sequence_length, :] = logits.gather(
+                        2, input_ids
+                    ).squeeze(0)
                 else:
                     input_logits = logits
 

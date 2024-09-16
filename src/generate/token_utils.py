@@ -5,11 +5,17 @@ from transformers import AutoConfig, AutoTokenizer
 
 class TokenizerUtils:
     def __init__(self, tok_path: str):
-        self.tokenizer = AutoTokenizer.from_pretrained(tok_path, trust_remote_code=True, use_fast=False)
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            tok_path, trust_remote_code=True, use_fast=False
+        )
 
-    def preprocess(self, text: str = None, message: List[Dict[str, str]] = None) -> List[int]:
+    def preprocess(
+        self, text: str = None, message: List[Dict[str, str]] = None
+    ) -> List[int]:
         if message:
-            text = self.tokenizer.apply_chat_template(message, tokenize=False, add_generation_prompt=True)
+            text = self.tokenizer.apply_chat_template(
+                message, tokenize=False, add_generation_prompt=True
+            )
             print(text)
         input_ids = self.tokenizer.encode(text, return_tensors="pt")
         return input_ids

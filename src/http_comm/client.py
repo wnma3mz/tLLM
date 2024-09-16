@@ -34,7 +34,9 @@ def init_model(data: LayerConfig):
     logging.info(f"{app.prefix_log_str} {data}")
     app.model.post_init(data)
     app.init_model_flag = True
-    logging.info(f"{app.prefix_log_str} Model initialized cost time: {time.time() - s1:.2f} s")
+    logging.info(
+        f"{app.prefix_log_str} Model initialized cost time: {time.time() - s1:.2f} s"
+    )
     return {"msg": "Model initialized", "status": 200}
 
 
@@ -46,7 +48,12 @@ def forward(data: ForwardData):
     return_output = app.model._prepare_output_data(data, output)
     cost_time = time.time() - s1
     logging.info(f"{app.prefix_log_str} Forward pass cost time: {cost_time:.2f} s")
-    return {"msg": "Forward pass completed", "status": 200, "output": return_output, "cost_time": cost_time}
+    return {
+        "msg": "Forward pass completed",
+        "status": 200,
+        "output": return_output,
+        "cost_time": cost_time,
+    }
 
 
 @app.post("/init_mlp")
@@ -56,13 +63,17 @@ def init_mlp(data: MLPConfig):
         return {"msg": "MLP already initialized", "status": 200}
 
     s1 = time.time()
-    logging.info(f"{app.prefix_log_str} Init MLP {data.proj_name} Config: {data.input_size}x{data.output_size}")
+    logging.info(
+        f"{app.prefix_log_str} Init MLP {data.proj_name} Config: {data.input_size}x{data.output_size}"
+    )
     try:
         app.mlp_dict[data.name] = MLP(data)
     except Exception as e:
         logging.info(f"{app.prefix_log_str} MLP initialization failed ", e)
         return {"msg": "MLP initialization failed", "status": 500}
-    logging.info(f"{app.prefix_log_str} MLP {data.name} initialized cost time: {time.time() - s1:.2f} s")
+    logging.info(
+        f"{app.prefix_log_str} MLP {data.name} initialized cost time: {time.time() - s1:.2f} s"
+    )
     return {"msg": "MLP initialized", "status": 200}
 
 
@@ -74,8 +85,15 @@ def forward_mlp(data: MLPForwardData):
     output = layer.forward(layer._prepare_forward_data(data))
     return_output = layer._prepare_output_data(output)
     cost_time = time.time() - s1
-    logging.info(f"{app.prefix_log_str} Forward MLP {data.name} cost time: {cost_time:.2f} s")
-    return {"msg": "Forward MLP completed", "status": 200, "output": return_output, "cost_time": cost_time}
+    logging.info(
+        f"{app.prefix_log_str} Forward MLP {data.name} cost time: {cost_time:.2f} s"
+    )
+    return {
+        "msg": "Forward MLP completed",
+        "status": 200,
+        "output": return_output,
+        "cost_time": cost_time,
+    }
 
 
 @app.get("/health")

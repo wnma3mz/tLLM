@@ -18,7 +18,9 @@ from utils import tensor_to_list
 
 
 class TensorParallelLlamaMLP(nn.Module):
-    def __init__(self, config, server: Server, layer_idx: int, tp_size: int, offset: int):
+    def __init__(
+        self, config, server: Server, layer_idx: int, tp_size: int, offset: int
+    ):
         super().__init__()
         self.tp_size = tp_size
         self.layer_idx = layer_idx
@@ -49,20 +51,34 @@ class TensorParallelLlamaMLP(nn.Module):
                 }
                 proj_config = copy.deepcopy(base_proj_config)
                 if proj_key == "gate_proj" or proj_key == "up_proj":
-                    proj_config.update({"input_size": self.hidden_size, "output_size": self.slice_intermediate_size})
+                    proj_config.update(
+                        {
+                            "input_size": self.hidden_size,
+                            "output_size": self.slice_intermediate_size,
+                        }
+                    )
                 elif proj_key == "down_proj":
-                    proj_config.update({"input_size": self.slice_intermediate_size, "output_size": self.hidden_size})
+                    proj_config.update(
+                        {
+                            "input_size": self.slice_intermediate_size,
+                            "output_size": self.hidden_size,
+                        }
+                    )
                 else:
                     raise ValueError(f"Invalid proj_key: {proj_key}")
                 proj_list.append(proj_config)
             proj_requests_dict[tp_idx] = proj_list
-        response_dict = self.server.post_thread_url_dict("/init_mlp", proj_requests_dict)
+        response_dict = self.server.post_thread_url_dict(
+            "/init_mlp", proj_requests_dict
+        )
         for tp_idx in range(self.tp_size):
             for response in response_dict[tp_idx]:
                 assert response.status_code == 200
         self.load_model_flag = True
 
-    def _prepare_forward_data(self, proj_name: str, tp_idx: int, hidden_states: torch.Tensor) -> Dict:
+    def _prepare_forward_data(
+        self, proj_name: str, tp_idx: int, hidden_states: torch.Tensor
+    ) -> Dict:
         return {
             "proj_name": proj_name,
             "tp_idx": tp_idx,
@@ -76,23 +92,34 @@ class TensorParallelLlamaMLP(nn.Module):
         proj_requests_dict = {}
         for tp_idx in range(self.tp_size):
             proj_data_list = [
-                self._prepare_forward_data(proj_name, tp_idx, x) for proj_name in ["gate_proj", "up_proj"]
+                self._prepare_forward_data(proj_name, tp_idx, x)
+                for proj_name in ["gate_proj", "up_proj"]
             ]
             proj_requests_dict[tp_idx] = proj_data_list
-        response_dict = self.server.post_thread_url_dict("/forward_mlp", proj_requests_dict)
+        response_dict = self.server.post_thread_url_dict(
+            "/forward_mlp", proj_requests_dict
+        )
         for tp_idx in range(self.tp_size):
-            gate_proj_slice, up_proj_slice = self.server.fetch_list_output(response_dict[tp_idx])
-            gate_proj_list.append(torch.tensor(gate_proj_slice, dtype=x.dtype).to(x.device))
+            gate_proj_slice, up_proj_slice = self.server.fetch_list_output(
+                response_dict[tp_idx]
+            )
+            gate_proj_list.append(
+                torch.tensor(gate_proj_slice, dtype=x.dtype).to(x.device)
+            )
             up_proj_list.append(torch.tensor(up_proj_slice, dtype=x.dtype).to(x.device))
         # concat data
         concat_gate_proj_out = torch.cat(gate_proj_list, dim=-1)
         concat_up_proj_out = torch.cat(up_proj_list, dim=-1)
 
         intermediate_states = self.act_fn(concat_gate_proj_out) * concat_up_proj_out
-        intermediate_states_list = intermediate_states.split(self.slice_intermediate_size, dim=2)
+        intermediate_states_list = intermediate_states.split(
+            self.slice_intermediate_size, dim=2
+        )
 
         x_list = [
-            self._prepare_forward_data("down_proj", tp_idx, intermediate_states_list[tp_idx])
+            self._prepare_forward_data(
+                "down_proj", tp_idx, intermediate_states_list[tp_idx]
+            )
             for tp_idx in range(self.tp_size)
         ]
         down_proj_slice_list = self.server.post_thread("/forward_mlp", x_list)
@@ -106,7 +133,9 @@ class TensorParallelLlamaMLP(nn.Module):
 
 
 class TensorParallelLlamaSdpaAttention(nn.Module):
-    def __init__(self, config, server: Server, layer_idx: int, tp_size: int, offset: int):
+    def __init__(
+        self, config, server: Server, layer_idx: int, tp_size: int, offset: int
+    ):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -126,7 +155,9 @@ class TensorParallelLlamaSdpaAttention(nn.Module):
         )
 
         self.tp_size = tp_size
-        self.key_value_slicing = (self.num_key_value_heads * self.head_dim) // self.tp_size
+        self.key_value_slicing = (
+            self.num_key_value_heads * self.head_dim
+        ) // self.tp_size
         self.query_slices = (self.num_heads * self.head_dim) // self.tp_size
         self.o_slicing = self.hidden_size // self.tp_size
         self.server = server
@@ -161,13 +192,17 @@ class TensorParallelLlamaSdpaAttention(nn.Module):
                 }
                 proj_config_list.append(proj_config)
             proj_requests_dict[tp_idx] = proj_config_list
-        response_dict = self.server.post_thread_url_dict("/init_mlp", proj_requests_dict)
+        response_dict = self.server.post_thread_url_dict(
+            "/init_mlp", proj_requests_dict
+        )
         for tp_idx in range(self.tp_size):
             for response in response_dict[tp_idx]:
                 assert response.status_code == 200
         self.load_model_flag = True
 
-    def _prepare_forward_data(self, proj_name: str, tp_idx: int, hidden_states: torch.Tensor) -> Dict:
+    def _prepare_forward_data(
+        self, proj_name: str, tp_idx: int, hidden_states: torch.Tensor
+    ) -> Dict:
         return {
             "proj_name": proj_name,
             "tp_idx": tp_idx,
@@ -194,34 +229,56 @@ class TensorParallelLlamaSdpaAttention(nn.Module):
         for tp_idx in range(self.tp_size):
             data_list = []
             for proj_name in ["q_proj", "k_proj", "v_proj"]:
-                data = self._prepare_forward_data(proj_name, tp_idx, tensor_to_list(hidden_states))
+                data = self._prepare_forward_data(
+                    proj_name, tp_idx, tensor_to_list(hidden_states)
+                )
                 data_list.append(data)
             proj_requests_dict[tp_idx] = data_list
 
-        proj_response_dict = self.server.post_thread_url_dict("/forward_mlp", proj_requests_dict)
+        proj_response_dict = self.server.post_thread_url_dict(
+            "/forward_mlp", proj_requests_dict
+        )
         for tp_idx in range(self.tp_size):
-            query, key, value = self.server.fetch_list_output(proj_response_dict[tp_idx])
-            query_list.append(torch.tensor(query, dtype=hidden_states.dtype).to(hidden_states.device))
-            key_list.append(torch.tensor(key, dtype=hidden_states.dtype).to(hidden_states.device))
-            value_list.append(torch.tensor(value, dtype=hidden_states.dtype).to(hidden_states.device))
+            query, key, value = self.server.fetch_list_output(
+                proj_response_dict[tp_idx]
+            )
+            query_list.append(
+                torch.tensor(query, dtype=hidden_states.dtype).to(hidden_states.device)
+            )
+            key_list.append(
+                torch.tensor(key, dtype=hidden_states.dtype).to(hidden_states.device)
+            )
+            value_list.append(
+                torch.tensor(value, dtype=hidden_states.dtype).to(hidden_states.device)
+            )
 
         # concat data
         query_states = torch.cat(query_list, dim=-1)
         key_states = torch.cat(key_list, dim=-1)
         value_states = torch.cat(value_list, dim=-1)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(
+            bsz, q_len, self.num_heads, self.head_dim
+        ).transpose(1, 2)
+        key_states = key_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
+        value_states = value_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
 
         print("position_ids:", position_ids)
         cos, sin = self.rotary_emb(value_states, position_ids)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin
+        )
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -255,14 +312,18 @@ class TensorParallelLlamaSdpaAttention(nn.Module):
 
         attn_output = attn_output.split(self.o_slicing, dim=2)
         data_list = [
-            self._prepare_forward_data("o_proj", tp_idx, tensor_to_list(attn_output[tp_idx]))
+            self._prepare_forward_data(
+                "o_proj", tp_idx, tensor_to_list(attn_output[tp_idx])
+            )
             for tp_idx in range(self.tp_size)
         ]
         attn_output_list = self.server.post_thread("/forward_mlp", data_list)
 
         attn_output = sum(
             map(
-                lambda out: torch.tensor(out, dtype=hidden_states.dtype).to(hidden_states.device),
+                lambda out: torch.tensor(out, dtype=hidden_states.dtype).to(
+                    hidden_states.device
+                ),
                 self.server.fetch_list_output(attn_output_list),
             )
         )
@@ -270,12 +331,18 @@ class TensorParallelLlamaSdpaAttention(nn.Module):
 
 
 class TensorParallelLlamaDecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: LlamaConfig, server: Server, layer_idx: int, tp_size: int, offset):
+    def __init__(
+        self, config: LlamaConfig, server: Server, layer_idx: int, tp_size: int, offset
+    ):
         super().__init__(config, layer_idx)
         self.hidden_size = config.hidden_size
 
-        self.self_attn = TensorParallelLlamaSdpaAttention(config, server, layer_idx, tp_size, offset)
+        self.self_attn = TensorParallelLlamaSdpaAttention(
+            config, server, layer_idx, tp_size, offset
+        )
 
         self.mlp = TensorParallelLlamaMLP(config, server, layer_idx, tp_size, offset)
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = LlamaRMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )

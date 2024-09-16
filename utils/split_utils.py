@@ -3,6 +3,7 @@ import os
 import torch
 from transformers import LlamaForCausalLM
 
+
 def split_model_by_layer(model_path: str, save_fname: str, tp: int):
     model = LlamaForCausalLM.from_pretrained(model_path, trust_remote_code=True)
 
@@ -17,13 +18,17 @@ def split_model_by_layer(model_path: str, save_fname: str, tp: int):
             for proj_name in proj_name_list1:
                 key_name = f"model.layers.{i}.self_attn.{proj_name}.weight"
                 split_dim = 0 if proj_name[0] in "qkv" else 1
-                layer_state_dict[key_name] = state_dict[key_name].chunk(tp, dim=split_dim)[tp_idx].clone()
+                layer_state_dict[key_name] = (
+                    state_dict[key_name].chunk(tp, dim=split_dim)[tp_idx].clone()
+                )
                 if tp_idx == tp - 1:
                     state_dict.pop(key_name)
             for proj_name in proj_name_list2:
                 key_name = f"model.layers.{i}.mlp.{proj_name}.weight"
                 split_dim = 1 if "down" in proj_name else 0
-                layer_state_dict[key_name] = state_dict[key_name].chunk(tp, dim=split_dim)[tp_idx].clone()
+                layer_state_dict[key_name] = (
+                    state_dict[key_name].chunk(tp, dim=split_dim)[tp_idx].clone()
+                )
                 if tp_idx == tp - 1:
                     state_dict.pop(key_name)
             for norm_name in norm_name_list:
@@ -44,7 +49,7 @@ if __name__ == "__main__":
     # model_path = "/Users/lujianghu/Documents/Meta-Llama-3-8B-Instruct"
 
     base_model_name = os.path.basename(model_path)
-    
+
     output_dir = os.path.join("weights_tp", base_model_name)
     os.makedirs(output_dir, exist_ok=True)
     tp = 2

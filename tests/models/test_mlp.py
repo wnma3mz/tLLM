@@ -18,7 +18,9 @@ if __name__ == "__main__":
     url_list = ["http://localhost:8000", "http://localhost:8001"]
     server = Server(url_list)
     hidden_size, intermediate_size = 2, 8
-    config = Config(hidden_size=hidden_size, intermediate_size=intermediate_size, mlp_bias=False)
+    config = Config(
+        hidden_size=hidden_size, intermediate_size=intermediate_size, mlp_bias=False
+    )
     t_mlp = TensorParallelLlamaMLP(config, server, layer_idx=0, tp_size=2)
 
     state_dict = {

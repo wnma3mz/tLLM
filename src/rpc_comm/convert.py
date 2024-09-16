@@ -4,13 +4,19 @@ from rpc_comm import schemas_pb2, schemas_pb2_grpc
 
 
 def protobuf_to_list(proto_message):
-    if proto_message.HasField("block_tensor") and proto_message.block_tensor is not None:
+    if (
+        proto_message.HasField("block_tensor")
+        and proto_message.block_tensor is not None
+    ):
         return [
             [[list(row.elements) for row in matrix.rows] for matrix in tensor.layers]
             for tensor in proto_message.block_tensor.blocks
         ]
     elif proto_message.HasField("tensor") and proto_message.tensor is not None:
-        return [[list(row.elements) for row in matrix.rows] for matrix in proto_message.tensor.layers]
+        return [
+            [list(row.elements) for row in matrix.rows]
+            for matrix in proto_message.tensor.layers
+        ]
     elif proto_message.HasField("matrix") and proto_message.matrix is not None:
         return [list(row.elements) for row in proto_message.matrix.rows]
     elif proto_message.HasField("array") and proto_message.array is not None:
@@ -29,7 +35,10 @@ def list_to_protobuf(data: List):
             array = schemas_pb2.Array()
             array.elements.extend(data)
             multi_array_proto.array.CopyFrom(array)
-        elif all(isinstance(row, list) and all(isinstance(item, float) for item in row) for row in data):
+        elif all(
+            isinstance(row, list) and all(isinstance(item, float) for item in row)
+            for row in data
+        ):
             # Two-dimensional array (Matrix)
             matrix = schemas_pb2.Matrix()
             for row in data:
@@ -39,7 +48,10 @@ def list_to_protobuf(data: List):
             multi_array_proto.matrix.CopyFrom(matrix)
         elif all(
             isinstance(layer, list)
-            and all(isinstance(row, list) and all(isinstance(item, float) for item in row) for row in layer)
+            and all(
+                isinstance(row, list) and all(isinstance(item, float) for item in row)
+                for row in layer
+            )
             for layer in data
         ):
             # Three-dimensional array (Tensor)
@@ -56,7 +68,11 @@ def list_to_protobuf(data: List):
             isinstance(block, list)
             and all(
                 isinstance(layer, list)
-                and all(isinstance(row, list) and all(isinstance(item, float) for item in row) for row in layer)
+                and all(
+                    isinstance(row, list)
+                    and all(isinstance(item, float) for item in row)
+                    for row in layer
+                )
                 for layer in block
             )
             for block in data
@@ -75,7 +91,9 @@ def list_to_protobuf(data: List):
                 block_tensor.blocks.add().CopyFrom(tensor)
             multi_array_proto.block_tensor.CopyFrom(block_tensor)
         else:
-            raise ValueError("Unsupported list structure. Make sure the list dimensions match the protobuf structure.")
+            raise ValueError(
+                "Unsupported list structure. Make sure the list dimensions match the protobuf structure."
+            )
     else:
         raise ValueError("Input data must be a list.")
 

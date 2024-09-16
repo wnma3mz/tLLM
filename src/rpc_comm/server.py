@@ -40,7 +40,9 @@ class RPCServer:
         return stub.InitModel(request)
 
     def forward(self, stub, data):
-        request = schemas_pb2.ForwardData(uuid=data["uuid"], hidden_states=list_to_protobuf(data["hidden_states"]))
+        request = schemas_pb2.ForwardData(
+            uuid=data["uuid"], hidden_states=list_to_protobuf(data["hidden_states"])
+        )
         # Set fields in request according to data
         return stub.Forward(request)
 
@@ -118,7 +120,9 @@ class RPCServer:
         return response_list
 
     # 指定 api path, url_idx 以及每个 url 的请求 data_list 多线程请求
-    def post_thread_url_dict(self, path: str, stub_idx_data_dict: Dict[str, List[Dict[str, Any]]]) -> Dict[str, List]:
+    def post_thread_url_dict(
+        self, path: str, stub_idx_data_dict: Dict[str, List[Dict[str, Any]]]
+    ) -> Dict[str, List]:
         if path[0] == "/":
             path = path[1:]
 
@@ -128,7 +132,9 @@ class RPCServer:
 
         for stub_idx, data_list in stub_idx_data_dict.items():
             for data in data_list:
-                future = self.executor.submit(self.func_dict[path], self.stub_list[stub_idx], json=data)
+                future = self.executor.submit(
+                    self.func_dict[path], self.stub_list[stub_idx], json=data
+                )
                 futures.append(future)
 
         for stub_idx, data_list in stub_idx_data_dict.items():

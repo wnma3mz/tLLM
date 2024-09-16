@@ -22,7 +22,9 @@ class Server:
         return response_list
 
     # 指定 api path，对所有 url 发送 post 请求
-    def post_thread(self, path, data_list: List[Dict[str, Any]]) -> List[requests.Response]:
+    def post_thread(
+        self, path, data_list: List[Dict[str, Any]]
+    ) -> List[requests.Response]:
         response_list = []
         futures = []
 
@@ -35,7 +37,9 @@ class Server:
         return response_list
 
     # 指定 url_idx，多线程请求
-    def post_thread_url(self, url_idx, path, data_list: List[Dict[str, Any]]) -> List[requests.Response]:
+    def post_thread_url(
+        self, url_idx, path, data_list: List[Dict[str, Any]]
+    ) -> List[requests.Response]:
         response_list = []
         futures = []
         url = self.url_list[url_idx]
@@ -57,7 +61,9 @@ class Server:
 
         for url_idx, data_list in url_idx_data_dict.items():
             for data in data_list:
-                future = self.executor.submit(requests.post, f"{self.url_list[url_idx]}{path}", json=data)
+                future = self.executor.submit(
+                    requests.post, f"{self.url_list[url_idx]}{path}", json=data
+                )
                 futures.append(future)
 
         for url_idx, data_list in url_idx_data_dict.items():
@@ -76,17 +82,23 @@ class Server:
     def _get(self, url, path):
         return requests.get(f"{url}{path}")
 
-    def fetch_list_output(self, response_list: Union[List[requests.Response], requests.Response]) -> List:
+    def fetch_list_output(
+        self, response_list: Union[List[requests.Response], requests.Response]
+    ) -> List:
         if isinstance(response_list, list):
             return [response.json()["output"] for response in response_list]
         return response_list.json()["output"]
 
-    def is_success(self, response_list: Union[List[requests.Response], requests.Response]) -> bool:
+    def is_success(
+        self, response_list: Union[List[requests.Response], requests.Response]
+    ) -> bool:
         if isinstance(response_list, list):
             return all(response.status_code == 200 for response in response_list)
         return response_list.status_code == 200
 
-    def fetch_list_cost_time(self, response_list: Union[List[requests.Response], requests.Response]) -> List:
+    def fetch_list_cost_time(
+        self, response_list: Union[List[requests.Response], requests.Response]
+    ) -> List:
         if isinstance(response_list, list):
             return [response.json()["cost_time"] for response in response_list]
         return response_list.json()["cost_time"]

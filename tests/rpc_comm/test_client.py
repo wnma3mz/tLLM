@@ -19,7 +19,9 @@ def test_init_model():
     # 创建一个 gRPC 客户端存根
     stub = schemas_pb2_grpc.RPCServiceStub(channel)
 
-    config = AutoConfig.from_pretrained("/Users/lujianghu/Documents/TinyLlama-1.1B-Chat-v1.0")
+    config = AutoConfig.from_pretrained(
+        "/Users/lujianghu/Documents/TinyLlama-1.1B-Chat-v1.0"
+    )
     config_struct_obj = struct_pb2.Struct()
     json_format.Parse(json.dumps(config.to_dict()), config_struct_obj)
     # 构造 InitModel 请求
@@ -48,7 +50,9 @@ def test_forward():
 
     hidden_states = torch.rand((1, 2, 2048)).tolist()
     # 构造 ForwardData 请求
-    forward_data = schemas_pb2.ForwardData(uuid="123456", hidden_states=list_to_protobuf(hidden_states))
+    forward_data = schemas_pb2.ForwardData(
+        uuid="123456", hidden_states=list_to_protobuf(hidden_states)
+    )
 
     # 调用 Forward RPC 方法
     response = stub.Forward(forward_data)
