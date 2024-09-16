@@ -3,4 +3,7 @@ __pycache__
 *.log
 *.pyc
 *.pkl
+*.npy
+*.pth
 weights/
+.DS_Store

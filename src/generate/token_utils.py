@@ -9,11 +9,10 @@ class TokenizerUtils:
 
     def preprocess(self, text: str = None, message: List[Dict[str, str]] = None) -> List[int]:
         if message:
-            text = self.tokenizer.apply_chat_template(message)
-        if text:
-            input_ids = self.tokenizer.encode(text, return_tensors="pt")
-            return input_ids
-        raise ValueError("Please provide text or message")
+            text = self.tokenizer.apply_chat_template(message, tokenize=False, add_generation_prompt=True)
+            print(text)
+        input_ids = self.tokenizer.encode(text, return_tensors="pt")
+        return input_ids
 
     def decode(self, input_ids: List[int]) -> str:
         return self.tokenizer.decode(input_ids)

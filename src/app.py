@@ -44,7 +44,7 @@ class LLM:
         self.pipeline_parallel = pipeline_parallel
         self.config = config
 
-    def init_client(self, tp_url_list: List[str], state_dict_path: str, layer_state_dict_dir: str):
+    def init_client(self, tp_url_list: List[str], state_dict_path: str, layer_state_dict_dir: str, layer_start_end_list = None):
         if self.load_model_flag:
             print(f"Model has been initialized")
             return
@@ -66,11 +66,15 @@ class LLM:
         step = self.config.num_hidden_layers // self.pipeline_parallel
         params_list = []
         for pp_idx in range(self.pipeline_parallel):
+            if layer_start_end_list is not None:
+                layer_idx_start, layer_start_end = layer_start_end_list[pp_idx]
+            else:
+                layer_idx_start, layer_start_end = pp_idx * step, (pp_idx + 1) * step            
             params_list.append(
                 {
                     "config": self.config.to_dict(),
-                    "layer_idx_start": pp_idx * step,
-                    "layer_idx_end": (pp_idx + 1) * step,
+                    "layer_idx_start": layer_idx_start,
+                    "layer_idx_end": layer_start_end,
                     "tp_url_list": tp_url_list,
                     "tp_size": self.tensor_parallel,
                     "layer_state_dict_dir": layer_state_dict_dir,
@@ -129,11 +133,14 @@ def test(llm, tok_path: str, text: str, max_tokens: int = 2):
 
     tok_util = TokenizerUtils(tok_path)
     decode_util = DecodeUtils("greedy")
-    formatted_prompt = "### Human: {}### Assistant:"
-    text = formatted_prompt.format("Hello, how are you?")
-    input_ids = tok_util.preprocess(text)
+    text = "Who are you?"
+    message = [{"role": "system", "content": "You are a pirate chatbot who always responds in pirate speak!"}, {"role": "user", "content": text}]
+    input_ids = tok_util.preprocess(message=message)
     print("input_ids: ", input_ids)
 
+    formatted_prompt = "### Human: {}### Assistant:"
+    text = formatted_prompt.format("Hello, how are you?")
+    input_ids = tok_util.preprocess(text=text)
     output_ids = []
     output_texts = []
     for idx in range(1, max_tokens + 1):
@@ -170,6 +177,8 @@ if __name__ == "__main__":
         tensor_parallel=config["tensor_parallel"],
         pipeline_parallel=config["pipeline_parallel"],
     )
-    llm.init_client(config["tensor_parallel_url_list"], config["state_dict_path"], config["layer_state_dict_dir"])
-
+    if "layer_start_end_list" in config and len(config["layer_start_end_list"]) == config["pipeline_parallel"]:
+        llm.init_client(config["tensor_parallel_url_list"], config["state_dict_path"], config["layer_state_dict_dir"], config["layer_start_end_list"])
+    else:
+        llm.init_client(config["tensor_parallel_url_list"], config["state_dict_path"], config["layer_state_dict_dir"])
     test(llm, config["model_path"], args.prompt, args.max_tokens)
