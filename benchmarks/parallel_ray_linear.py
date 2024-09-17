@@ -26,7 +26,7 @@ class MyModel(nn.Module):
         assert (
             hidden_size % tensor_split == 0
         ), "hidden_size must be divisible by tensor_split"
-        self.is_col_layer = True
+        self.is_col_layer = False
         if self.is_col_layer:
             self.layer = [
                 ParallelLinear.remote(hidden_size, hidden_size // tensor_split)
@@ -43,12 +43,12 @@ class MyModel(nn.Module):
         state_dict_chunks = {}
         for k, v in state_dict.items():
             state_dict_chunks[k] = []
+            if self.is_col_layer:
+                tensor_list = v.chunk(self.tensor_split, dim=0)
+            else:
+                tensor_list = v.chunk(self.tensor_split, dim=1)
             for i in range(self.tensor_split):
-                if self.is_col_layer:
-                    tensor = v.chunk(self.tensor_split, dim=0)[i]
-                else:
-                    tensor = v.chunk(self.tensor_split, dim=1)[i]
-                state_dict_chunks[k.lstrip("layer.")].append(tensor)
+                state_dict_chunks[k].append(tensor_list[i])
 
         # Distribute the state_dict chunks to each remote instance
         futures = []
@@ -58,18 +58,14 @@ class MyModel(nn.Module):
         ray.get(futures)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        futures = []
         s1 = time.time()
         if self.is_col_layer:
-            for i in range(self.tensor_split):
-                futures.append(self.layer[i].forward.remote(x))
+            futures = [self.layer[i].forward.remote(x) for i in range(self.tensor_split)]
             results = ray.get(futures)
-            output_tensor = torch.cat(results, dim=1)
+            output_tensor = torch.cat(results, dim=-1)
         else:
-            chunk_size = x.shape[-1] // self.tensor_split
-            for i in range(self.tensor_split):
-                split_x = x[:, i * (chunk_size) : (i + 1) * (chunk_size)]
-                futures.append(self.layer[i].forward.remote(split_x))
+            split_x_list = torch.chunk(x, self.tensor_split, dim=-1)
+            futures = [self.layer[i].forward.remote(split_x_list[i]) for i in range(self.tensor_split)]
             results = ray.get(futures)
             stacked_tensors = torch.stack(results)
             output_tensor = torch.sum(stacked_tensors, dim=0)
@@ -82,9 +78,9 @@ if __name__ == "__main__":
     model = MyModel(hidden_size=hidden_size, tensor_split=tensor_split)
     print(f"hidden_size: {hidden_size}; tensor_split: {tensor_split}")
     # w = torch.randn(hidden_size, hidden_size)
-    # model.load_state_dict({"layer.weight": w})
+    # model.load_state_dict({"weight": w})
 
-    input_tensor = torch.randn(1, hidden_size)
+    input_tensor = torch.randn(1, 2, hidden_size)
     output_tensor = model(input_tensor)
 
     cost_time_list, calc_cost_time_list = [], []

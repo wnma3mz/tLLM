@@ -86,12 +86,6 @@ class Decoder:
                 .key_cache[0]
                 .shape[-2]
             )
-            print(
-                f'kv_cache_seq_len: {self.cache_manager.cache_dict[data.uuid]["past_key_values"].key_cache[0].shape}'
-            )
-            print(f"hiddens_states_seq_len: {hidden_states.size(1)}")
-            # request_seq_len = hidden_states.size(1) - 1
-            # assert kv_cache_seq_len == request_seq_len, "seq_len not match"
             position_ids = torch.tensor([kv_cache_seq_len], dtype=torch.long).unsqueeze(
                 0
             )
@@ -128,7 +122,6 @@ class Decoder:
             # 所有层的 kv cache 放到一起了，所以这里只需要取最后一层的 kv cache
             next_decoder_cache = layer_outputs[1]
         next_cache = next_decoder_cache
-        print("next_cache: ", next_cache[0][0].shape)
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states, past_key_values=next_cache
         )

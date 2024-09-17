@@ -29,10 +29,11 @@ def tokenize_message(tok: AutoTokenizer, messages: List[Dict[str, str]]) -> List
 
 
 if __name__ == "__main__":
-    model_path = "/Users/jianghulu/Documents/TinyLlama-1.1B-Chat-v0.1"
+    # model_path = "/Users/jianghulu/Documents/TinyLlama-1.1B-Chat-v0.1"
+    model_path = "/Users/lujianghu/Documents/TinyLlama-1.1B-Chat-v1.0"
     model, tok = load_model_and_tokenizer(model_path)
-    print(tok.decode(1788))
-    assert False
+    # print(tok.decode(1788))
+    # assert False
     model.eval()
 
     messages = [{"role": "user", "content": "Hello, how are you?"}]
@@ -42,9 +43,14 @@ if __name__ == "__main__":
     # output = model.generate(input_ids, max_new_tokens=50, tokenizer=tok, eos_token_id=[0, tok.eos_token_id])
     # print(tok.decode(output[0][input_ids.shape[1]:], skip_special_tokens=True))
 
-    s1 = time.time()
-    output = model.generate(input_ids, max_new_tokens=20, do_sample=False)
-    print(f"Time taken: {time.time() - s1}")
-    print(tok.decode(output[0][input_ids.shape[1] :], skip_special_tokens=True))
+    with torch.no_grad():
+        output = model.generate(input_ids, max_new_tokens=20, do_sample=False)
+
+    for _ in range(0):
+        s1 = time.time()
+        with torch.no_grad():
+            output = model.generate(input_ids, max_new_tokens=20, do_sample=False)
+        print(f"Time taken: {time.time() - s1}")
+        print(tok.decode(output[0][input_ids.shape[1] :], skip_special_tokens=True))
 
     # 2.6-3.0s
