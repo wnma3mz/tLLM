@@ -44,12 +44,13 @@ if __name__ == "__main__":
     # print(tok.decode(output[0][input_ids.shape[1]:], skip_special_tokens=True))
 
     with torch.no_grad():
-        output = model.generate(input_ids, max_new_tokens=20, do_sample=False)
+        output = model.generate(input_ids, max_new_tokens=1, do_sample=False)
+    print("generate token: ", output[0])
 
     for _ in range(0):
         s1 = time.time()
         with torch.no_grad():
-            output = model.generate(input_ids, max_new_tokens=20, do_sample=False)
+            output = model.generate(input_ids, max_new_tokens=1, do_sample=False)
         print(f"Time taken: {time.time() - s1}")
         print(tok.decode(output[0][input_ids.shape[1] :], skip_special_tokens=True))
 
