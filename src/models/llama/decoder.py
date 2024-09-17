@@ -82,9 +82,7 @@ class Decoder:
         # 客户端自行生成 position_ids
         if data.uuid in self.cache_manager.cache_dict:
             kv_cache_seq_len = (
-                self.cache_manager.cache_dict[data.uuid]["past_key_values"]
-                .key_cache[0]
-                .shape[-2]
+                self.cache_manager.cache_dict[data.uuid]["past_key_values"].get_seq_length()
             )
             position_ids = torch.tensor([kv_cache_seq_len], dtype=torch.long).unsqueeze(
                 0

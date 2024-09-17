@@ -152,7 +152,7 @@ class MyLlamaSdpaAttention(nn.Module):
             value_states,
             attn_mask=None,
             # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
-            is_causal=self.is_causal,
+            is_causal=self.is_causal and q_len > 1,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -215,8 +215,6 @@ class MyLlamaModel(nn.Module):
         self.decoder = nn.ModuleList(
             [MyLlamaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self._use_sdpa = config._attn_implementation == "sdpa"
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
     def load_state_dict(self, state_dict: Dict) -> None:
         for layer in self.decoder:
@@ -274,9 +272,8 @@ class MyLlamaForCausalLM(nn.Module):
         model.eval()
         return model
 
-    def forward(self, input_ids: List[int], position_ids, past_key_values):
-        hidden_states = self.embed_tokens(input_ids)
-        output = self.model(hidden_states, position_ids, past_key_values)
+    def forward(self, input_embeds: torch.Tensor, position_ids, past_key_values):
+        output = self.model(input_embeds, position_ids, past_key_values)
         hidden_states = self.norm(output.last_hidden_state)
         logits = self.lm_head(hidden_states)
         return logits, output.past_key_values
@@ -289,6 +286,8 @@ class MyLlamaForCausalLM(nn.Module):
         bs, seq_len = input_ids.size() # bs == 1
         past_key_values = None
         position_ids = None
+        input_embeds = self.embed_tokens(input_ids)
+        token_list = []
         cnt = 0
         while True:
 
@@ -296,19 +295,21 @@ class MyLlamaForCausalLM(nn.Module):
                 past_key_values = DynamicCache()
                 position_ids = torch.arange(seq_len, dtype=torch.long).unsqueeze(0)
             else:
-                kv_cache_seq_len = past_key_values.key_cache[0].shape[-2]
-                # request_seq_len = hidden_states.size(1) - 1
-                # assert kv_cache_seq_len == request_seq_len, "seq_len not match"
-                position_ids = torch.tensor([kv_cache_seq_len], dtype=torch.long).unsqueeze(
-                    0
+                past_key_values_length = past_key_values.get_seq_length()
+                position_ids = torch.arange(
+                    past_key_values_length, 1 + past_key_values_length, dtype=torch.long
                 )
+                position_ids = position_ids.unsqueeze(0)
 
-            logits, past_key_values = self.forward(input_ids, position_ids, past_key_values)
-            return logits, None
+            logits, past_key_values = self(input_embeds, position_ids, past_key_values)
+            next_token = torch.argmax(logits[:, -1], dim=1)
+            token_list.append(next_token)
             cnt += 1
-            if cnt > max_new_tokens:
+            if cnt >= max_new_tokens:
                 break
-        return logits, None
+            input_embeds = self.embed_tokens(next_token).unsqueeze(0)
+
+        return token_list, None
 
 
 def load_model_and_tokenizer(model_path: str) -> Tuple[MyLlamaForCausalLM, AutoTokenizer]:
@@ -347,16 +348,13 @@ if __name__ == "__main__":
     # print(tok.decode(output[0][input_ids.shape[1]:], skip_special_tokens=True))
 
     output = model.generate(input_ids, max_new_tokens=20, do_sample=False)
-    logits = output[0]
-    print("logits: ", logits.shape)
-    print("token", torch.argmax(logits[:, -1], dim=1))
+    token_list = output[0]
+    # print("token: ", token_list)
     # print(tok.decode(output[0][input_ids.shape[1] :], skip_special_tokens=True))
 
-    for _ in range(0):
+    for _ in range(10):
         s1 = time.time()
         with torch.no_grad():
-            output = model.generate(input_ids, max_new_tokens=20, do_sample=False)
+            output = model.generate(input_ids, max_new_tokens=1, do_sample=False)
         print(f"Time taken: {time.time() - s1}")
-        print(tok.decode(output[0][input_ids.shape[1] :], skip_special_tokens=True))
-
-    # 2.6-3.0s
+        # print(tok.decode(output[0][input_ids.shape[1] :], skip_special_tokens=True))
