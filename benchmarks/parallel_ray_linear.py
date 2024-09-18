@@ -16,9 +16,21 @@ class ParallelLinear(nn.Module):
     def load_state_dict(self, state_dict):
         self.layer.load_state_dict(state_dict)
 
+    @torch.no_grad()
     def forward(self, x):
         return self.layer(x)
 
+class MyLinear(nn.Module):
+    def __init__(self, row_size: int, col_size: int) -> None:
+        super().__init__()
+        self.layer = nn.Linear(row_size, col_size, bias=False)
+
+    def load_state_dict(self, state_dict):
+        self.layer.load_state_dict(state_dict)
+
+    @torch.no_grad()
+    def forward(self, x):
+        return self.layer(x)
 
 class MyModel(nn.Module):
     def __init__(self, hidden_size: int = 4096, tensor_split: int = 2):
@@ -77,11 +89,15 @@ if __name__ == "__main__":
     hidden_size, tensor_split = 4096, 2
     model = MyModel(hidden_size=hidden_size, tensor_split=tensor_split)
     print(f"hidden_size: {hidden_size}; tensor_split: {tensor_split}")
-    # w = torch.randn(hidden_size, hidden_size)
-    # model.load_state_dict({"weight": w})
+    w = torch.randn(hidden_size, hidden_size)
+    model.load_state_dict({"weight": w})
+
+    base_model = MyLinear(hidden_size, hidden_size)
+    base_model.load_state_dict({"weight": w})
 
     input_tensor = torch.randn(1, 2, hidden_size)
     output_tensor = model(input_tensor)
+    output_tensor = base_model(input_tensor)
 
     cost_time_list, calc_cost_time_list = [], []
     for _ in range(10):
@@ -91,4 +107,12 @@ if __name__ == "__main__":
         calc_cost_time_list.append(calc_cost_time)
     print("Cost time:", sum(cost_time_list) / len(cost_time_list))
     print("Calc cost time:", sum(calc_cost_time_list) / len(calc_cost_time_list))
+    # print(f"Output tensor: {output_tensor.shape}")
+
+    cost_time_list = []
+    for _ in range(10):
+        s1 = time.time()
+        output_tensor_v2 = base_model(input_tensor)
+        cost_time_list.append(time.time() - s1)
+    print("Cost time:", sum(cost_time_list) / len(cost_time_list))
     # print(f"Output tensor: {output_tensor.shape}")

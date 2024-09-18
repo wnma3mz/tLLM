@@ -150,7 +150,6 @@ class MyLlamaSdpaAttention(nn.Module):
             query_states,
             key_states,
             value_states,
-            attn_mask=None,
             # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
             is_causal=self.is_causal and q_len > 1,
         )
@@ -255,7 +254,7 @@ class MyLlamaForCausalLM(nn.Module):
     @classmethod
     def from_pretrained(cls, model_path: str, **kwargs):
         config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
-        config.tp = 2
+        config.tp = 4
         # config.num_hidden_layers = 1
 
         model = cls(config)
