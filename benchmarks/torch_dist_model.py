@@ -229,6 +229,7 @@ class MyLlamaDecoderLayer(nn.Module):
         self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def load_state_dict(self, state_dict: Dict):
+        # 用两次 layer norm 的时间替换两次通信的时间
         self.input_layernorm.load_state_dict(
             {"weight": state_dict.pop(f"model.layers.{self.layer_idx}.input_layernorm.weight")}
         )
@@ -249,7 +250,6 @@ class MyLlamaDecoderLayer(nn.Module):
 
         hidden_states = self.input_layernorm(hidden_states)
 
-        dist.broadcast(hidden_states, src=0)
         # Self Attention
         hidden_states, _, past_key_value = self.self_attn(
             hidden_states=hidden_states,
@@ -261,7 +261,6 @@ class MyLlamaDecoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
 
-        dist.broadcast(hidden_states, src=0)
         # Fully Connected
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
@@ -350,7 +349,8 @@ class MyLlamaForCausalLM(nn.Module):
         token_list: List[int] = []
         cnt = 0
         while True:
-
+            dist.broadcast(input_embeds, src=0)
+            # print(f"Rank: {dist.get_rank()}, input_embeds: {input_embeds}")
             if past_key_values is None:
                 past_key_values = DynamicCache()
                 position_ids = torch.arange(seq_len, dtype=torch.long).unsqueeze(0)
@@ -368,7 +368,7 @@ class MyLlamaForCausalLM(nn.Module):
                 token_list.append(next_token[0].tolist())
                 input_embeds = self.embed_tokens(next_token).unsqueeze(0)
             else:
-                # 避免 broadcast
+                # 必须要加上这一行
                 input_embeds = self.embed_tokens(torch.tensor([0])).unsqueeze(0)
 
         return token_list, None
