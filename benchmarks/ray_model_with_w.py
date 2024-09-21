@@ -11,6 +11,8 @@ from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.cache_utils import Cache, DynamicCache
 from transformers.activations import ACT2FN
 
+# 使用 ray 实现 张量并行，通信时通信权重和输入，以复用 ray 的 actor
+
 ray.init(ignore_reinit_error=True, num_cpus=4)
 
 

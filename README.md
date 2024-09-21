@@ -18,9 +18,13 @@ http 耗时明显大于 rpc
 
 ray 框架更易使用，无需手写 rpc 相关内容，且通信差不多，底层也是 rpc。
 
-但 ray 框架在使用 Tensor Parallel 会比不开 TP 更快，故暂时先换用 torch.dist，可以实现加速的效果。
+但 ray 框架在使用 Tensor Parallel 会比不开 TP 更快，故暂时先用 torch.dist，可以实现加速的效果。
 
-torch.dist 在 CPU 机器上用 gloo（跨机或许也是用这个？）
+torch.dist 在 CPU 机器上用 gloo（跨机或许也是用这个？）。
+
+同时，使用 torch 的多进程共享内存进行 TP 也会更慢。
+
+主要注意的是，reduce 涉及到一些复杂的规约算法，会有一些精度问题。
 
 #### parallel strategy
 

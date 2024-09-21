@@ -11,6 +11,8 @@ from transformers.activations import GELUActivation
 from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.cache_utils import Cache, DynamicCache
 
+# 使用 ray 实现 张量并行，通信时通信仅通信输入
+
 ray.init(ignore_reinit_error=True, num_cpus=4)
 
 
