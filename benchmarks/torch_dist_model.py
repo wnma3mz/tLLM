@@ -18,6 +18,7 @@ import torch.distributed as dist
 
 # export OMP_NUM_THREADS=8; torchrun --nproc_per_node=2 benchmarks/torch_dist_model.py
 
+
 # 使用 torch.dist 实现 张量并行，通信时通信输入
 def setup_seed(seed):
     torch.manual_seed(seed)
@@ -57,6 +58,7 @@ class Communicator:
         dist.gather(x, gather_list=cluster_output, dst=0)
         return torch.cat(cluster_output, dim=-1) if self.rank == 0 else None
 
+
 class ColumnParallelLayer(nn.Module):
     def __init__(self, row_size: int, col_size: int) -> None:
         super().__init__()
@@ -75,6 +77,50 @@ class ColumnParallelLayer(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         node_output = self.layer(x)
         return node_output
+
+
+class MergeParallelLayer(nn.Module):
+    def __init__(self, row_size: int, col_size: int, dup_layer: int) -> None:
+        super().__init__()
+        self.world_size = dist.get_world_size()
+        self.rank = dist.get_rank()
+        assert col_size % self.world_size == 0
+        self.row_size, self.col_size = row_size, col_size
+        self.dup_layer = dup_layer
+        self.layer = nn.Linear(row_size, col_size * self.dup_layer // self.world_size, bias=False)
+
+    def load_weight(self, w_list: Optional[List[torch.Tensor]] = None):
+        w = w_list[self.rank]
+        self.load_state_dict({"layer.weight": w})
+
+    @torch.no_grad()
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        node_output = self.layer(x)
+        return torch.chunk(node_output, self.dup_layer, dim=-1)
+
+
+class QKVParallelLayer(nn.Module):
+    def __init__(self, row_size: int, col_size_list: List[int]) -> None:
+        super().__init__()
+        self.world_size = dist.get_world_size()
+        self.rank = dist.get_rank()
+        assert col_size % self.world_size == 0
+        for x in col_size_list:
+            assert x % self.world_size == 0
+        col_size = sum(col_size_list)
+
+        self.row_size, self.col_size = row_size, col_size
+        self.col_size_list = [x // self.world_size for x in col_size_list]
+        self.layer = nn.Linear(row_size, col_size // self.world_size, bias=False)
+
+    def load_weight(self, w_list: Optional[List[torch.Tensor]] = None):
+        w = w_list[self.rank]
+        self.load_state_dict({"layer.weight": w})
+
+    @torch.no_grad()
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        node_output = self.layer(x)
+        return torch.split(node_output, self.col_size_list, dim=-1)
 
 
 class RowParallelLayer(nn.Module):
@@ -112,21 +158,30 @@ class MyLlamaMLP(nn.Module):
         self.intermediate_size = config.intermediate_size
         self.act_fn = ACT2FN[config.hidden_act]
 
-        self.gate_proj = ColumnParallelLayer(self.hidden_size, self.intermediate_size)
-        self.up_proj = ColumnParallelLayer(self.hidden_size, self.intermediate_size)
+        # self.gate_proj = ColumnParallelLayer(self.hidden_size, self.intermediate_size)
+        # self.up_proj = ColumnParallelLayer(self.hidden_size, self.intermediate_size)
+        self.gate_up_proj = MergeParallelLayer(self.hidden_size, self.intermediate_size, 2)
         self.down_proj = RowParallelLayer(self.intermediate_size, self.hidden_size)
 
     def load_state_dict(self, state_dict: Dict) -> None:
-        for key in ["gate_proj", "up_proj", "down_proj"]:
+        # for key in ["gate_proj", "up_proj", "down_proj"]:
+        for key in ["down_proj"]:
             layer_name = f"model.layers.{self.layer_idx}.mlp.{key}.weight"
             getattr(self, key).load_weight(state_dict.get(layer_name, None))
 
-    def forward(self, x):
-        gate_out = self.act_fn(self.gate_proj(x))
-        up_out = self.up_proj(x)
-        intermediate_states = gate_out * up_out
-        return comm.all_reduce(self.down_proj.forward_chunk(intermediate_states))
+        weight_chunks = []
+        len_ = dist.get_world_size()
+        for key in ["gate_proj", "up_proj"]:
+            layer_name = f"model.layers.{self.layer_idx}.mlp.{key}.weight"
+            weight = state_dict[layer_name]
+            weight_chunks.append(torch.chunk(weight, len_, dim=0))
+        combined_weights = [torch.cat([chunk[i] for chunk in weight_chunks], dim=0) for i in range(len_)]
+        self.gate_up_proj.load_weight(combined_weights)
 
+    def forward(self, x):
+        gate_out, up_out = self.gate_up_proj(x)
+        intermediate_states = self.act_fn(gate_out) * up_out
+        return comm.all_reduce(self.down_proj.forward_chunk(intermediate_states))
 
 
 class MyLlamaSdpaAttention(nn.Module):
@@ -151,9 +206,17 @@ class MyLlamaSdpaAttention(nn.Module):
                 f" and `num_heads`: {self.num_heads})."
             )
         self.world_size = dist.get_world_size()
-        self.q_proj = ColumnParallelLayer(self.hidden_size, self.num_heads * self.head_dim)
-        self.k_proj = ColumnParallelLayer(self.hidden_size, self.num_key_value_heads * self.head_dim)
-        self.v_proj = ColumnParallelLayer(self.hidden_size, self.num_key_value_heads * self.head_dim)
+        # self.q_proj = ColumnParallelLayer(self.hidden_size, self.num_heads * self.head_dim)
+        # self.k_proj = ColumnParallelLayer(self.hidden_size, self.num_key_value_heads * self.head_dim)
+        # self.v_proj = ColumnParallelLayer(self.hidden_size, self.num_key_value_heads * self.head_dim)
+        self.qkv_proj = QKVParallelLayer(
+            self.hidden_size,
+            [
+                self.num_heads * self.head_dim,
+                self.num_key_value_heads * self.head_dim,
+                self.num_key_value_heads * self.head_dim,
+            ],
+        )
         self.o_proj = RowParallelLayer(self.num_heads * self.head_dim, self.hidden_size)
         self._init_rope()
 
@@ -165,9 +228,19 @@ class MyLlamaSdpaAttention(nn.Module):
         )
 
     def load_state_dict(self, state_dict: Dict) -> None:
-        for key in ["q_proj", "k_proj", "v_proj", "o_proj"]:
+        # for key in ["q_proj", "k_proj", "v_proj", "o_proj"]:
+        for key in ["o_proj"]:
             layer_name = f"model.layers.{self.layer_idx}.self_attn.{key}.weight"
             getattr(self, key).load_weight(state_dict.get(layer_name, None))
+
+        weight_chunks = []
+        len_ = dist.get_world_size()
+        for key in ["q_proj", "k_proj", "v_proj"]:
+            layer_name = f"model.layers.{self.layer_idx}.self_attn.{key}.weight"
+            weight = state_dict[layer_name]
+            weight_chunks.append(torch.chunk(weight, len_, dim=0))
+        combined_weights = [torch.cat([chunk[i] for chunk in weight_chunks], dim=0) for i in range(len_)]
+        self.qkv_proj.load_weight(combined_weights)
 
     def forward(
         self,
@@ -177,9 +250,10 @@ class MyLlamaSdpaAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
+        # query_states = self.q_proj(hidden_states)
+        # key_states = self.k_proj(hidden_states)
+        # value_states = self.v_proj(hidden_states)
+        query_states, key_states, value_states = self.qkv_proj(hidden_states)
 
         query_states = query_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
@@ -266,6 +340,7 @@ class MyLlamaDecoderLayer(nn.Module):
         hidden_states = residual + hidden_states
 
         return hidden_states, past_key_value
+
 
 class MyLlamaModel(nn.Module):
     def __init__(self, config):
