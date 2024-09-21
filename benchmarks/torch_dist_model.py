@@ -10,7 +10,6 @@ from typing import *
 import time
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import time
 from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.cache_utils import Cache, DynamicCache
@@ -45,18 +44,14 @@ class Communicator:
         return x
 
     def all_gather(self, x: torch.Tensor):
-        cluster_output = [
-            torch.zeros_like(x, dtype=x.dtype) for _ in range(self.world_size)
-        ]
+        cluster_output = [torch.zeros_like(x, dtype=x.dtype) for _ in range(self.world_size)]
         dist.all_gather(cluster_output, x)
         return torch.cat(cluster_output, dim=-1)
 
     def gather(self, x: torch.Tensor):
         # 只在节点 0 上聚合
         cluster_output = (
-            [torch.zeros_like(x, dtype=x.dtype) for _ in range(self.world_size)]
-            if self.rank == 0
-            else None
+            [torch.zeros_like(x, dtype=x.dtype) for _ in range(self.world_size)] if self.rank == 0 else None
         )
         dist.gather(x, gather_list=cluster_output, dst=0)
         return torch.cat(cluster_output, dim=-1) if self.rank == 0 else None
@@ -151,15 +146,9 @@ class MyLlamaSdpaAttention(nn.Module):
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
-        self.q_proj = ColumnParallelLayer(
-            self.hidden_size, self.num_heads * self.head_dim
-        )
-        self.k_proj = ColumnParallelLayer(
-            self.hidden_size, self.num_key_value_heads * self.head_dim
-        )
-        self.v_proj = ColumnParallelLayer(
-            self.hidden_size, self.num_key_value_heads * self.head_dim
-        )
+        self.q_proj = ColumnParallelLayer(self.hidden_size, self.num_heads * self.head_dim)
+        self.k_proj = ColumnParallelLayer(self.hidden_size, self.num_key_value_heads * self.head_dim)
+        self.v_proj = ColumnParallelLayer(self.hidden_size, self.num_key_value_heads * self.head_dim)
         self.o_proj = RowParallelLayer(self.num_heads * self.head_dim, self.hidden_size)
 
         self._init_rope()
@@ -193,32 +182,20 @@ class MyLlamaSdpaAttention(nn.Module):
         value_states = comm.gather(self.v_proj(hidden_states))
 
         if is_rank0():
-            query_states = query_states.view(
-                bsz, q_len, self.num_heads, self.head_dim
-            ).transpose(1, 2)
-            key_states = key_states.view(
-                bsz, q_len, self.num_key_value_heads, self.head_dim
-            ).transpose(1, 2)
-            value_states = value_states.view(
-                bsz, q_len, self.num_key_value_heads, self.head_dim
-            ).transpose(1, 2)
+            query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+            key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+            value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
             kv_seq_len = key_states.shape[-2]
             if past_key_value is not None:
-                kv_seq_len += past_key_value.get_usable_length(
-                    kv_seq_len, self.layer_idx
-                )
+                kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
             cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
 
-            query_states, key_states = apply_rotary_pos_emb(
-                query_states, key_states, cos, sin, position_ids
-            )
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
             if past_key_value is not None:
                 cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
-                key_states, value_states = past_key_value.update(
-                    key_states, value_states, self.layer_idx, cache_kwargs
-                )
+                key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
             key_states = repeat_kv(key_states, self.num_key_value_groups)
             value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -253,24 +230,14 @@ class MyLlamaDecoderLayer(nn.Module):
 
         self.mlp = MyLlamaMLP(config, layer_idx=layer_idx)
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = LlamaRMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def load_state_dict(self, state_dict: Dict):
         self.input_layernorm.load_state_dict(
-            {
-                "weight": state_dict.pop(
-                    f"model.layers.{self.layer_idx}.input_layernorm.weight"
-                )
-            }
+            {"weight": state_dict.pop(f"model.layers.{self.layer_idx}.input_layernorm.weight")}
         )
         self.post_attention_layernorm.load_state_dict(
-            {
-                "weight": state_dict.pop(
-                    f"model.layers.{self.layer_idx}.post_attention_layernorm.weight"
-                )
-            }
+            {"weight": state_dict.pop(f"model.layers.{self.layer_idx}.post_attention_layernorm.weight")}
         )
 
         self.self_attn.load_state_dict(state_dict)
@@ -310,10 +277,7 @@ class MyLlamaModel(nn.Module):
         self.vocab_size = config.vocab_size
 
         self.decoder = nn.ModuleList(
-            [
-                MyLlamaDecoderLayer(config, layer_idx)
-                for layer_idx in range(config.num_hidden_layers)
-            ]
+            [MyLlamaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
     def load_state_dict(self, state_dict: Dict) -> None:
@@ -338,9 +302,7 @@ class MyLlamaModel(nn.Module):
             # 所有层的 kv cache 放到一起了，所以这里只需要取最后一层的 kv cache
             next_decoder_cache = layer_outputs[1]
         next_cache = next_decoder_cache
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states, past_key_values=next_cache
-        )
+        return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=next_cache)
 
 
 class MyLlamaForCausalLM(nn.Module):
@@ -361,14 +323,10 @@ class MyLlamaForCausalLM(nn.Module):
         model = cls(config)
         from transformers import LlamaForCausalLM
 
-        state_dict = LlamaForCausalLM.from_pretrained(
-            model_path, trust_remote_code=True, device_map="cpu"
-        ).state_dict()
+        state_dict = LlamaForCausalLM.from_pretrained(model_path, trust_remote_code=True, device_map="cpu").state_dict()
 
         # if is_rank0():
-        model.embed_tokens.load_state_dict(
-            {"weight": state_dict.pop("model.embed_tokens.weight")}
-        )
+        model.embed_tokens.load_state_dict({"weight": state_dict.pop("model.embed_tokens.weight")})
         model.norm.load_state_dict({"weight": state_dict.pop("model.norm.weight")})
         model.lm_head.load_state_dict({"weight": state_dict.pop("lm_head.weight")})
 
@@ -384,9 +342,7 @@ class MyLlamaForCausalLM(nn.Module):
         return logits, output.past_key_values
 
     @torch.no_grad()
-    def generate(
-        self, input_ids: torch.Tensor, **kwargs
-    ) -> Tuple[List[int], Optional[torch.Tensor]]:
+    def generate(self, input_ids: torch.Tensor, **kwargs) -> Tuple[List[int], Optional[torch.Tensor]]:
         # input_ids: bs x seq_len
         max_new_tokens = kwargs.get("max_new_tokens", 16)
         bs, seq_len = input_ids.size()  # bs == 1
@@ -402,9 +358,7 @@ class MyLlamaForCausalLM(nn.Module):
                 position_ids = torch.arange(seq_len, dtype=torch.long).unsqueeze(0)
             else:
                 past_key_values_length = past_key_values.get_seq_length()
-                position_ids = torch.arange(
-                    past_key_values_length, 1 + past_key_values_length, dtype=torch.long
-                )
+                position_ids = torch.arange(past_key_values_length, 1 + past_key_values_length, dtype=torch.long)
                 position_ids = position_ids.unsqueeze(0)
 
             logits, past_key_values = self(input_embeds, position_ids, past_key_values)
@@ -421,12 +375,8 @@ class MyLlamaForCausalLM(nn.Module):
 def load_model_and_tokenizer(
     model_path: str,
 ) -> Tuple[MyLlamaForCausalLM, AutoTokenizer]:
-    model = MyLlamaForCausalLM.from_pretrained(
-        model_path, trust_remote_code=True, device_map="cpu"
-    )
-    tok = AutoTokenizer.from_pretrained(
-        model_path, use_fast=True, trust_remote_code=True
-    )
+    model = MyLlamaForCausalLM.from_pretrained(model_path, trust_remote_code=True, device_map="cpu")
+    tok = AutoTokenizer.from_pretrained(model_path, use_fast=True, trust_remote_code=True)
     return model, tok
 
 

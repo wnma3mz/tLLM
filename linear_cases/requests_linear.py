@@ -33,9 +33,7 @@ class RPCServer:
     def forward(self, stub, data):
         x = torch.randn(1, 4096).tolist()
         s1 = time.time()
-        request = schemas_pb2.ForwardData(
-            uuid="1234t", hidden_states=list_to_protobuf(x)
-        )
+        request = schemas_pb2.ForwardData(uuid="1234t", hidden_states=list_to_protobuf(x))
         out = stub.Forward(request)
         print("Cost time:", time.time() - s1)
         print("Output:", out.cost_time)

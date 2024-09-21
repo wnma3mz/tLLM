@@ -6,17 +6,20 @@ import time
 # Run command
 # torchrun --nproc_per_node=2 linear_cases/parallel/dist_torch.py
 
+
 def setup_seed(seed):
     torch.manual_seed(seed)
+
 
 class MyModel(nn.Module):
     def __init__(self, hidden_size: int):
         super().__init__()
         self.layer = nn.Linear(hidden_size, hidden_size, bias=False)
-        
+
     @torch.no_grad()
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.layer(x)
+
 
 class ColumnParallelLayer(nn.Module):
     def __init__(self, hidden_size: int) -> None:
@@ -33,7 +36,11 @@ class ColumnParallelLayer(nn.Module):
     @torch.no_grad()
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         node_output = self.layer(x)
-        cluster_output = [torch.zeros_like(node_output, dtype=node_output.dtype) for _ in range(self.world_size)] if self.rank == 0 else None
+        cluster_output = (
+            [torch.zeros_like(node_output, dtype=node_output.dtype) for _ in range(self.world_size)]
+            if self.rank == 0
+            else None
+        )
         dist.gather(node_output, gather_list=cluster_output, dst=0)
         return torch.cat(cluster_output, dim=-1) if self.rank == 0 else None
 
@@ -42,6 +49,7 @@ class ColumnParallelLayer(nn.Module):
         cluster_output = [torch.zeros_like(node_output, dtype=node_output.dtype) for _ in range(self.world_size)]
         dist.all_gather(cluster_output, node_output)
         return torch.cat(cluster_output, dim=-1) if self.rank == 0 else None
+
 
 class RowParallelLayer(nn.Module):
     def __init__(self, hidden_size: int) -> None:
@@ -62,6 +70,7 @@ class RowParallelLayer(nn.Module):
         dist.all_reduce(node_output, op=dist.ReduceOp.SUM)
         return node_output if self.rank == 0 else None
 
+
 def broadcast_func(x):
     y = torch.zeros_like(x)
     if dist.get_rank() == 0:
@@ -69,10 +78,11 @@ def broadcast_func(x):
     dist.broadcast(y, src=0)
     print(f"Rank: {dist.get_rank()}; value: {y}")
 
+
 if __name__ == "__main__":
     setup_seed(42)
     # 初始化分布式环境
-    dist.init_process_group(backend='gloo')
+    dist.init_process_group(backend="gloo")
 
     # x = torch.tensor([1,2])
     # broadcast_func(x)

@@ -7,6 +7,7 @@ from typing import Dict
 torch.set_num_threads(4)
 ray.init(ignore_reinit_error=True, num_cpus=4)
 
+
 @ray.remote
 class ParallelLinear(nn.Module):
     def __init__(self, row_size: int, col_size: int) -> None:
@@ -20,6 +21,7 @@ class ParallelLinear(nn.Module):
     def forward(self, x):
         return self.layer(x)
 
+
 class MyLinear(nn.Module):
     def __init__(self, row_size: int, col_size: int) -> None:
         super().__init__()
@@ -32,23 +34,16 @@ class MyLinear(nn.Module):
     def forward(self, x):
         return self.layer(x)
 
+
 class MyModel(nn.Module):
     def __init__(self, hidden_size: int = 4096, tensor_split: int = 2):
         super(MyModel, self).__init__()
-        assert (
-            hidden_size % tensor_split == 0
-        ), "hidden_size must be divisible by tensor_split"
+        assert hidden_size % tensor_split == 0, "hidden_size must be divisible by tensor_split"
         self.is_col_layer = False
         if self.is_col_layer:
-            self.layer = [
-                ParallelLinear.remote(hidden_size, hidden_size // tensor_split)
-                for _ in range(tensor_split)
-            ]
+            self.layer = [ParallelLinear.remote(hidden_size, hidden_size // tensor_split) for _ in range(tensor_split)]
         else:
-            self.layer = [
-                ParallelLinear.remote(hidden_size // tensor_split, hidden_size)
-                for _ in range(tensor_split)
-            ]
+            self.layer = [ParallelLinear.remote(hidden_size // tensor_split, hidden_size) for _ in range(tensor_split)]
         self.tensor_split = tensor_split
 
     def load_state_dict(self, state_dict: Dict):

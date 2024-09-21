@@ -5,12 +5,8 @@ import time
 
 
 def load_model_and_tokenizer(model_path: str) -> Tuple[LlamaForCausalLM, AutoTokenizer]:
-    model = LlamaForCausalLM.from_pretrained(
-        model_path, trust_remote_code=True, device_map="cpu"
-    )
-    tok = AutoTokenizer.from_pretrained(
-        model_path, use_fast=True, trust_remote_code=True
-    )
+    model = LlamaForCausalLM.from_pretrained(model_path, trust_remote_code=True, device_map="cpu")
+    tok = AutoTokenizer.from_pretrained(model_path, use_fast=True, trust_remote_code=True)
     return model, tok
 
 

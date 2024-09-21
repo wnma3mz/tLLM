@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 from torch.multiprocessing import Process, Array
 import time
+
+
 class LinearModel(nn.Module):
     def __init__(self, input_size, output_size):
         super(LinearModel, self).__init__()
@@ -9,6 +11,7 @@ class LinearModel(nn.Module):
 
     def forward(self, x):
         return self.linear(x)
+
 
 def compute_linear(model, input_array, output_array, input_size):
     # 从共享内存读取输入
@@ -18,6 +21,7 @@ def compute_linear(model, input_array, output_array, input_size):
         # 将输出写入共享内存
         for i in range(output_tensor.numel()):
             output_array[i] = output_tensor.view(-1)[i].item()
+
 
 def base_compute_linear(models, input_tensor):
     lst = []
@@ -38,8 +42,8 @@ if __name__ == "__main__":
     print(time.time() - s1)
 
     # 创建共享内存用于输入和输出
-    inputs = Array('f', bs * hidden_size)  # 输入数据共享内存
-    outputs = [Array('f', model(torch.randn(bs, hidden_size)).numel()) for model in models]
+    inputs = Array("f", bs * hidden_size)  # 输入数据共享内存
+    outputs = [Array("f", model(torch.randn(bs, hidden_size)).numel()) for model in models]
 
     # 填充输入数据到共享内存
     # for i in range(bs):
@@ -51,7 +55,7 @@ if __name__ == "__main__":
         p = Process(target=compute_linear, args=(model, inputs, output_array, hidden_size))
         processes.append(p)
         p.start()
-        
+
     s1 = time.time()
     for p in processes:
         p.join()
