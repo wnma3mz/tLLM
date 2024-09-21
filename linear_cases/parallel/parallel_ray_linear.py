@@ -4,8 +4,8 @@ import ray
 import time
 from typing import Dict
 
-ray.init(ignore_reinit_error=True)
-
+torch.set_num_threads(4)
+ray.init(ignore_reinit_error=True, num_cpus=4)
 
 @ray.remote
 class ParallelLinear(nn.Module):
@@ -86,7 +86,7 @@ class MyModel(nn.Module):
 
 if __name__ == "__main__":
     # Initialize model
-    hidden_size, tensor_split = 4096, 2
+    hidden_size, tensor_split = 4096, 1
     model = MyModel(hidden_size=hidden_size, tensor_split=tensor_split)
     print(f"hidden_size: {hidden_size}; tensor_split: {tensor_split}")
     w = torch.randn(hidden_size, hidden_size)
@@ -95,7 +95,7 @@ if __name__ == "__main__":
     base_model = MyLinear(hidden_size, hidden_size)
     base_model.load_state_dict({"weight": w})
 
-    input_tensor = torch.randn(1, 2, hidden_size)
+    input_tensor = torch.randn(10, 20, hidden_size)
     output_tensor = model(input_tensor)
     output_tensor = base_model(input_tensor)
 

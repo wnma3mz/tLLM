@@ -7,73 +7,37 @@
 #### backend
 
 - [X] transformers
-- [ ] numpy?
-- [ ] cpp
+- [X] torch
 
 #### communication
 
-- [X] http
-- [X] grpc
+- [X] ray
+- [X] torch.dist
+
+http 耗时明显大于 rpc
+
+ray 框架更易使用，无需手写 rpc 相关内容，且通信差不多，底层也是 rpc。
+
+但 ray 框架在使用 Tensor Parallel 会比不开 TP 更快，故暂时先换用 torch.dist，可以实现加速的效果。
+
+torch.dist 在 CPU 机器上用 gloo（跨机或许也是用这个？）
 
 #### parallel strategy
 
-- [X] pipeline-parallel
-- [X] tensor-parallel
-
-#### base func
-
-- [ ] decode strategy
-    - [ ] beam search
-    - [x] top-k
-    - [x] top-p
-    - [x] greedy
-    - [x] temperature
-    - [ ] logits processor
-- [x] detailed log
-    - [x] node forward time
-    - [x] communication time
-    - [x] local forward time
-
-#### speed up
-
-- [ ] calculation & communication to be overlapped
-
-### communication
-
-shape: [batch, seq_len, hidden] 1x10x4096 -> $1*10*4096*4*8$
-network: 1 MB/s -> 1 * (10 ** 6)
-
-$\frac{1*10*4096*4*8}{1 * (10 ** 6)}=1.3 s$
-
-
-### QuickStart
-
-```bash
-bash examples/run_rpc_pp2.sh
-```
-
-#### model folder
-
-用`weights`文件夹作为模型存放路径, 会把模型每层拆分出来便于各个节点读取。例如:
-
-```shell
-weights
-├── llama3-8B
-    ├── layer_0.pth
-    ├── layer_1.pth
-    ├── ......
-    ├── other.pth
-```
-
-每个节点均需存放所有模型参数
-
-- 避免每次加载都需要传输模型
-- 每个节点可以灵活控制，可以是位于模型中任何层的任何位置
+- [ ] pipeline-parallel
+- [ ] tensor-parallel
 
 ### Performance
 
+#### Pipeline Parallel (PP)
 
-| PP   | LLaMA3-8B | 34B | LLaMA3-70B |
+随着 PP 数变大，通信时间增大，所以单 token 时间变大
+
+#### Tensor Parallel (TP)
+
+在保证通信带宽的前提下，速度应当更快
+
+| TP   | LLaMA3-8B | 34B | LLaMA3-70B |
 | ---- | --------- | --- | ---------- |
 | base |           |     |            |
 | 2    | 1 token/ 10s|     |            |
