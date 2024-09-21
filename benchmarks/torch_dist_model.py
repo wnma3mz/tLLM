@@ -16,6 +16,7 @@ from transformers.cache_utils import Cache, DynamicCache
 from transformers.activations import ACT2FN
 import torch.distributed as dist
 
+# export OMP_NUM_THREADS=8; torchrun --nproc_per_node=2 benchmarks/torch_dist_model.py
 
 # 使用 torch.dist 实现 张量并行，通信时通信输入
 def setup_seed(seed):
@@ -56,17 +57,18 @@ class Communicator:
         dist.gather(x, gather_list=cluster_output, dst=0)
         return torch.cat(cluster_output, dim=-1) if self.rank == 0 else None
 
-
 class ColumnParallelLayer(nn.Module):
     def __init__(self, row_size: int, col_size: int) -> None:
         super().__init__()
         self.world_size = dist.get_world_size()
         self.rank = dist.get_rank()
         assert col_size % self.world_size == 0
+        self.row_size, self.col_size = row_size, col_size
         self.layer = nn.Linear(row_size, col_size // self.world_size, bias=False)
 
-    def load_weight(self, w: torch.Tensor):
-        w = w.chunk(self.world_size, dim=0)[self.rank]
+    def load_weight(self, w: Optional[torch.Tensor] = None):
+        w_list = w.chunk(self.world_size, dim=0)
+        w = w_list[self.rank]
         self.load_state_dict({"layer.weight": w})
 
     @torch.no_grad()
@@ -81,10 +83,12 @@ class RowParallelLayer(nn.Module):
         self.world_size = dist.get_world_size()
         self.rank = dist.get_rank()
         assert row_size % self.world_size == 0
+        self.row_size, self.col_size = row_size, col_size
         self.layer = nn.Linear(row_size // self.world_size, col_size, bias=False)
 
-    def load_weight(self, w: torch.Tensor):
-        w = w.chunk(self.world_size, dim=1)[self.rank]
+    def load_weight(self, w: Optional[torch.Tensor] = None):
+        w_list = w.chunk(self.world_size, dim=1)
+        w = w_list[self.rank]
         self.load_state_dict({"layer.weight": w})
 
     @torch.no_grad()
@@ -115,14 +119,14 @@ class MyLlamaMLP(nn.Module):
     def load_state_dict(self, state_dict: Dict) -> None:
         for key in ["gate_proj", "up_proj", "down_proj"]:
             layer_name = f"model.layers.{self.layer_idx}.mlp.{key}.weight"
-            getattr(self, key).load_weight(state_dict[layer_name])
+            getattr(self, key).load_weight(state_dict.get(layer_name, None))
 
     def forward(self, x):
-        gate_results = self.gate_proj(x)
+        gate_out = self.act_fn(self.gate_proj(x))
         up_out = self.up_proj(x)
-        gate_out = self.act_fn(gate_results)
         intermediate_states = gate_out * up_out
         return comm.all_reduce(self.down_proj.forward_chunk(intermediate_states))
+
 
 
 class MyLlamaSdpaAttention(nn.Module):
@@ -146,11 +150,11 @@ class MyLlamaSdpaAttention(nn.Module):
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
+        self.world_size = dist.get_world_size()
         self.q_proj = ColumnParallelLayer(self.hidden_size, self.num_heads * self.head_dim)
         self.k_proj = ColumnParallelLayer(self.hidden_size, self.num_key_value_heads * self.head_dim)
         self.v_proj = ColumnParallelLayer(self.hidden_size, self.num_key_value_heads * self.head_dim)
         self.o_proj = RowParallelLayer(self.num_heads * self.head_dim, self.hidden_size)
-
         self._init_rope()
 
     def _init_rope(self):
@@ -163,7 +167,7 @@ class MyLlamaSdpaAttention(nn.Module):
     def load_state_dict(self, state_dict: Dict) -> None:
         for key in ["q_proj", "k_proj", "v_proj", "o_proj"]:
             layer_name = f"model.layers.{self.layer_idx}.self_attn.{key}.weight"
-            getattr(self, key).load_weight(state_dict[layer_name])
+            getattr(self, key).load_weight(state_dict.get(layer_name, None))
 
     def forward(
         self,
@@ -173,49 +177,41 @@ class MyLlamaSdpaAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
-        # query_states = comm.all_gather(self.q_proj(hidden_states))
-        # key_states = comm.all_gather(self.k_proj(hidden_states))
-        # value_states = comm.all_gather(self.v_proj(hidden_states))
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
 
-        query_states = comm.gather(self.q_proj(hidden_states))
-        key_states = comm.gather(self.k_proj(hidden_states))
-        value_states = comm.gather(self.v_proj(hidden_states))
+        query_states = query_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
 
-        if is_rank0():
-            query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-            key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-            value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        kv_seq_len = key_states.shape[-2]
+        if past_key_value is not None:
+            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
 
-            kv_seq_len = key_states.shape[-2]
-            if past_key_value is not None:
-                kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-            cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        if past_key_value is not None:
+            cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-            if past_key_value is not None:
-                cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
-                key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-            key_states = repeat_kv(key_states, self.num_key_value_groups)
-            value_states = repeat_kv(value_states, self.num_key_value_groups)
+        # TODO: speed up the following line
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
+            # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
+            is_causal=self.is_causal and q_len > 1,
+        )
 
-            # TODO: speed up the following line
-            attn_output = torch.nn.functional.scaled_dot_product_attention(
-                query_states,
-                key_states,
-                value_states,
-                # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
-                is_causal=self.is_causal and q_len > 1,
-            )
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.reshape(bsz, q_len, -1)
 
-            attn_output = attn_output.transpose(1, 2).contiguous()
-            attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
-        else:
-            attn_output = torch.zeros_like(hidden_states, dtype=hidden_states.dtype)
-        dist.broadcast(attn_output, src=0)
-
-        attn_output = comm.all_reduce(self.o_proj(attn_output))
+        attn_output = comm.all_reduce(self.o_proj.forward_chunk(attn_output))
         return attn_output, None, past_key_value
 
 
@@ -253,6 +249,7 @@ class MyLlamaDecoderLayer(nn.Module):
 
         hidden_states = self.input_layernorm(hidden_states)
 
+        dist.broadcast(hidden_states, src=0)
         # Self Attention
         hidden_states, _, past_key_value = self.self_attn(
             hidden_states=hidden_states,
@@ -261,14 +258,15 @@ class MyLlamaDecoderLayer(nn.Module):
         )
         hidden_states = residual + hidden_states
 
-        # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
+
+        dist.broadcast(hidden_states, src=0)
+        # Fully Connected
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
         return hidden_states, past_key_value
-
 
 class MyLlamaModel(nn.Module):
     def __init__(self, config):
@@ -318,17 +316,15 @@ class MyLlamaForCausalLM(nn.Module):
     @classmethod
     def from_pretrained(cls, model_path: str, **kwargs):
         config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
-        # config.num_hidden_layers = 1
-
         model = cls(config)
         from transformers import LlamaForCausalLM
 
         state_dict = LlamaForCausalLM.from_pretrained(model_path, trust_remote_code=True, device_map="cpu").state_dict()
 
-        # if is_rank0():
-        model.embed_tokens.load_state_dict({"weight": state_dict.pop("model.embed_tokens.weight")})
-        model.norm.load_state_dict({"weight": state_dict.pop("model.norm.weight")})
-        model.lm_head.load_state_dict({"weight": state_dict.pop("lm_head.weight")})
+        if is_rank0():
+            model.embed_tokens.load_state_dict({"weight": state_dict.pop("model.embed_tokens.weight")})
+            model.norm.load_state_dict({"weight": state_dict.pop("model.norm.weight")})
+            model.lm_head.load_state_dict({"weight": state_dict.pop("lm_head.weight")})
 
         model.model.load_state_dict(state_dict)
 
@@ -337,9 +333,11 @@ class MyLlamaForCausalLM(nn.Module):
 
     def forward(self, input_embeds: torch.Tensor, position_ids, past_key_values):
         output = self.model(input_embeds, position_ids, past_key_values)
-        hidden_states = self.norm(output.last_hidden_state)
-        logits = self.lm_head(hidden_states)
-        return logits, output.past_key_values
+        if is_rank0():
+            hidden_states = self.norm(output.last_hidden_state)
+            logits = self.lm_head(hidden_states)
+            return logits, output.past_key_values
+        return None, output.past_key_values
 
     @torch.no_grad()
     def generate(self, input_ids: torch.Tensor, **kwargs) -> Tuple[List[int], Optional[torch.Tensor]]:
@@ -362,12 +360,16 @@ class MyLlamaForCausalLM(nn.Module):
                 position_ids = position_ids.unsqueeze(0)
 
             logits, past_key_values = self(input_embeds, position_ids, past_key_values)
-            next_token = torch.argmax(logits[:, -1], dim=1)
-            token_list.append(next_token[0].tolist())
             cnt += 1
             if cnt >= max_new_tokens:
                 break
-            input_embeds = self.embed_tokens(next_token).unsqueeze(0)
+            if is_rank0():
+                next_token = torch.argmax(logits[:, -1], dim=1)
+                token_list.append(next_token[0].tolist())
+                input_embeds = self.embed_tokens(next_token).unsqueeze(0)
+            else:
+                # 避免 broadcast
+                input_embeds = self.embed_tokens(torch.tensor([0])).unsqueeze(0)
 
         return token_list, None
 
@@ -414,8 +416,7 @@ if __name__ == "__main__":
 
     s1 = time.time()
     output = model.generate(input_ids, max_new_tokens=20, do_sample=False)
-    token_list = output[0]
-    print_rank0("token: ", token_list)
+    print_rank0("token: ", output[0])
     print_rank0("Cost time: ", time.time() - s1)
 
     for _ in range(10):
