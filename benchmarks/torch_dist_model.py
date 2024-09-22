@@ -104,10 +104,10 @@ class QKVParallelLayer(nn.Module):
         super().__init__()
         self.world_size = dist.get_world_size()
         self.rank = dist.get_rank()
-        assert col_size % self.world_size == 0
         for x in col_size_list:
             assert x % self.world_size == 0
         col_size = sum(col_size_list)
+        assert col_size % self.world_size == 0
 
         self.row_size, self.col_size = row_size, col_size
         self.col_size_list = [x // self.world_size for x in col_size_list]

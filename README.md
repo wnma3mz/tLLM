@@ -26,6 +26,14 @@ torch.dist 在 CPU 机器上用 gloo（跨机或许也是用这个？）。
 
 主要注意的是，reduce 涉及到一些复杂的规约算法，会有一些精度问题。
 
+Q：为什么在单个 nn.Linear 使用 torch.dist 更快，但是在复杂模型中更慢？
+
+A：可能是通信？内存不够？CPU不够？换 CUDA？
+
+Q: 为什么 Merge QKV/gate、up 之后在复杂模型中更慢？
+
+A：内存带宽？多核利用？换 CUDA？
+
 #### parallel strategy
 
 - [ ] pipeline-parallel
