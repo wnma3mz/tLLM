@@ -1,21 +1,21 @@
-from transformers import AutoTokenizer, AutoConfig
+import time
+from typing import *
+
+import ray
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from transformers import AutoConfig, AutoTokenizer
+from transformers.activations import ACT2FN
+from transformers.cache_utils import Cache, DynamicCache
+from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.models.llama.modeling_llama import (
-    LlamaRMSNorm,
     LlamaConfig,
+    LlamaRMSNorm,
     LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     repeat_kv,
 )
-from typing import *
-import time
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import ray
-import time
-from transformers.modeling_outputs import BaseModelOutputWithPast
-from transformers.cache_utils import Cache, DynamicCache
-from transformers.activations import ACT2FN
 
 # 使用 ray 实现 张量并行，通信时通信权重和输入，以复用 ray 的 actor
 

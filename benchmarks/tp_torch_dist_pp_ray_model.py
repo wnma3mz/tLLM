@@ -1,6 +1,8 @@
 import time
+import os
 from typing import *
 
+import ray
 import torch
 import torch.distributed as dist
 import torch.nn as nn
@@ -16,27 +18,38 @@ from transformers.models.llama.modeling_llama import (
     repeat_kv,
 )
 
-# 使用 torch.dist 实现 张量并行，通信时仅通信输入
+# 使用 torch.dist 实现 张量并行，使用 ray 实现 管道并行，通信时仅通信输入
+# 太慢了
 # export OMP_NUM_THREADS=8; torchrun --nproc_per_node=2 benchmarks/torch_dist_model.py
-
 
 def setup_seed(seed):
     torch.manual_seed(seed)
 
 
-def is_rank0():
-    return dist.get_rank() == 0
+def init_process(rank, world_size, backend='gloo'):
+    os.environ['MASTER_ADDR'] = 'localhost'  # 或者使用集群中的主节点地址
+    os.environ['MASTER_PORT'] = '12355'  # 端口号
+    dist.init_process_group(backend, rank=rank, world_size=world_size)
 
-
-def print_rank0(*args):
-    if dist.get_rank() == 0:
-        print(*args)
-
-
+@ray.remote
 class Communicator:
-    def __init__(self) -> None:
+    def __init__(self, rank, world_size) -> None:
+        init_process(rank, world_size)
         self.world_size = dist.get_world_size()
         self.rank = dist.get_rank()
+
+    def get_rank(self):
+        return self.rank
+
+    def get_world_size(self):
+        return self.world_size
+
+    def is_rank0(self):
+        return dist.get_rank() == 0
+
+    def print_rank0(self, *args):
+        if self.is_rank0():
+            print(*args)
 
     def all_reduce(self, x: torch.Tensor):
         # input shape == output shape
@@ -58,32 +71,22 @@ class Communicator:
         dist.gather(x, gather_list=cluster_output, dst=0)
         return torch.cat(cluster_output, dim=-1) if self.rank == 0 else None
 
+    def broadcast(self, x: torch.Tensor):
+        dist.broadcast(x, src=0)
 
-class ColumnParallelLayer(nn.Module):
-    def __init__(self, row_size: int, col_size: int) -> None:
+
+class BaseParallelLayer(nn.Module):
+    def __init__(self, world_size: int, rank: int) -> None:
+        self.world_size = world_size
+        self.rank = rank
         super().__init__()
-        self.world_size = dist.get_world_size()
-        self.rank = dist.get_rank()
-        assert col_size % self.world_size == 0
-        self.row_size, self.col_size = row_size, col_size
-        self.layer = nn.Linear(row_size, col_size // self.world_size, bias=False)
-
-    def load_weight(self, w: Optional[torch.Tensor] = None):
-        w_list = w.chunk(self.world_size, dim=0)
-        w = w_list[self.rank]
-        self.load_state_dict({"layer.weight": w})
-
-    @torch.no_grad()
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        node_output = self.layer(x)
-        return node_output
+        # self.world_size = ray.get(comm.get_world_size.remote())
+        # self.rank = ray.get(comm.get_rank.remote())
 
 
-class MergeParallelLayer(nn.Module):
-    def __init__(self, row_size: int, col_size: int, dup_layer: int) -> None:
-        super().__init__()
-        self.world_size = dist.get_world_size()
-        self.rank = dist.get_rank()
+class MergeParallelLayer(BaseParallelLayer):
+    def __init__(self, row_size: int, col_size: int, dup_layer: int, world_size: int, rank: int) -> None:
+        super().__init__(world_size, rank)
         assert col_size % self.world_size == 0
         self.row_size, self.col_size = row_size, col_size
         self.dup_layer = dup_layer
@@ -99,11 +102,9 @@ class MergeParallelLayer(nn.Module):
         return torch.chunk(node_output, self.dup_layer, dim=-1)
 
 
-class QKVParallelLayer(nn.Module):
-    def __init__(self, row_size: int, col_size_list: List[int]) -> None:
-        super().__init__()
-        self.world_size = dist.get_world_size()
-        self.rank = dist.get_rank()
+class QKVParallelLayer(BaseParallelLayer):
+    def __init__(self, row_size: int, col_size_list: List[int], world_size: int, rank: int) -> None:
+        super().__init__(world_size, rank)
         for x in col_size_list:
             assert x % self.world_size == 0
         col_size = sum(col_size_list)
@@ -123,11 +124,9 @@ class QKVParallelLayer(nn.Module):
         return torch.split(node_output, self.col_size_list, dim=-1)
 
 
-class RowParallelLayer(nn.Module):
-    def __init__(self, row_size: int, col_size: int) -> None:
-        super().__init__()
-        self.world_size = dist.get_world_size()
-        self.rank = dist.get_rank()
+class RowParallelLayer(BaseParallelLayer):
+    def __init__(self, row_size: int, col_size: int, world_size: int, rank: int) -> None:
+        super().__init__(world_size, rank)
         assert row_size % self.world_size == 0
         self.row_size, self.col_size = row_size, col_size
         self.layer = nn.Linear(row_size // self.world_size, col_size, bias=False)
@@ -139,12 +138,7 @@ class RowParallelLayer(nn.Module):
 
     @torch.no_grad()
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        node_x = torch.chunk(x, self.world_size, dim=-1)[self.rank]
-        node_output = self.layer(node_x)
-        return node_output
-
-    @torch.no_grad()
-    def forward_chunk(self, x: torch.Tensor) -> torch.Tensor:
+        # 输入已经 chunk 过了
         return self.layer(x)
 
 
@@ -158,30 +152,30 @@ class MyLlamaMLP(nn.Module):
         self.intermediate_size = config.intermediate_size
         self.act_fn = ACT2FN[config.hidden_act]
 
-        # self.gate_proj = ColumnParallelLayer(self.hidden_size, self.intermediate_size)
-        # self.up_proj = ColumnParallelLayer(self.hidden_size, self.intermediate_size)
-        self.gate_up_proj = MergeParallelLayer(self.hidden_size, self.intermediate_size, 2)
-        self.down_proj = RowParallelLayer(self.intermediate_size, self.hidden_size)
+        self.comm = config.comm
+        self.rank = ray.get(self.comm.get_rank.remote())
+        self.world_size = ray.get(self.comm.get_world_size.remote())
+
+        self.gate_up_proj = MergeParallelLayer(self.hidden_size, self.intermediate_size, 2, self.world_size, self.rank)
+        self.down_proj = RowParallelLayer(self.intermediate_size, self.hidden_size, self.world_size, self.rank)
 
     def load_state_dict(self, state_dict: Dict) -> None:
-        # for key in ["gate_proj", "up_proj", "down_proj"]:
         for key in ["down_proj"]:
             layer_name = f"model.layers.{self.layer_idx}.mlp.{key}.weight"
             getattr(self, key).load_weight(state_dict.get(layer_name, None))
 
         weight_chunks = []
-        len_ = dist.get_world_size()
         for key in ["gate_proj", "up_proj"]:
             layer_name = f"model.layers.{self.layer_idx}.mlp.{key}.weight"
             weight = state_dict[layer_name]
-            weight_chunks.append(torch.chunk(weight, len_, dim=0))
-        combined_weights = [torch.cat([chunk[i] for chunk in weight_chunks], dim=0) for i in range(len_)]
+            weight_chunks.append(torch.chunk(weight, self.world_size, dim=0))
+        combined_weights = [torch.cat([chunk[i] for chunk in weight_chunks], dim=0) for i in range(self.world_size)]
         self.gate_up_proj.load_weight(combined_weights)
 
     def forward(self, x):
         gate_out, up_out = self.gate_up_proj(x)
         intermediate_states = self.act_fn(gate_out) * up_out
-        return comm.all_reduce(self.down_proj.forward_chunk(intermediate_states))
+        return ray.get(self.comm.all_reduce.remote((self.down_proj(intermediate_states))))
 
 
 class MyLlamaSdpaAttention(nn.Module):
@@ -205,10 +199,11 @@ class MyLlamaSdpaAttention(nn.Module):
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
-        self.world_size = dist.get_world_size()
-        # self.q_proj = ColumnParallelLayer(self.hidden_size, self.num_heads * self.head_dim)
-        # self.k_proj = ColumnParallelLayer(self.hidden_size, self.num_key_value_heads * self.head_dim)
-        # self.v_proj = ColumnParallelLayer(self.hidden_size, self.num_key_value_heads * self.head_dim)
+
+        self.comm = config.comm
+        self.rank = ray.get(self.comm.get_rank.remote())
+        self.world_size = ray.get(self.comm.get_world_size.remote())
+
         self.qkv_proj = QKVParallelLayer(
             self.hidden_size,
             [
@@ -216,8 +211,10 @@ class MyLlamaSdpaAttention(nn.Module):
                 self.num_key_value_heads * self.head_dim,
                 self.num_key_value_heads * self.head_dim,
             ],
+            self.world_size,
+            self.rank
         )
-        self.o_proj = RowParallelLayer(self.num_heads * self.head_dim, self.hidden_size)
+        self.o_proj = RowParallelLayer(self.num_heads * self.head_dim, self.hidden_size, self.world_size, self.rank)
         self._init_rope()
 
     def _init_rope(self):
@@ -228,18 +225,16 @@ class MyLlamaSdpaAttention(nn.Module):
         )
 
     def load_state_dict(self, state_dict: Dict) -> None:
-        # for key in ["q_proj", "k_proj", "v_proj", "o_proj"]:
         for key in ["o_proj"]:
             layer_name = f"model.layers.{self.layer_idx}.self_attn.{key}.weight"
             getattr(self, key).load_weight(state_dict.get(layer_name, None))
 
         weight_chunks = []
-        len_ = dist.get_world_size()
         for key in ["q_proj", "k_proj", "v_proj"]:
             layer_name = f"model.layers.{self.layer_idx}.self_attn.{key}.weight"
             weight = state_dict[layer_name]
-            weight_chunks.append(torch.chunk(weight, len_, dim=0))
-        combined_weights = [torch.cat([chunk[i] for chunk in weight_chunks], dim=0) for i in range(len_)]
+            weight_chunks.append(torch.chunk(weight, self.world_size, dim=0))
+        combined_weights = [torch.cat([chunk[i] for chunk in weight_chunks], dim=0) for i in range(self.world_size)]
         self.qkv_proj.load_weight(combined_weights)
 
     def forward(
@@ -250,9 +245,6 @@ class MyLlamaSdpaAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
-        # query_states = self.q_proj(hidden_states)
-        # key_states = self.k_proj(hidden_states)
-        # value_states = self.v_proj(hidden_states)
         query_states, key_states, value_states = self.qkv_proj(hidden_states)
 
         query_states = query_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
@@ -285,7 +277,7 @@ class MyLlamaSdpaAttention(nn.Module):
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(bsz, q_len, -1)
 
-        attn_output = comm.all_reduce(self.o_proj.forward_chunk(attn_output))
+        attn_output = ray.get(self.comm.all_reduce.remote(self.o_proj(attn_output)))
         return attn_output, None, past_key_value
 
 
@@ -342,32 +334,32 @@ class MyLlamaDecoderLayer(nn.Module):
         return hidden_states, past_key_value
 
 
-class MyLlamaModel(nn.Module):
-    def __init__(self, config):
+@ray.remote
+class Decoder(nn.Module):
+    def __init__(self, config, start_layer_idx: int, end_layer_idx: int, decoder_idx: int):
         super().__init__()
-        self.padding_idx = config.pad_token_id
-        self.vocab_size = config.vocab_size
-
+        config.comm = comm_list[decoder_idx]
         self.decoder = nn.ModuleList(
-            [MyLlamaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [MyLlamaDecoderLayer(config, layer_idx) for layer_idx in range(start_layer_idx, end_layer_idx)]
         )
 
     def load_state_dict(self, state_dict: Dict) -> None:
         for layer in self.decoder:
             layer.load_state_dict(state_dict)
 
+
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional["Cache"] = None,
+        past_key_value: Optional["Cache"] = None,
     ):
         next_decoder_cache = None
         for layer in self.decoder:
             layer_outputs = layer(
                 hidden_states,
                 position_ids=position_ids,
-                past_key_value=past_key_values,
+                past_key_value=past_key_value,
             )
             hidden_states = layer_outputs[0]
 
@@ -376,6 +368,42 @@ class MyLlamaModel(nn.Module):
         next_cache = next_decoder_cache
         return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=next_cache)
 
+
+class MyLlamaModel(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
+
+        pp_layers = config.num_hidden_layers // 2
+
+        self.decoder1 = Decoder.remote(config, 0, pp_layers, 0)
+        self.decoder2 = Decoder.remote(config, pp_layers, config.num_hidden_layers, 1)
+
+    def load_state_dict(self, state_dict: Dict) -> None:
+        self.decoder1.load_state_dict.remote(state_dict)
+        self.decoder2.load_state_dict.remote(state_dict)
+
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional["Cache"] = None,
+    ):
+        layer_futures = self.decoder1.forward.remote(hidden_states, position_ids=position_ids, past_key_value=past_key_values)
+        layer_outputs = ray.get(layer_futures)
+        hidden_states, past_key_values = layer_outputs.last_hidden_state, layer_outputs.past_key_values
+        layer_futures = self.decoder2.forward.remote(hidden_states, position_ids=position_ids, past_key_value=past_key_values)
+        layer_outputs = ray.get(layer_futures)
+        hidden_states, past_key_values = layer_outputs.last_hidden_state, layer_outputs.past_key_values
+        return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
+
+        # layer_outputs = self.decoder1(hidden_states, position_ids=position_ids, past_key_value=past_key_values)
+        # hidden_states, past_key_values = layer_outputs.last_hidden_state, layer_outputs.past_key_values
+        # layer_outputs = self.decoder2(hidden_states, position_ids=position_ids, past_key_value=past_key_values)
+        # hidden_states, past_key_values = layer_outputs.last_hidden_state, layer_outputs.past_key_values
+        # return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
 
 class MyLlamaForCausalLM(nn.Module):
     def __init__(self, config):
@@ -395,7 +423,7 @@ class MyLlamaForCausalLM(nn.Module):
 
         state_dict = LlamaForCausalLM.from_pretrained(model_path, trust_remote_code=True, device_map="cpu").state_dict()
 
-        if is_rank0():
+        if rank == 0:
             model.embed_tokens.load_state_dict({"weight": state_dict.pop("model.embed_tokens.weight")})
             model.norm.load_state_dict({"weight": state_dict.pop("model.norm.weight")})
             model.lm_head.load_state_dict({"weight": state_dict.pop("lm_head.weight")})
@@ -407,7 +435,7 @@ class MyLlamaForCausalLM(nn.Module):
 
     def forward(self, input_embeds: torch.Tensor, position_ids, past_key_values):
         output = self.model(input_embeds, position_ids, past_key_values)
-        if is_rank0():
+        if rank == 0:
             hidden_states = self.norm(output.last_hidden_state)
             logits = self.lm_head(hidden_states)
             return logits, output.past_key_values
@@ -424,7 +452,8 @@ class MyLlamaForCausalLM(nn.Module):
         token_list: List[int] = []
         cnt = 0
         while True:
-            dist.broadcast(input_embeds, src=0)
+            ray.get(comm.broadcast.remote(input_embeds))
+            # comm.broadcast(input_embeds)
             # print(f"Rank: {dist.get_rank()}, input_embeds: {input_embeds}")
             if past_key_values is None:
                 past_key_values = DynamicCache()
@@ -438,7 +467,7 @@ class MyLlamaForCausalLM(nn.Module):
             cnt += 1
             if cnt >= max_new_tokens:
                 break
-            if is_rank0():
+            if rank == 0:
                 next_token = torch.argmax(logits[:, -1], dim=1)
                 token_list.append(next_token[0].tolist())
                 input_embeds = self.embed_tokens(next_token).unsqueeze(0)
@@ -473,30 +502,33 @@ def tokenize_message(tok: AutoTokenizer, messages: List[Dict[str, str]]) -> List
 
 if __name__ == "__main__":
     setup_seed(42)
-    # 初始化分布式环境
-    dist.init_process_group(backend="gloo")
-    comm = Communicator()
-
+    world_size = 2
+    ray.init(ignore_reinit_error=True)
+    # dist_list = ray.get([init_process.remote(rank, world_size) for rank in range(world_size)])
+    comm_list = [Communicator.remote(rank, world_size) for rank in range(world_size)]
+    comm = comm_list[0]
+    rank = ray.get(comm.get_rank.remote())
     model_path = "/Users/lujianghu/Documents/TinyLlama-1.1B-Chat-v1.0"
     s1 = time.time()
     model, tok = load_model_and_tokenizer(model_path)
-    print_rank0(f"load_model cost time {time.time() - s1}")
+    # ray.get(comm.print_rank0.remote(f"load_model cost time {time.time() - s1}"))
+    print(f"[Rank: {rank}] load_model cost time {time.time() - s1}")
 
     messages = [{"role": "user", "content": "Hello, how are you?"}]
     input_id_list = tokenize_message(tok, messages)
     input_ids = torch.tensor(input_id_list).unsqueeze(0)
-    print_rank0("input_ids: ", input_ids)
+    print(f"[Rank: {rank}] input_ids: {input_ids}")
     # output = model.generate(input_ids, max_new_tokens=50, tokenizer=tok, eos_token_id=[0, tok.eos_token_id])
     # print(tok.decode(output[0][input_ids.shape[1]:], skip_special_tokens=True))
 
     s1 = time.time()
     output = model.generate(input_ids, max_new_tokens=20, do_sample=False)
-    print_rank0("token: ", output[0])
-    print_rank0("Cost time: ", time.time() - s1)
+    print(f"[Rank: {rank}] token: {output[0]}")
+    print(f"[Rank: {rank}] cost time: {time.time() - s1}")
 
     for _ in range(10):
         s1 = time.time()
         with torch.no_grad():
             output = model.generate(input_ids, max_new_tokens=1, do_sample=False)
-        print_rank0(f"Time taken: {time.time() - s1}")
+        print(f"[Rank: {rank}] Time taken: {time.time() - s1}")
         # print(tok.decode(output[0][input_ids.shape[1] :], skip_special_tokens=True))

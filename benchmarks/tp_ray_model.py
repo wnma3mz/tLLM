@@ -1,22 +1,20 @@
-from typing import Mapping
-from transformers import AutoTokenizer, AutoConfig
+import time
+from typing import *
+
+import ray
+import torch
+import torch.nn as nn
+from transformers import AutoConfig, AutoTokenizer
+from transformers.activations import GELUActivation
+from transformers.cache_utils import Cache, DynamicCache
+from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.models.llama.modeling_llama import (
-    LlamaRMSNorm,
-    LlamaSdpaAttention,
     LlamaConfig,
+    LlamaRMSNorm,
     LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     repeat_kv,
 )
-from typing import *
-import time
-import torch
-import torch.nn as nn
-import ray
-import time
-from transformers.activations import GELUActivation
-from transformers.modeling_outputs import BaseModelOutputWithPast
-from transformers.cache_utils import Cache, DynamicCache
 
 # 使用 ray 实现 张量并行，通信时通信仅通信输入
 

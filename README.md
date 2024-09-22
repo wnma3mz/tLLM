@@ -13,6 +13,7 @@
 
 - [X] ray
 - [X] torch.dist
+- [X] rpc
 
 http 耗时明显大于 rpc
 
@@ -36,8 +37,15 @@ A：内存带宽？多核利用？换 CUDA？
 
 #### parallel strategy
 
-- [ ] pipeline-parallel
-- [ ] tensor-parallel
+- [x] pipeline-parallel
+
+PP 通信频率取决于 PP 个数。在使用 ray 实现 PP 策略时，发现难以实现预期的效果，故换用 RPC 的方式来实现 PP 策略。
+
+- [x] tensor-parallel
+
+TP 要求更高的通信频率，适合单机多卡/局域网。故使用 torch.dist 策略。
+
+当 TP 和 PP 同时使用的时候，需要兼顾两种通信策略。在实现上，应该是先切 PP 再 TP 比较容易。
 
 ### Performance
 

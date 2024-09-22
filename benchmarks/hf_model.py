@@ -1,7 +1,8 @@
-from transformers import LlamaForCausalLM, AutoTokenizer
-from typing import *
-import torch
 import time
+from typing import *
+
+import torch
+from transformers import AutoTokenizer, LlamaForCausalLM
 
 
 def load_model_and_tokenizer(model_path: str) -> Tuple[LlamaForCausalLM, AutoTokenizer]:
