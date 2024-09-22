@@ -16,10 +16,9 @@ from transformers.cache_utils import Cache, DynamicCache
 from transformers.activations import ACT2FN
 import torch.distributed as dist
 
+# 使用 torch.dist 实现 张量并行，通信时仅通信输入
 # export OMP_NUM_THREADS=8; torchrun --nproc_per_node=2 benchmarks/torch_dist_model.py
 
-
-# 使用 torch.dist 实现 张量并行，通信时通信输入
 def setup_seed(seed):
     torch.manual_seed(seed)
 
