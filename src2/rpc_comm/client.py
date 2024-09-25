@@ -47,16 +47,25 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
         self.ip_addr = "test"
         self.prefix_log_str = f"IP: [{self.ip_addr}]"
         hidden_states_shape = torch.empty(3, dtype=torch.int64)
+        uuid_shape = torch.empty(1, dtype=torch.int64)
         if self.config.comm.is_rank0():
             pass
         else:
             while True:
                 dist.recv(hidden_states_shape, src=0)
-
                 hidden_states = torch.empty(tuple(hidden_states_shape.tolist()))
                 dist.recv(hidden_states, src=0)
 
-                self.model.forward(hidden_states=hidden_states)
+                dist.recv(uuid_shape, src=0)
+                uuid_tensor = torch.empty(tuple(uuid_shape.tolist()), dtype=torch.int8)
+                dist.recv(uuid_tensor, src=0)
+                uuid = "".join(chr(c) for c in uuid_tensor.numpy())
+
+                input_data = self.model._prepare_forward_data_v2(hidden_states, uuid)
+                output = self.model.forward(**input_data)
+
+                self.model.cache_manager.set(uuid, output.past_key_values)
+                self.model.cache_manager.check_alive()
 
     def Forward(self, request, context):
         s1 = time.time()
@@ -65,10 +74,14 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
 
         input_data = self.model._prepare_forward_data(data)
         shape = torch.tensor(input_data["hidden_states"].shape, dtype=torch.int64)
+        uuid_tensor = torch.tensor([ord(c) for c in data.uuid], dtype=torch.int8)
+        uuid_shape = torch.tensor(uuid_tensor.shape, dtype=torch.int64)
         for rank in range(1, self.config.comm.world_size):
             dist.send(shape, dst=rank)
             dist.send(input_data["hidden_states"], dst=rank)
-            # 需要同步 input_data，所有参数，否则 attention 会计算错
+
+            dist.send(uuid_shape, dst=rank)
+            dist.send(uuid_tensor, dst=rank)
 
         output = self.model.forward(**input_data)
 

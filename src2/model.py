@@ -72,6 +72,22 @@ class MyLlamaModel(nn.Module):
             "past_key_values": past_key_values,
         }
 
+    def _prepare_forward_data_v2(self, hidden_states, uuid) -> torch.Tensor:
+        # 客户端自行生成 position_ids
+        if uuid in self.cache_manager.cache_dict:
+            kv_cache_seq_len = self.cache_manager.cache_dict[uuid]["past_key_values"].get_seq_length()
+            position_ids = torch.tensor([kv_cache_seq_len], dtype=torch.long).unsqueeze(0)
+            past_key_values = self.cache_manager.get(uuid)["past_key_values"]
+        else:
+            position_ids = torch.arange(hidden_states.size(1), dtype=torch.long).unsqueeze(0)
+            past_key_values = DynamicCache()
+
+        return {
+            "hidden_states": hidden_states,
+            "position_ids": position_ids,
+            "past_key_values": past_key_values,
+        }
+
     def forward(
         self,
         hidden_states: torch.Tensor,
