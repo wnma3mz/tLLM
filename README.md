@@ -33,7 +33,13 @@ A：可能是通信？内存不够？CPU不够？换 CUDA？
 
 Q: 为什么 Merge QKV/gate、up 之后在复杂模型中更慢？
 
-A：内存带宽？多核利用？换 CUDA？
+A：内存带宽？多核利用？换 CUDA 效果可能会变好？
+
+在 `src2` 文件夹中，用 grpc 通信 PP，`torch.dist` 通信 TP。当前版本在实现的时候，没有通信 kv cache 和 position_ids，所以是有 bug 的。
+
+在实现的时候，需要注意 grpc 只有一个 node 能接收到请求，所以需要该 node 同步输入至其他 node，以能够实现 `all.reduce`。
+
+在之后才发现 `torch.dist` 其实是有 rpc 模块的，所以新建了 src3. TODO
 
 #### parallel strategy
 
