@@ -53,6 +53,64 @@ TP 要求更高的通信频率，适合单机多卡/局域网。故使用 torch.
 
 当 TP 和 PP 同时使用的时候，需要兼顾两种通信策略。在实现上，应该是先切 PP 再 TP 比较容易。
 
+整体数据流如下：
+
+输入会发送至 Master 节点，由 Master 节点发送至 Node0 中，由 Node0 同步数据至各个进程，计算完成后再汇总至进程 0，由Node0-进程0发送数据至下一个 Node。重复该流程直至最后一个 Node 完成，由最后一个 Node 的进程 0 发送至 Master 节点，最后由 Master 节点返回输出。
+
+实现过程为了方便会有一定调整：
+
+- Master 节点和 Node0 节点可能是一个节点
+- Node0->Node1 的通信实现比较麻烦，暂时会由 Node1-> Master，再由 Master 发送至 Node1
+
+```mermaid
+graph LR
+    A[输入] --> B[Master]
+    B --> X[Node0]
+    X --> C[Node0-进程0]
+    X --> D[Node0-进程1]
+    C --> E[Node0]
+    D --> E[Node0]
+
+
+    F[Node0] --> G[Node0-进程0]
+    G --> Y[Node1]
+    Y --> H[Node1-进程0]
+    Y --> I[Node1-进程1]
+    H --> J[Node1]
+    I --> J[Node1]
+    
+    K[Node1] --> L[Node1-进程0]
+    L --> M[Master]
+    M --> N[输出]
+```
+
+单层 TP 的通信细节实现如下图所示，两个进程一直都存在。图中所示，对于`input_layernorm`两个进程的输入是一样，但都需要计算一次。计算后的输出也是一样，但是处于不不同的进程。不同的进程执行 attention 计算过程，最后对两个进程的 `O Proj` 的输出进行求和，再分发至两个进程。再执行`post_attention_layernorm`计算。MLP 的计算过程同理，最后对`Down Proj` 的输出进行求和，并分发至两个进程以输入至下一层。
+
+```mermaid
+graph TD
+    A[输入] --> B[input_layernorm]
+    B --> C[QKV Proj 进程0] 
+    B --> D[QKV Proj 进程1]
+    C --> E[attention 计算]
+    D --> F[attention 计算]
+    E --> G[O Proj 进程0]
+    F --> H[O Proj 进程1]
+    G --> I[reduce]
+    H --> I[reduce]
+    I --> J[post_attention_layernorm]
+    J --> K[Gate Up Proj 进程0]
+    J --> L[Gate Up Proj 进程1]
+    K --> M[Down Proj 进程0]
+    L --> N[Down Proj 进程1]
+    M --> O[reduce]
+    N --> O[reduce]
+```
+
+
+经典的实现中 qkv proj 是分三层实现的 Q Proj,K Proj, V Proj，但是这里其实是可以并行，或者说合并为一层进行的，即 QKV Proj。Gate Up Proj 也是同理。具体实现可见 `linear_cases/parallel/merge_linear.py`
+
+
+
 ### Performance
 
 #### Pipeline Parallel (PP)
