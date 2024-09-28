@@ -25,7 +25,7 @@ class Decoder(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional["Cache"] = None,
+        past_key_value: Optional[Cache] = None,
     ):
         next_decoder_cache = None
         for i, layer in enumerate(self.decoder):
@@ -54,13 +54,14 @@ class MyLlamaModel(nn.Module):
     def load_state_dict(self, state_dict: Dict) -> None:
         self.decoder.load_state_dict(state_dict)
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        uuid_str: Optional[str] = None,
-    ):
+    def forward(self, hidden_states: torch.Tensor, uuid_str: Optional[str] = None) -> torch.Tensor:
+        """
+        @param hidden_states: bs x seq_len x hidden_size
+        @param position_ids: bs x seq_len
+        @param uuid_str: 可选的 uuid，用于区分不同的请求。如果 uuid_str 存在，则使用缓存的 kv cache，否则使用新的 kv cache
+
+        @return: bs x seq_len x hidden_size
+        """
         if uuid_str in self.cache_manager.cache_dict:
             kv_cache_seq_len = self.cache_manager.cache_dict[uuid_str]["past_key_values"].get_seq_length()
             position_ids = torch.tensor([kv_cache_seq_len], dtype=torch.long).unsqueeze(0)

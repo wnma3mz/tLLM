@@ -40,7 +40,7 @@ class ModelManager:
         self.model = model
 
     @torch.no_grad()
-    def forward(self, hidden_states, uuid_str: str):
+    def forward(self, hidden_states: torch.Tensor, uuid_str: str) -> torch.Tensor:
         return self.model(hidden_states, uuid_str=uuid_str)  # 执行模型的前向传播
 
 

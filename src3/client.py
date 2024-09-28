@@ -10,18 +10,13 @@ import torch.nn as nn
 from transformers import AutoConfig, AutoTokenizer, LlamaForCausalLM
 from transformers.models.llama.modeling_llama import LlamaRMSNorm
 
-from src3.model import MyLlamaModel
+from src3.utils import call_remote_forward, call_remote_init, parse_range_string, setup_seed, tokenize_message
 from src3.worker import ModelManager
 
 # 使用 torch.dist 实现 张量并行，使用 torch.dist.rpc 实现 管道并行，通信时仅通信输入
 
 
-def setup_seed(seed):
-    torch.manual_seed(seed)
-
-
 class MyLlamaForCausalLM(nn.Module):
-    # 主控制程序
     def __init__(self, config):
         super().__init__()
         self.vocab_size = config.vocab_size
@@ -48,6 +43,12 @@ class MyLlamaForCausalLM(nn.Module):
         return model
 
     def forward(self, inputs_embeds: torch.Tensor, uuid_str: str) -> torch.Tensor:
+        """
+        @param inputs_embeds: bs x seq_len x hidden_size
+        @param uuid_str: 用于区分不同请求的 uuid
+
+        @return: bs x seq_len x vocab_size
+        """
         hidden_states = inputs_embeds
 
         for i, model_rref_list in enumerate(self.model_rref_list_list):
@@ -67,7 +68,13 @@ class MyLlamaForCausalLM(nn.Module):
 
     @torch.no_grad()
     def generate(self, input_ids: torch.Tensor, **kwargs) -> Tuple[List[int], Optional[torch.Tensor]]:
-        # input_ids: bs x seq_len
+        """
+        @param input_ids: bs x seq_len
+        @param kwargs:
+            max_new_tokens: 最大生成 token 数
+
+        @return: token list, 可选的返回内容
+        """
         max_new_tokens = kwargs.get("max_new_tokens", 16)
         input_embeds = self.embed_tokens(input_ids)
         token_list: List[int] = []
@@ -91,28 +98,6 @@ def load_model_and_tokenizer(model_path: str) -> Tuple[MyLlamaForCausalLM, AutoT
     model = MyLlamaForCausalLM.from_pretrained(model_path, trust_remote_code=True, device_map="cpu")
     tok = AutoTokenizer.from_pretrained(model_path, use_fast=True, trust_remote_code=True)
     return model, tok
-
-
-formatted_prompt = "### Human: {}### Assistant:"
-
-
-def tokenize_message(tok: AutoTokenizer, messages: List[Dict[str, str]]) -> List[int]:
-    inputs = formatted_prompt.format(messages[0]["content"])
-    # inputs = "Hello, how are you?"
-    # inputs = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    input_ids = tok.encode(inputs, add_special_tokens=True)
-    while input_ids[0] == input_ids[1] == tok.bos_token_id:
-        # input_ids = input_ids[1:]
-        input_ids.pop(0)
-    return input_ids
-
-
-def call_remote_init(model_rref, start_layer_idx: int, end_layer_idx: int, model_path: str) -> torch.futures.Future:
-    return model_rref.rpc_async().init_model(start_layer_idx, end_layer_idx, model_path)
-
-
-def call_remote_forward(model_rref, hidden_states, uuid_str) -> torch.futures.Future:
-    return model_rref.rpc_async().forward(hidden_states, uuid_str)
 
 
 def run_client(rank: int, world_size: int, model_path: str, pp_ranges: List[Tuple[int, int]], init_method: str):
@@ -175,18 +160,6 @@ def run_client(rank: int, world_size: int, model_path: str, pp_ranges: List[Tupl
             output = model.generate(input_ids, max_new_tokens=1, do_sample=False)
         print(f"Time taken: {time.time() - s1}")
         # print(tok.decode(output[0][input_ids.shape[1] :], skip_special_tokens=True))
-
-
-def parse_range_string(s):
-    try:
-        ranges = s.split(",")
-        result = []
-        for r in ranges:
-            start, end = map(int, r.split("-"))
-            result.append((start, end))
-        return result
-    except:
-        raise argparse.ArgumentTypeError("参数必须是形如 '1-2,3-4' 的范围字符串")
 
 
 def parse_args():
