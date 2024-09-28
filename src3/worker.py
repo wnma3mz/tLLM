@@ -8,9 +8,9 @@ import torch.distributed.rpc as rpc
 import torch.multiprocessing as mp
 from transformers import AutoConfig, LlamaForCausalLM
 
-from commons.communicator import Communicator
-from llama import MyLlamaModel
-from utils import NodeConfig
+from src.commons.communicator import Communicator
+from src.llama import MyLlamaModel
+from src.utils import NodeConfig
 
 
 def get_state_dict(model_path: str, device: str) -> Dict[str, torch.Tensor]:

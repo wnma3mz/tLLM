@@ -3,18 +3,19 @@ from concurrent import futures
 import json
 import logging
 import os
+import pickle
 import time
 from typing import *
 
 from google.protobuf import json_format, struct_pb2
 import grpc
 
-from commons.communicator import Communicator
-from llama import MyLlamaModel
 from rpc_comm import schemas_pb2, schemas_pb2_grpc
 from rpc_comm.convert import list_to_protobuf, protobuf_to_list
-from schemas import ForwardData, LayerConfig
-from utils import get_ip_address, tensor_to_list
+from src.commons.communicator import Communicator
+from src.llama import MyLlamaModel
+from src.schemas import ForwardData, LayerConfig
+from src.utils import get_ip_address, tensor_to_list
 
 logging.basicConfig(level=logging.INFO)
 
@@ -22,7 +23,8 @@ import torch
 import torch.distributed as dist
 from transformers import AutoConfig, LlamaForCausalLM
 
-# PYTHONPATH="./src2:./src":$PYTHONPATH torchrun --nproc_per_node=2 src2/rpc_comm/client.py
+# export OMP_NUM_THREADS=8;
+# PYTHONPATH="./src2:./src":$PYTHONPATH; torchrun --nproc_per_node=2 --master_port=29501 src2/rpc_comm/client.py
 
 
 class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
@@ -32,63 +34,36 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
         self.rank = rank
 
         self.init_model_flag = False
-        self.mlp_dict = {}
-        self.int_key = [
-            "bos_token_id",
-            "eos_token_id",
-            "hidden_size",
-            "intermediate_size",
-            "max_position_embeddings",
-            "num_attention_heads",
-            "num_hidden_layers",
-            "num_key_value_heads",
-            "pretraining_tp",
-            "vocab_size",
-        ]
-        self.ip_addr = get_ip_address()
+        # self.ip_addr = get_ip_address()
+        self.ip_addr = "localhost"
         self.prefix_log_str = f"IP: [{self.ip_addr}]"
-        hidden_states_shape = torch.empty(3, dtype=torch.int64)
-        uuid_shape = torch.empty(1, dtype=torch.int64)
+        tensor_data = torch.ByteTensor()
         if self.config.comm.is_rank0():
             pass
         else:
             while True:
-                dist.recv(hidden_states_shape, src=0)
+                hidden_states_shape, uuid = dist.recv(tensor_data, src=0)
+
                 hidden_states = torch.empty(tuple(hidden_states_shape.tolist()))
                 dist.recv(hidden_states, src=0)
 
-                dist.recv(uuid_shape, src=0)
-                uuid_tensor = torch.empty(tuple(uuid_shape.tolist()), dtype=torch.int8)
-                dist.recv(uuid_tensor, src=0)
-                uuid = "".join(chr(c) for c in uuid_tensor.numpy())
-
-                input_data = self.model._prepare_forward_data_v2(hidden_states, uuid)
-                output = self.model.forward(**input_data)
-
-                self.model.cache_manager.set(uuid, output.past_key_values)
-                self.model.cache_manager.check_alive()
+                _ = self.model.forward(hidden_states, uuid)
 
     def Forward(self, request, context):
         s1 = time.time()
         hidden_states = protobuf_to_list(request.hidden_states)
 
-        data = ForwardData(uuid=request.uuid, hidden_states=hidden_states)
-
-        input_data = self.model._prepare_forward_data(data)
-        shape = torch.tensor(input_data["hidden_states"].shape, dtype=torch.int64)
-        uuid_tensor = torch.tensor([ord(c) for c in data.uuid], dtype=torch.int8)
-        uuid_shape = torch.tensor(uuid_tensor.shape, dtype=torch.int64)
+        hidden_states = torch.Tensor(hidden_states, self.model.dtype)
+        hidden_states_shape = torch.tensor(hidden_states, dtype=torch.int64)
+        send_data_list = [pickle.dumps(hidden_states_shape), pickle.dumps(request.uuid)]
         for rank in range(1, self.config.comm.world_size):
-            dist.send(shape, dst=rank)
-            dist.send(input_data["hidden_states"], dst=rank)
+            tensor_data = torch.ByteTensor(send_data_list)
+            dist.send(tensor_data, dst=rank)
+            dist.send(hidden_states, dst=rank)
 
-            dist.send(uuid_shape, dst=rank)
-            dist.send(uuid_tensor, dst=rank)
+        output = self.model.forward(hidden_states, request.uuid)
 
-        output = self.model.forward(**input_data)
-
-        return_output = tensor_to_list(self.model._prepare_output_data(request, output))
-        return_output = list_to_protobuf(return_output)
+        return_output = list_to_protobuf(tensor_to_list(output))
         cost_time = time.time() - s1
         logging.info(f"{self.prefix_log_str} Forward pass cost time: {cost_time:.2f} s")
         return schemas_pb2.ForwardResponse(
@@ -109,6 +84,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=50051)
+    parser.add_argument("--start_layer_idx", type=int, default=0, help="start layer idx")
+    parser.add_argument("--end_layer_idx", type=int, default=11, help="end layer idx")
     return parser.parse_args()
 
 
@@ -129,16 +106,16 @@ if __name__ == "__main__":
 
     model_path = "/Users/lujianghu/Documents/TinyLlama-1.1B-Chat-v1.0"
     config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
-    config.decoder_start_layer_idx = config.num_hidden_layers // 2
-    config.decoder_end_layer_idx = config.num_hidden_layers
+    config.decoder_start_layer_idx = args.start_layer_idx
+    config.decoder_end_layer_idx = args.end_layer_idx
     config.comm = comm
 
-    # s1 = time.time()
-    # state_dict = LlamaForCausalLM.from_pretrained(model_path, trust_remote_code=True, device_map="cpu").state_dict()
-    # model = MyLlamaModel(config)
-    # model.load_state_dict(state_dict)
-    # print(f"[Rank: {config.comm.rank}] Cost time {time.time() - s1}")
-    # model.eval()
-    model = None
+    s1 = time.time()
+    state_dict = LlamaForCausalLM.from_pretrained(model_path, trust_remote_code=True, device_map="cpu").state_dict()
+    model = MyLlamaModel(config)
+    model.load_state_dict(state_dict)
+    print(f"[Rank: {config.comm.rank}] Cost time {time.time() - s1}")
+    model.eval()
+    # model = None
 
     start_grpc_server(config, model, args.port, comm.rank)
