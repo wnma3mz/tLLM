@@ -48,8 +48,8 @@ class MyLlamaModel(nn.Module):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.cache_manager = CacheManager()
-        self.decoder = Decoder(config, config.decoder_start_layer_idx, config.decoder_end_layer_idx)
         self.config = config
+        self.decoder = Decoder(config, config.decoder_start_layer_idx, config.decoder_end_layer_idx)
 
     def load_state_dict(self, state_dict: Dict) -> None:
         self.decoder.load_state_dict(state_dict)
@@ -58,26 +58,24 @@ class MyLlamaModel(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional["Cache"] = None,
+        past_key_values: Optional[Cache] = None,
         uuid_str: Optional[str] = None,
     ):
-        if uuid_str is not None:
-            if uuid_str in self.cache_manager.cache_dict:
-                kv_cache_seq_len = self.cache_manager.cache_dict[uuid_str]["past_key_values"].get_seq_length()
-                position_ids = torch.tensor([kv_cache_seq_len], dtype=torch.long).unsqueeze(0)
-                past_key_values = self.cache_manager.get(uuid_str)["past_key_values"]
-            else:
-                position_ids = torch.arange(hidden_states.size(1), dtype=torch.long).unsqueeze(0)
-                past_key_values = DynamicCache()
+        if uuid_str in self.cache_manager.cache_dict:
+            kv_cache_seq_len = self.cache_manager.cache_dict[uuid_str]["past_key_values"].get_seq_length()
+            position_ids = torch.tensor([kv_cache_seq_len], dtype=torch.long).unsqueeze(0)
+            past_key_values = self.cache_manager.get(uuid_str)["past_key_values"]
+        else:
+            position_ids = torch.arange(hidden_states.size(1), dtype=torch.long).unsqueeze(0)
+            past_key_values = DynamicCache()
         hidden_states = hidden_states.to(self.device)
         position_ids = position_ids.to(self.device)
-        return self.decoder(hidden_states, position_ids=position_ids, past_key_value=past_key_values)
+        output = self.decoder(hidden_states, position_ids=position_ids, past_key_value=past_key_values)
+
+        self.cache_manager.set(uuid_str, output.past_key_values)
+        self.cache_manager.check_alive()
+        return output.last_hidden_state
 
     @property
     def device(self):
         return next(self.parameters()).device
-
-    def _prepare_output_data(self, uuid: str, output: BaseModelOutputWithPast) -> List:
-        self.cache_manager.set(uuid, output.past_key_values)
-        self.cache_manager.check_alive()
-        return output.last_hidden_state

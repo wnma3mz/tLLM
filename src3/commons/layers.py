@@ -1,12 +1,9 @@
-import os
-import time
 from typing import *
 
 import torch
-import torch.distributed as dist
 import torch.nn as nn
 from transformers.activations import ACT2FN
-from transformers.cache_utils import Cache, DynamicCache
+from transformers.cache_utils import Cache
 from transformers.models.llama.modeling_llama import (
     LlamaConfig,
     LlamaRMSNorm,
@@ -77,7 +74,6 @@ class RowParallelLayer(BaseParallelLayer):
 
     @torch.no_grad()
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # 输入已经 chunk 过了
         return self.layer(x)
 
 
@@ -235,7 +231,6 @@ class MyLlamaDecoderLayer(nn.Module):
         self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def load_state_dict(self, state_dict: Dict):
-        # 用两次 layer norm 的时间替换两次通信的时间
         self.input_layernorm.load_state_dict(
             {"weight": state_dict.pop(f"model.layers.{self.layer_idx}.input_layernorm.weight")}
         )
