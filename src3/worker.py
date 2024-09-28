@@ -10,28 +10,39 @@ from transformers import AutoConfig, LlamaForCausalLM
 
 from src3.commons.communicator import Communicator
 from src3.model import MyLlamaModel
+from src3.utils import NodeConfig
+
+
+def get_state_dict(model_path: str, device: str) -> Dict[str, torch.Tensor]:
+    state_dict = LlamaForCausalLM.from_pretrained(model_path, trust_remote_code=True, device_map=device).state_dict()
+    return state_dict
 
 
 class ModelManager:
-    def init_model(self, start_layer_idx: int, end_layer_idx: int, model_path: str):
+    def init_model(self, node_config: NodeConfig):
         """
-        @param start_layer_idx: 开始层数
-        @param end_layer_idx: 结束层数
-        @param model_path: 模型路径
+        @param node_config: 当前节点的配置
+            start_layer_idx: 当前节点开始层
+            end_layer_idx: 当前节点结束层
+            model_path: 模型路径
+            rank: 当前节点的 rank
+            prev_rank: 当前节点的前一个节点的 rank
+            next_start_rank: 当前节点的下一个节点的开始 rank
+            next_end_rank: 当前节点的下一个节点的结束 rank
         """
         device = "cpu"
         comm = Communicator()
-        config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
-        config.decoder_start_layer_idx = start_layer_idx
-        config.decoder_end_layer_idx = end_layer_idx
+        config = AutoConfig.from_pretrained(node_config.model_path, trust_remote_code=True)
+        config.decoder_start_layer_idx = node_config.start_layer_idx
+        config.decoder_end_layer_idx = node_config.end_layer_idx
         config.comm = comm
 
+        self.next_rank_list = range(node_config.next_start_rank, node_config.next_end_rank + 1)
         print(f"[Rank: {config.comm.rank}] World Size: {config.comm.world_size}")
 
         s1 = time.time()
-        state_dict = LlamaForCausalLM.from_pretrained(
-            model_path, trust_remote_code=True, device_map=device
-        ).state_dict()
+        # TODO: 只在 rank0 获取 state_dict
+        state_dict = get_state_dict(node_config.model_path, device)
         model = MyLlamaModel(config)
         model.load_state_dict(state_dict)
         print(f"[Rank: {config.comm.rank}] Load Model Cost Time {time.time() - s1}")
@@ -40,8 +51,13 @@ class ModelManager:
         self.model = model
 
     @torch.no_grad()
-    def forward(self, hidden_states: torch.Tensor, uuid_str: str) -> torch.Tensor:
-        return self.model(hidden_states, uuid_str=uuid_str)  # 执行模型的前向传播
+    def forward(self, hidden_states: torch.Tensor, shape_hidden_states: Tuple[int], uuid_str: str) -> torch.Tensor:
+        # 不是 rank0，需要同步 hidden_states
+        if hidden_states is None:
+            hidden_states = torch.zeros(shape_hidden_states, dtype=self.model.dtype, device=self.model.device)
+        self.model.config.comm.broadcast(hidden_states)
+        hidden_states = self.model(hidden_states, uuid_str=uuid_str)
+        return hidden_states
 
 
 def run_worker(rank: int, world_size: int, pp_range: Tuple[int], init_method: str, dist_init_method: str):

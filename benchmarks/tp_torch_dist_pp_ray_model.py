@@ -1,5 +1,5 @@
-import time
 import os
+import time
 from typing import *
 
 import ray
@@ -18,18 +18,20 @@ from transformers.models.llama.modeling_llama import (
     repeat_kv,
 )
 
-# 使用 torch.dist 实现 张量并行，使用 ray 实现 管道并行，通信时仅通信输入
+# 使用 torch.dist 实现 张量并行，使用 ray 实现 流水并行，通信时仅通信输入
 # 太慢了
 # export OMP_NUM_THREADS=8; torchrun --nproc_per_node=2 benchmarks/torch_dist_model.py
+
 
 def setup_seed(seed):
     torch.manual_seed(seed)
 
 
-def init_process(rank, world_size, backend='gloo'):
-    os.environ['MASTER_ADDR'] = 'localhost'  # 或者使用集群中的主节点地址
-    os.environ['MASTER_PORT'] = '12355'  # 端口号
+def init_process(rank, world_size, backend="gloo"):
+    os.environ["MASTER_ADDR"] = "localhost"  # 或者使用集群中的主节点地址
+    os.environ["MASTER_PORT"] = "12355"  # 端口号
     dist.init_process_group(backend, rank=rank, world_size=world_size)
+
 
 @ray.remote
 class Communicator:
@@ -212,7 +214,7 @@ class MyLlamaSdpaAttention(nn.Module):
                 self.num_key_value_heads * self.head_dim,
             ],
             self.world_size,
-            self.rank
+            self.rank,
         )
         self.o_proj = RowParallelLayer(self.num_heads * self.head_dim, self.hidden_size, self.world_size, self.rank)
         self._init_rope()
@@ -347,7 +349,6 @@ class Decoder(nn.Module):
         for layer in self.decoder:
             layer.load_state_dict(state_dict)
 
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -384,17 +385,20 @@ class MyLlamaModel(nn.Module):
         self.decoder1.load_state_dict.remote(state_dict)
         self.decoder2.load_state_dict.remote(state_dict)
 
-
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional["Cache"] = None,
     ):
-        layer_futures = self.decoder1.forward.remote(hidden_states, position_ids=position_ids, past_key_value=past_key_values)
+        layer_futures = self.decoder1.forward.remote(
+            hidden_states, position_ids=position_ids, past_key_value=past_key_values
+        )
         layer_outputs = ray.get(layer_futures)
         hidden_states, past_key_values = layer_outputs.last_hidden_state, layer_outputs.past_key_values
-        layer_futures = self.decoder2.forward.remote(hidden_states, position_ids=position_ids, past_key_value=past_key_values)
+        layer_futures = self.decoder2.forward.remote(
+            hidden_states, position_ids=position_ids, past_key_value=past_key_values
+        )
         layer_outputs = ray.get(layer_futures)
         hidden_states, past_key_values = layer_outputs.last_hidden_state, layer_outputs.past_key_values
         return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
@@ -404,6 +408,7 @@ class MyLlamaModel(nn.Module):
         # layer_outputs = self.decoder2(hidden_states, position_ids=position_ids, past_key_value=past_key_values)
         # hidden_states, past_key_values = layer_outputs.last_hidden_state, layer_outputs.past_key_values
         # return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
+
 
 class MyLlamaForCausalLM(nn.Module):
     def __init__(self, config):

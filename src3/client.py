@@ -10,10 +10,17 @@ import torch.nn as nn
 from transformers import AutoConfig, AutoTokenizer, LlamaForCausalLM
 from transformers.models.llama.modeling_llama import LlamaRMSNorm
 
-from src3.utils import call_remote_forward, call_remote_init, parse_range_string, setup_seed, tokenize_message
-from src3.worker import ModelManager
+from src3.utils import (
+    NodeConfig,
+    call_remote_forward,
+    call_remote_init,
+    parse_range_string,
+    setup_seed,
+    tokenize_message,
+)
+from src3.worker import ModelManager, save_hidden_states
 
-# 使用 torch.dist 实现 张量并行，使用 torch.dist.rpc 实现 管道并行，通信时仅通信输入
+# 使用 torch.dist 实现 张量并行，使用 torch.dist.rpc 实现流水并行，通信时仅通信输入
 
 
 class MyLlamaForCausalLM(nn.Module):
@@ -50,14 +57,16 @@ class MyLlamaForCausalLM(nn.Module):
         @return: bs x seq_len x vocab_size
         """
         hidden_states = inputs_embeds
+        shape_hidden_states = hidden_states.shape
 
         for i, model_rref_list in enumerate(self.model_rref_list_list):
-            # TODO
-            # 每个 node 只发送一次，但需要同步 kv cache 和 hidden states
-            # 每个 node 直接发送至下一个 node
             fut_list = []
-            for model_rref in model_rref_list:
-                fut = call_remote_forward(model_rref, hidden_states, uuid_str)
+            for j, model_rref in enumerate(model_rref_list):
+                # 每个 node 只发送一次，但需要同步 kv cache 和 hidden states
+                if j == 0:
+                    fut = call_remote_forward(model_rref, hidden_states, shape_hidden_states, uuid_str)
+                else:
+                    fut = call_remote_forward(model_rref, None, shape_hidden_states, uuid_str)
                 fut_list.append(fut)
             hidden_states = fut_list[0].wait()
 
@@ -81,7 +90,6 @@ class MyLlamaForCausalLM(nn.Module):
         cnt = 0
         uuid_str = str(uuid.uuid4())
         while True:
-            # print(f"Rank: {dist.get_rank()}, input_embeds: {input_embeds}")
             logits = self(input_embeds, uuid_str=uuid_str)
             cnt += 1
             if cnt >= max_new_tokens:
@@ -127,22 +135,40 @@ def run_client(rank: int, world_size: int, model_path: str, pp_ranges: List[Tupl
     options.rpc_timeout = 180000
     rpc.init_rpc(name=f"client{rank}", rank=rank, world_size=world_size, rpc_backend_options=options)
 
-    # TODO: 优化只给每个 PP 发送一次
     # init and load model
+    # 二维：第一维是每个 node，第二维是每个 node 的每个 TP
     model_rref_list_list = []
+    prev_rank = 0
+    idx = 0
+    next_rank_list_list = []
     for (start, end), (start_layer_idx, end_layer_idx) in zip(pp_ranges, layer_idx_list):
+        next_start_rank = pp_ranges[idx + 1][0] if idx + 1 < len(pp_ranges) else 0
+        next_end_rank = pp_ranges[idx + 1][1] if idx + 1 < len(pp_ranges) else 0
+        node_config = NodeConfig(
+            start_layer_idx=start_layer_idx,
+            end_layer_idx=end_layer_idx,
+            model_path=model_path,
+            prev_rank=prev_rank,
+            next_start_rank=next_start_rank,
+            next_end_rank=next_end_rank,
+        )
+        next_rank_list_list.append(list(range(next_start_rank, next_end_rank + 1)))
         model_rref_list = []
         for remote_rank in range(start, end + 1):
+            node_config.rank = remote_rank
             model_rref = rpc.remote(f"worker{remote_rank}", ModelManager)
-            fut = call_remote_init(model_rref, start_layer_idx, end_layer_idx, model_path)
+            fut = call_remote_init(model_rref, node_config)
             model_rref_list.append(model_rref)
         s1 = time.time()
-        fut.wait()  # 伪分布式需要在 init 后等待，实际上可以在最后一起等待
-        print(f"[Client] Init Cost Time: {time.time() - s1}")
+        fut.wait()  # 伪分布式需要在每个节点 init 后等待，实际可以在最后一起等待
+        print(f"[PP {start}-{end}] Init Cost Time: {time.time() - s1}")
         model_rref_list_list.append(model_rref_list)
+        prev_rank = start
+        idx += 1
 
     # TODO 优化
     model.model_rref_list_list = model_rref_list_list
+    model.next_rank_list_list = next_rank_list_list
 
     messages = [{"role": "user", "content": "Hello, how are you?"}]
     input_id_list = tokenize_message(tok, messages)

@@ -78,5 +78,9 @@ class MyLlamaModel(nn.Module):
         return output.last_hidden_state
 
     @property
+    def dtype(self):
+        return next(self.parameters()).dtype
+
+    @property
     def device(self):
         return next(self.parameters()).device
