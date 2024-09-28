@@ -5,8 +5,8 @@ import torch.nn as nn
 from transformers.cache_utils import Cache, DynamicCache
 from transformers.modeling_outputs import BaseModelOutputWithPast
 
-from src3.commons.layers import MyLlamaDecoderLayer
-from src.cache_manager import CacheManager
+from cache_manager import CacheManager
+from commons.layers import MyLlamaDecoderLayer
 
 
 class Decoder(nn.Module):

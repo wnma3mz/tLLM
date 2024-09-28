@@ -158,3 +158,8 @@ class RPCServer:
         if isinstance(response_list, list):
             return [response.cost_time for response in response_list]
         return response_list.cost_time
+
+if __name__ == "__main__":
+    # for test
+    server = RPCServer(["localhost:50051", "localhost:50052"])
+    server.post_sync(0, "/forward", {"uuid": "123", "hidden_states": [[1., 2., 3.]]})

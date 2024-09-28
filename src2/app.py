@@ -9,12 +9,12 @@ from transformers import AutoConfig, AutoTokenizer
 from transformers.cache_utils import DynamicCache
 from transformers.models.llama.modeling_llama import LlamaRMSNorm
 
-from src2.commons.communicator import Communicator
-from src2.model import MyLlamaModel
 from src2.rpc_comm.server import RPCServer
+from src.commons.communicator import Communicator
+from src.llama import MyLlamaModel
 from src.utils import tensor_to_list
 
-# 使用 torch.dist 实现 张量并行，使用 rpc 实现 流水并行，通信时仅通信输入
+# 使用 torch.dist 实现 张量并行，使用 rpc 实现流水并行，通信时仅通信输入
 # export OMP_NUM_THREADS=8; torchrun --nproc_per_node=2 benchmarks/torch_dist_model.py
 
 

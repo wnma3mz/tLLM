@@ -5,9 +5,11 @@ import torch.distributed as dist
 
 
 class Communicator:
-    def __init__(self, init_method=None, rank=None, world_size=None) -> None:
+    def __init__(self, init_method=None, rank=None, world_size=None, is_torchrun: bool = False) -> None:
         if init_method is not None:
             dist.init_process_group("gloo", init_method=init_method, rank=rank, world_size=world_size)
+        if is_torchrun:
+            dist.init_process_group("gloo")
 
         self.world_size = dist.get_world_size()
         self.rank = dist.get_rank()

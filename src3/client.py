@@ -9,16 +9,9 @@ import torch.multiprocessing as mp
 import torch.nn as nn
 from transformers import AutoConfig, AutoTokenizer, LlamaForCausalLM
 from transformers.models.llama.modeling_llama import LlamaRMSNorm
+from worker import ModelManager
 
-from src3.utils import (
-    NodeConfig,
-    call_remote_forward,
-    call_remote_init,
-    parse_range_string,
-    setup_seed,
-    tokenize_message,
-)
-from src3.worker import ModelManager, save_hidden_states
+from utils import NodeConfig, call_remote_forward, call_remote_init, parse_range_string, setup_seed, tokenize_message
 
 # 使用 torch.dist 实现 张量并行，使用 torch.dist.rpc 实现流水并行，通信时仅通信输入
 
@@ -113,6 +106,10 @@ def run_client(rank: int, world_size: int, model_path: str, pp_ranges: List[Tupl
         return
     # master: embedding + lm head
     # PP: decoder layer 其他部分
+    options = rpc.TensorPipeRpcBackendOptions()
+    options.init_method = init_method
+    options.rpc_timeout = 180000
+    rpc.init_rpc(name=f"client{rank}", rank=rank, world_size=world_size, rpc_backend_options=options)
 
     model, tok = load_model_and_tokenizer(model_path)
 
@@ -129,11 +126,6 @@ def run_client(rank: int, world_size: int, model_path: str, pp_ranges: List[Tupl
         layer_idx_list.append((start_layer_idx, end_layer_idx))
         start_layer_idx = end_layer_idx
     print(f"layer_idx_list: {layer_idx_list}")
-
-    options = rpc.TensorPipeRpcBackendOptions()
-    options.init_method = init_method
-    options.rpc_timeout = 180000
-    rpc.init_rpc(name=f"client{rank}", rank=rank, world_size=world_size, rpc_backend_options=options)
 
     # init and load model
     # 二维：第一维是每个 node，第二维是每个 node 的每个 TP

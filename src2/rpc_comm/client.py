@@ -9,18 +9,20 @@ from typing import *
 from google.protobuf import json_format, struct_pb2
 import grpc
 
-from src2.commons.communicator import Communicator
-from src2.model import MyLlamaModel
-from src2.rpc_comm import schemas_pb2, schemas_pb2_grpc
-from src2.rpc_comm.convert import list_to_protobuf, protobuf_to_list
-from src.schemas import ForwardData, LayerConfig
-from src.utils import get_ip_address, tensor_to_list
+from commons.communicator import Communicator
+from llama import MyLlamaModel
+from rpc_comm import schemas_pb2, schemas_pb2_grpc
+from rpc_comm.convert import list_to_protobuf, protobuf_to_list
+from schemas import ForwardData, LayerConfig
+from utils import get_ip_address, tensor_to_list
 
 logging.basicConfig(level=logging.INFO)
 
 import torch
 import torch.distributed as dist
 from transformers import AutoConfig, LlamaForCausalLM
+
+# PYTHONPATH="./src2:./src":$PYTHONPATH torchrun --nproc_per_node=2 src2/rpc_comm/client.py
 
 
 class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
@@ -43,8 +45,7 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
             "pretraining_tp",
             "vocab_size",
         ]
-        # self.ip_addr = get_ip_address()
-        self.ip_addr = "test"
+        self.ip_addr = get_ip_address()
         self.prefix_log_str = f"IP: [{self.ip_addr}]"
         hidden_states_shape = torch.empty(3, dtype=torch.int64)
         uuid_shape = torch.empty(1, dtype=torch.int64)
@@ -70,6 +71,7 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
     def Forward(self, request, context):
         s1 = time.time()
         hidden_states = protobuf_to_list(request.hidden_states)
+
         data = ForwardData(uuid=request.uuid, hidden_states=hidden_states)
 
         input_data = self.model._prepare_forward_data(data)
@@ -107,13 +109,12 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=50051)
-    parser.add_argument("--local-rank", type=int)
     return parser.parse_args()
 
 
 def start_grpc_server(config, model, port, rank):
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
-    rpc_servicer = RPCServicer(config, model, args.local_rank)
+    rpc_servicer = RPCServicer(config, model, rank)
     if config.comm.is_rank0():
         schemas_pb2_grpc.add_RPCServiceServicer_to_server(rpc_servicer, server)
         server.add_insecure_port(f"[::]:{port}")
@@ -124,7 +125,7 @@ def start_grpc_server(config, model, port, rank):
 
 if __name__ == "__main__":
     args = parse_args()
-    comm = Communicator()
+    comm = Communicator(is_torchrun=True)
 
     model_path = "/Users/lujianghu/Documents/TinyLlama-1.1B-Chat-v1.0"
     config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
@@ -132,12 +133,12 @@ if __name__ == "__main__":
     config.decoder_end_layer_idx = config.num_hidden_layers
     config.comm = comm
 
-    s1 = time.time()
-    state_dict = LlamaForCausalLM.from_pretrained(model_path, trust_remote_code=True, device_map="cpu").state_dict()
-    model = MyLlamaModel(config)
-    model.load_state_dict(state_dict)
-    print(f"[Rank: {config.comm.rank}] Cost time {time.time() - s1}")
-    model.eval()
-    # model = None
+    # s1 = time.time()
+    # state_dict = LlamaForCausalLM.from_pretrained(model_path, trust_remote_code=True, device_map="cpu").state_dict()
+    # model = MyLlamaModel(config)
+    # model.load_state_dict(state_dict)
+    # print(f"[Rank: {config.comm.rank}] Cost time {time.time() - s1}")
+    # model.eval()
+    model = None
 
-    start_grpc_server(config, model, args.port, args.local_rank)
+    start_grpc_server(config, model, args.port, comm.rank)
