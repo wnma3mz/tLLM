@@ -37,14 +37,16 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
         # self.ip_addr = get_ip_address()
         self.ip_addr = "localhost"
         self.prefix_log_str = f"IP: [{self.ip_addr}]"
-        tensor_data = torch.ByteTensor()
+        tensor_data = torch.empty(83, dtype=torch.uint8)  # TODO 优化，同步 uuid str 和 shape
         if self.config.comm.is_rank0():
             pass
         else:
             while True:
-                hidden_states_shape, uuid = dist.recv(tensor_data, src=0)
+                dist.recv(tensor_data, src=0)
+                serialized_data = bytes(tensor_data.numpy())
+                hidden_states_shape, uuid = pickle.loads(serialized_data)
 
-                hidden_states = torch.empty(tuple(hidden_states_shape.tolist()))
+                hidden_states = torch.empty(hidden_states_shape, dtype=self.model.dtype)
                 dist.recv(hidden_states, src=0)
 
                 _ = self.model.forward(hidden_states, uuid)
@@ -53,11 +55,10 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
         s1 = time.time()
         hidden_states = protobuf_to_list(request.hidden_states)
 
-        hidden_states = torch.Tensor(hidden_states, self.model.dtype)
-        hidden_states_shape = torch.tensor(hidden_states, dtype=torch.int64)
-        send_data_list = [pickle.dumps(hidden_states_shape), pickle.dumps(request.uuid)]
+        hidden_states = torch.tensor(hidden_states, dtype=self.model.dtype)
+        serialized_data = list(pickle.dumps((hidden_states.shape, request.uuid)))
+        tensor_data = torch.ByteTensor(serialized_data)
         for rank in range(1, self.config.comm.world_size):
-            tensor_data = torch.ByteTensor(send_data_list)
             dist.send(tensor_data, dst=rank)
             dist.send(hidden_states, dst=rank)
 

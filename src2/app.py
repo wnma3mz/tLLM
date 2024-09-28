@@ -20,7 +20,7 @@ class MyLlamaForCausalLM(nn.Module):
         super().__init__()
         self.vocab_size = config.vocab_size
 
-        url_list = ["localhost:50051", "localhost:25002"]
+        url_list = ["localhost:25001", "localhost:25002"]
         self.pp_size = len(url_list)
         self.server = RPCServer(url_list)
 
@@ -43,10 +43,10 @@ class MyLlamaForCausalLM(nn.Module):
         model.eval()
         return model
 
-    def _prepare_forward_data(self, uuid_str: str, hidden_states: torch.Tensor) -> Dict:
+    def _prepare_forward_data(self, uuid_str: str, hidden_states: torch.Tensor) -> Dict[str, Any]:
         return {"uuid": uuid_str, "hidden_states": tensor_to_list(hidden_states)}
 
-    def forward(self, inputs_embeds: torch.Tensor, uuid_str: str):
+    def forward(self, inputs_embeds: torch.Tensor, uuid_str: str) -> Tuple[torch.Tensor, None]:
         hidden_states = inputs_embeds
         for pp_idx in range(self.pp_size):
             outputs = self.server.post_sync(
@@ -62,10 +62,10 @@ class MyLlamaForCausalLM(nn.Module):
         hidden_states = torch.tensor(hidden_states).to(inputs_embeds.dtype).to(self.norm.weight.device)
         hidden_states = self.norm(hidden_states)
         logits = self.lm_head(hidden_states)
-        return logits, output.past_key_values
+        return logits, None
 
     @torch.no_grad()
-    def generate(self, input_ids: torch.Tensor, **kwargs) -> Tuple[List[int], Optional[torch.Tensor]]:
+    def generate(self, input_ids: torch.Tensor, **kwargs) -> Tuple[List[int], None]:
         # input_ids: bs x seq_len
         max_new_tokens = kwargs.get("max_new_tokens", 16)
         input_embeds = self.embed_tokens(input_ids)
@@ -73,7 +73,7 @@ class MyLlamaForCausalLM(nn.Module):
         cnt = 0
         uuid_str = str(uuid.uuid4())
         while True:
-            logits, past_key_values = self(input_embeds, uuid_str)
+            logits, _ = self(input_embeds, uuid_str)
             cnt += 1
             if cnt >= max_new_tokens:
                 break
@@ -94,7 +94,6 @@ def load_model_and_tokenizer(model_path: str) -> Tuple[MyLlamaForCausalLM, AutoT
 if __name__ == "__main__":
     # PP0（master）: decoder layer 第一部分 + embedding + lm head
     # PP: decoder layer 其他部分
-    is_master = True
     setup_seed(42)
 
     model_path = "/Users/lujianghu/Documents/TinyLlama-1.1B-Chat-v1.0"
