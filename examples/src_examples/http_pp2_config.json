@@ -1,9 +1,0 @@
-{
-    "pipeline_parallel_url_list": ["http://localhost:8000", "http://localhost:8001"],
-    "tensor_parallel_url_list": [""],
-    "state_dict_path": "./weights/TinyLlama-1.1B-Chat-v1.0.pth",
-    "tensor_parallel": 1,
-    "pipeline_parallel": 2,
-    "model_path": "/Users/lujianghu/Documents/TinyLlama-1.1B-Chat-v1.0",
-    "layer_state_dict_dir": "./weights"
-}
