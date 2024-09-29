@@ -1,0 +1,16 @@
+[
+    {
+        "pp_rank": 0,
+        "url": "localhost:25001",
+        "tp_size": 2,
+        "master_port": 29501,
+        "layer_idx": [0, 11]
+    },
+    {
+        "pp_rank": 1,
+        "url": "localhost:25002",
+        "tp_size": 2,
+        "master_port": 29502,
+        "layer_idx": [11, 22]
+    }
+]

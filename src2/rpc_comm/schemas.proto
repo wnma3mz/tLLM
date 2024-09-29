@@ -2,9 +2,6 @@ syntax = "proto3";
 
 package schemas;
 
-import "google/protobuf/any.proto";
-import "google/protobuf/struct.proto";
-
 message Array {
     repeated float elements = 1;  // One-dimensional array of integers
 }
@@ -31,41 +28,18 @@ message MultiDimensionalArray {
     }
 }
 
-message LayerConfig {
-    google.protobuf.Struct config = 1;
-    int32 layer_idx_start = 2;
-    int32 layer_idx_end = 3;
-    repeated string tp_url_list = 4;
-    int32 tp_size = 5;
-    string layer_state_dict_dir = 6;
+message ModelConfig {
+    string model_name = 1;
+    int32 pp_rank = 2;
+    int32 layer_idx_start = 3;
+    int32 layer_idx_end = 4;
+    string master_url = 5;
+    int32 next_pp_rank = 6;
 }
 
-message ForwardData {
+message ForwardRequest {
     string uuid = 1;
     MultiDimensionalArray hidden_states = 2;
-}
-
-message MLPConfig {
-    int32 input_size = 1;
-    int32 output_size = 2;
-    bool mlp_bias = 3;
-    string proj_name = 4;
-    int32 layer_idx = 5;
-    int32 tp_idx = 6;
-    int32 tp_size = 7;
-    string state_dict_path = 8;
-    google.protobuf.Any weight_data = 9;
-    google.protobuf.Any bias_data = 10;
-    string name = 11;
-}
-
-message MLPForwardData {
-    string proj_name = 1;
-    int32 tp_idx = 2;
-    int32 layer_idx = 3;
-    MultiDimensionalArray hidden_states = 4;
-    string name = 5;
-    float cost_time = 6;
 }
 
 message StatusResponse {
@@ -85,11 +59,6 @@ message HealthResponse {
     int32 status = 2;
 }
 
-message MLPKeysResponse {
-    string msg = 1;
-    int32 status = 2;
-}
-
 message InitModelFlagResponse {
     bool msg = 1;
     int32 status = 2;
@@ -99,11 +68,8 @@ message Empty {}
 
 
 service RPCService {
-    rpc InitModel (LayerConfig) returns (StatusResponse);
-    rpc Forward (ForwardData) returns (ForwardResponse);
-    rpc InitMLP (MLPConfig) returns (StatusResponse);
-    rpc ForwardMLP (MLPForwardData) returns (ForwardResponse);
+    rpc InitModel (ModelConfig) returns (StatusResponse);
+    rpc Forward (ForwardRequest) returns (ForwardResponse);
     rpc Health (Empty) returns (HealthResponse);
-    rpc MLPKeys (Empty) returns (MLPKeysResponse);
     rpc InitModelFlag (Empty) returns (InitModelFlagResponse);
 }

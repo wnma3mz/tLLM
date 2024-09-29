@@ -18,17 +18,13 @@ def split_model_by_layer(model_path: str, save_fname: str, tp: int):
             for proj_name in proj_name_list1:
                 key_name = f"model.layers.{i}.self_attn.{proj_name}.weight"
                 split_dim = 0 if proj_name[0] in "qkv" else 1
-                layer_state_dict[key_name] = (
-                    state_dict[key_name].chunk(tp, dim=split_dim)[tp_idx].clone()
-                )
+                layer_state_dict[key_name] = state_dict[key_name].chunk(tp, dim=split_dim)[tp_idx].clone()
                 if tp_idx == tp - 1:
                     state_dict.pop(key_name)
             for proj_name in proj_name_list2:
                 key_name = f"model.layers.{i}.mlp.{proj_name}.weight"
                 split_dim = 1 if "down" in proj_name else 0
-                layer_state_dict[key_name] = (
-                    state_dict[key_name].chunk(tp, dim=split_dim)[tp_idx].clone()
-                )
+                layer_state_dict[key_name] = state_dict[key_name].chunk(tp, dim=split_dim)[tp_idx].clone()
                 if tp_idx == tp - 1:
                     state_dict.pop(key_name)
             for norm_name in norm_name_list:

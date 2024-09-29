@@ -11,14 +11,8 @@ from transformers import AutoConfig, AutoTokenizer, LlamaForCausalLM
 from transformers.models.llama.modeling_llama import LlamaRMSNorm
 from worker import ModelManager
 
-from src.utils import (
-    NodeConfig,
-    call_remote_forward,
-    call_remote_init,
-    parse_range_string,
-    setup_seed,
-    tokenize_message,
-)
+from src.schemas import NodeConfig
+from src.utils import call_remote_forward, call_remote_init, parse_range_string, setup_seed, tokenize_message
 
 # 使用 torch.dist 实现 张量并行，使用 torch.dist.rpc 实现流水并行，通信时仅通信输入
 

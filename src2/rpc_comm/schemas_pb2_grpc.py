@@ -4,12 +4,10 @@ import warnings
 
 import grpc
 
-from src.rpc_comm import schemas_pb2 as src_dot_rpc__comm_dot_schemas__pb2
+from src2.rpc_comm import schemas_pb2 as src2_dot_rpc__comm_dot_schemas__pb2
 
-GRPC_GENERATED_VERSION = "1.64.1"
+GRPC_GENERATED_VERSION = "1.66.2"
 GRPC_VERSION = grpc.__version__
-EXPECTED_ERROR_RELEASE = "1.65.0"
-SCHEDULED_RELEASE_DATE = "June 25, 2024"
 _version_not_supported = False
 
 try:
@@ -20,15 +18,12 @@ except ImportError:
     _version_not_supported = True
 
 if _version_not_supported:
-    warnings.warn(
+    raise RuntimeError(
         f"The grpc package installed is at version {GRPC_VERSION},"
-        + f" but the generated code in src/rpc_comm/schemas_pb2_grpc.py depends on"
+        + f" but the generated code in src2/rpc_comm/schemas_pb2_grpc.py depends on"
         + f" grpcio>={GRPC_GENERATED_VERSION}."
         + f" Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}"
         + f" or downgrade your generated code using grpcio-tools<={GRPC_VERSION}."
-        + f" This warning will become an error in {EXPECTED_ERROR_RELEASE},"
-        + f" scheduled for release on {SCHEDULED_RELEASE_DATE}.",
-        RuntimeWarning,
     )
 
 
@@ -43,44 +38,26 @@ class RPCServiceStub(object):
         """
         self.InitModel = channel.unary_unary(
             "/schemas.RPCService/InitModel",
-            request_serializer=src_dot_rpc__comm_dot_schemas__pb2.LayerConfig.SerializeToString,
-            response_deserializer=src_dot_rpc__comm_dot_schemas__pb2.StatusResponse.FromString,
+            request_serializer=src2_dot_rpc__comm_dot_schemas__pb2.ModelConfig.SerializeToString,
+            response_deserializer=src2_dot_rpc__comm_dot_schemas__pb2.StatusResponse.FromString,
             _registered_method=True,
         )
         self.Forward = channel.unary_unary(
             "/schemas.RPCService/Forward",
-            request_serializer=src_dot_rpc__comm_dot_schemas__pb2.ForwardData.SerializeToString,
-            response_deserializer=src_dot_rpc__comm_dot_schemas__pb2.ForwardResponse.FromString,
-            _registered_method=True,
-        )
-        self.InitMLP = channel.unary_unary(
-            "/schemas.RPCService/InitMLP",
-            request_serializer=src_dot_rpc__comm_dot_schemas__pb2.MLPConfig.SerializeToString,
-            response_deserializer=src_dot_rpc__comm_dot_schemas__pb2.StatusResponse.FromString,
-            _registered_method=True,
-        )
-        self.ForwardMLP = channel.unary_unary(
-            "/schemas.RPCService/ForwardMLP",
-            request_serializer=src_dot_rpc__comm_dot_schemas__pb2.MLPForwardData.SerializeToString,
-            response_deserializer=src_dot_rpc__comm_dot_schemas__pb2.ForwardResponse.FromString,
+            request_serializer=src2_dot_rpc__comm_dot_schemas__pb2.ForwardRequest.SerializeToString,
+            response_deserializer=src2_dot_rpc__comm_dot_schemas__pb2.ForwardResponse.FromString,
             _registered_method=True,
         )
         self.Health = channel.unary_unary(
             "/schemas.RPCService/Health",
-            request_serializer=src_dot_rpc__comm_dot_schemas__pb2.Empty.SerializeToString,
-            response_deserializer=src_dot_rpc__comm_dot_schemas__pb2.HealthResponse.FromString,
-            _registered_method=True,
-        )
-        self.MLPKeys = channel.unary_unary(
-            "/schemas.RPCService/MLPKeys",
-            request_serializer=src_dot_rpc__comm_dot_schemas__pb2.Empty.SerializeToString,
-            response_deserializer=src_dot_rpc__comm_dot_schemas__pb2.MLPKeysResponse.FromString,
+            request_serializer=src2_dot_rpc__comm_dot_schemas__pb2.Empty.SerializeToString,
+            response_deserializer=src2_dot_rpc__comm_dot_schemas__pb2.HealthResponse.FromString,
             _registered_method=True,
         )
         self.InitModelFlag = channel.unary_unary(
             "/schemas.RPCService/InitModelFlag",
-            request_serializer=src_dot_rpc__comm_dot_schemas__pb2.Empty.SerializeToString,
-            response_deserializer=src_dot_rpc__comm_dot_schemas__pb2.InitModelFlagResponse.FromString,
+            request_serializer=src2_dot_rpc__comm_dot_schemas__pb2.Empty.SerializeToString,
+            response_deserializer=src2_dot_rpc__comm_dot_schemas__pb2.InitModelFlagResponse.FromString,
             _registered_method=True,
         )
 
@@ -100,25 +77,7 @@ class RPCServiceServicer(object):
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
-    def InitMLP(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details("Method not implemented!")
-        raise NotImplementedError("Method not implemented!")
-
-    def ForwardMLP(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details("Method not implemented!")
-        raise NotImplementedError("Method not implemented!")
-
     def Health(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details("Method not implemented!")
-        raise NotImplementedError("Method not implemented!")
-
-    def MLPKeys(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
@@ -135,38 +94,23 @@ def add_RPCServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
         "InitModel": grpc.unary_unary_rpc_method_handler(
             servicer.InitModel,
-            request_deserializer=src_dot_rpc__comm_dot_schemas__pb2.LayerConfig.FromString,
-            response_serializer=src_dot_rpc__comm_dot_schemas__pb2.StatusResponse.SerializeToString,
+            request_deserializer=src2_dot_rpc__comm_dot_schemas__pb2.ModelConfig.FromString,
+            response_serializer=src2_dot_rpc__comm_dot_schemas__pb2.StatusResponse.SerializeToString,
         ),
         "Forward": grpc.unary_unary_rpc_method_handler(
             servicer.Forward,
-            request_deserializer=src_dot_rpc__comm_dot_schemas__pb2.ForwardData.FromString,
-            response_serializer=src_dot_rpc__comm_dot_schemas__pb2.ForwardResponse.SerializeToString,
-        ),
-        "InitMLP": grpc.unary_unary_rpc_method_handler(
-            servicer.InitMLP,
-            request_deserializer=src_dot_rpc__comm_dot_schemas__pb2.MLPConfig.FromString,
-            response_serializer=src_dot_rpc__comm_dot_schemas__pb2.StatusResponse.SerializeToString,
-        ),
-        "ForwardMLP": grpc.unary_unary_rpc_method_handler(
-            servicer.ForwardMLP,
-            request_deserializer=src_dot_rpc__comm_dot_schemas__pb2.MLPForwardData.FromString,
-            response_serializer=src_dot_rpc__comm_dot_schemas__pb2.ForwardResponse.SerializeToString,
+            request_deserializer=src2_dot_rpc__comm_dot_schemas__pb2.ForwardRequest.FromString,
+            response_serializer=src2_dot_rpc__comm_dot_schemas__pb2.ForwardResponse.SerializeToString,
         ),
         "Health": grpc.unary_unary_rpc_method_handler(
             servicer.Health,
-            request_deserializer=src_dot_rpc__comm_dot_schemas__pb2.Empty.FromString,
-            response_serializer=src_dot_rpc__comm_dot_schemas__pb2.HealthResponse.SerializeToString,
-        ),
-        "MLPKeys": grpc.unary_unary_rpc_method_handler(
-            servicer.MLPKeys,
-            request_deserializer=src_dot_rpc__comm_dot_schemas__pb2.Empty.FromString,
-            response_serializer=src_dot_rpc__comm_dot_schemas__pb2.MLPKeysResponse.SerializeToString,
+            request_deserializer=src2_dot_rpc__comm_dot_schemas__pb2.Empty.FromString,
+            response_serializer=src2_dot_rpc__comm_dot_schemas__pb2.HealthResponse.SerializeToString,
         ),
         "InitModelFlag": grpc.unary_unary_rpc_method_handler(
             servicer.InitModelFlag,
-            request_deserializer=src_dot_rpc__comm_dot_schemas__pb2.Empty.FromString,
-            response_serializer=src_dot_rpc__comm_dot_schemas__pb2.InitModelFlagResponse.SerializeToString,
+            request_deserializer=src2_dot_rpc__comm_dot_schemas__pb2.Empty.FromString,
+            response_serializer=src2_dot_rpc__comm_dot_schemas__pb2.InitModelFlagResponse.SerializeToString,
         ),
     }
     generic_handler = grpc.method_handlers_generic_handler("schemas.RPCService", rpc_method_handlers)
@@ -195,8 +139,8 @@ class RPCService(object):
             request,
             target,
             "/schemas.RPCService/InitModel",
-            src_dot_rpc__comm_dot_schemas__pb2.LayerConfig.SerializeToString,
-            src_dot_rpc__comm_dot_schemas__pb2.StatusResponse.FromString,
+            src2_dot_rpc__comm_dot_schemas__pb2.ModelConfig.SerializeToString,
+            src2_dot_rpc__comm_dot_schemas__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -225,68 +169,8 @@ class RPCService(object):
             request,
             target,
             "/schemas.RPCService/Forward",
-            src_dot_rpc__comm_dot_schemas__pb2.ForwardData.SerializeToString,
-            src_dot_rpc__comm_dot_schemas__pb2.ForwardResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True,
-        )
-
-    @staticmethod
-    def InitMLP(
-        request,
-        target,
-        options=(),
-        channel_credentials=None,
-        call_credentials=None,
-        insecure=False,
-        compression=None,
-        wait_for_ready=None,
-        timeout=None,
-        metadata=None,
-    ):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            "/schemas.RPCService/InitMLP",
-            src_dot_rpc__comm_dot_schemas__pb2.MLPConfig.SerializeToString,
-            src_dot_rpc__comm_dot_schemas__pb2.StatusResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True,
-        )
-
-    @staticmethod
-    def ForwardMLP(
-        request,
-        target,
-        options=(),
-        channel_credentials=None,
-        call_credentials=None,
-        insecure=False,
-        compression=None,
-        wait_for_ready=None,
-        timeout=None,
-        metadata=None,
-    ):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            "/schemas.RPCService/ForwardMLP",
-            src_dot_rpc__comm_dot_schemas__pb2.MLPForwardData.SerializeToString,
-            src_dot_rpc__comm_dot_schemas__pb2.ForwardResponse.FromString,
+            src2_dot_rpc__comm_dot_schemas__pb2.ForwardRequest.SerializeToString,
+            src2_dot_rpc__comm_dot_schemas__pb2.ForwardResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -315,38 +199,8 @@ class RPCService(object):
             request,
             target,
             "/schemas.RPCService/Health",
-            src_dot_rpc__comm_dot_schemas__pb2.Empty.SerializeToString,
-            src_dot_rpc__comm_dot_schemas__pb2.HealthResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True,
-        )
-
-    @staticmethod
-    def MLPKeys(
-        request,
-        target,
-        options=(),
-        channel_credentials=None,
-        call_credentials=None,
-        insecure=False,
-        compression=None,
-        wait_for_ready=None,
-        timeout=None,
-        metadata=None,
-    ):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            "/schemas.RPCService/MLPKeys",
-            src_dot_rpc__comm_dot_schemas__pb2.Empty.SerializeToString,
-            src_dot_rpc__comm_dot_schemas__pb2.MLPKeysResponse.FromString,
+            src2_dot_rpc__comm_dot_schemas__pb2.Empty.SerializeToString,
+            src2_dot_rpc__comm_dot_schemas__pb2.HealthResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -375,8 +229,8 @@ class RPCService(object):
             request,
             target,
             "/schemas.RPCService/InitModelFlag",
-            src_dot_rpc__comm_dot_schemas__pb2.Empty.SerializeToString,
-            src_dot_rpc__comm_dot_schemas__pb2.InitModelFlagResponse.FromString,
+            src2_dot_rpc__comm_dot_schemas__pb2.Empty.SerializeToString,
+            src2_dot_rpc__comm_dot_schemas__pb2.InitModelFlagResponse.FromString,
             options,
             channel_credentials,
             insecure,

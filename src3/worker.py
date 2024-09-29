@@ -10,7 +10,7 @@ from transformers import AutoConfig, LlamaForCausalLM
 
 from src.commons.communicator import Communicator
 from src.llama import MyLlamaModel
-from src.utils import NodeConfig
+from src.schemas import NodeConfig
 
 
 def get_state_dict(model_path: str, device: str) -> Dict[str, torch.Tensor]:
@@ -32,7 +32,7 @@ class ModelManager:
         """
         device = "cpu"
         comm = Communicator()
-        config = AutoConfig.from_pretrained(node_config.model_path, trust_remote_code=True)
+        config = AutoConfig.from_pretrained(node_config.checkpoint_path, trust_remote_code=True)
         config.decoder_start_layer_idx = node_config.start_layer_idx
         config.decoder_end_layer_idx = node_config.end_layer_idx
         config.comm = comm
@@ -42,7 +42,7 @@ class ModelManager:
 
         s1 = time.time()
         # TODO: 只在 rank0 获取 state_dict
-        state_dict = get_state_dict(node_config.model_path, device)
+        state_dict = get_state_dict(node_config.checkpoint_path, device)
         model = MyLlamaModel(config)
         model.load_state_dict(state_dict)
         print(f"[Rank: {config.comm.rank}] Load Model Cost Time {time.time() - s1}")

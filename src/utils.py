@@ -3,19 +3,10 @@ import socket
 from typing import *
 from typing import List, Optional
 
-from pydantic import BaseModel
 import torch
 from transformers import AutoTokenizer
 
-
-class NodeConfig(BaseModel):
-    start_layer_idx: int
-    end_layer_idx: int
-    model_path: str
-    prev_rank: int
-    next_start_rank: int
-    next_end_rank: int
-    rank: int = None
+from schemas import NodeConfig
 
 
 def setup_seed(seed):

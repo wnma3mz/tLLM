@@ -12,6 +12,7 @@ from rpc_comm.convert import list_to_protobuf, protobuf_to_list
 class RPCServer:
     def __init__(self, url_list: List[str]):
         self.stub_list = []
+        self.url_list = url_list
         for url in url_list:
             channel = grpc.insecure_channel(url)
             self.stub_list.append(schemas_pb2_grpc.RPCServiceStub(channel))
@@ -19,56 +20,30 @@ class RPCServer:
         self.func_dict = {
             "init_model": self.init_model,
             "forward": self.forward,
-            "init_mlp": self.init_mlp,
-            "forward_mlp": self.forward_mlp,
             "health": self.health,
-            "mlp_keys": self.mlp_keys,
             "init_model_flag": self.init_model_flag,
         }
 
     def init_model(self, stub, data):
         config_struct_obj = struct_pb2.Struct()
         json_format.Parse(json.dumps(data["config"]), config_struct_obj)
-        request = schemas_pb2.LayerConfig(
-            config=config_struct_obj,
+        request = schemas_pb2.ModelConfig(
+            model_name=data["model_name"],
+            pp_rank=data["pp_rank"],
             layer_idx_start=data["layer_idx_start"],
             layer_idx_end=data["layer_idx_end"],
-            tp_url_list=data["tp_url_list"],
-            tp_size=data["tp_size"],
-            layer_state_dict_dir=data["layer_state_dict_dir"],
+            master_url=data["master_url"],
+            next_pp_rank=data["next_pp_rank"],
         )
         return stub.InitModel(request)
 
     def forward(self, stub, data):
-        request = schemas_pb2.ForwardData(uuid=data["uuid"], hidden_states=list_to_protobuf(data["hidden_states"]))
-        # Set fields in request according to data
+        request = schemas_pb2.ForwardRequest(uuid=data["uuid"], hidden_states=list_to_protobuf(data["hidden_states"]))
         return stub.Forward(request)
-
-    def init_mlp(self, stub, data):
-        request = schemas_pb2.MLPConfig(
-            proj_name=data["proj_name"],
-            input_size=data["input_size"],
-            output_size=data["output_size"],
-            state_dict_path=data["state_dict_path"],
-        )
-        return stub.InitMLP(request)
-
-    def forward_mlp(self, stub, data):
-        request = schemas_pb2.MLPForwardData(
-            proj_name=data["proj_name"],
-            tp_idx=data["tp_idx"],
-            layer_idx=data["layer_idx"],
-            hidden_states=data["hidden_states"],
-        )
-        return stub.ForwardMLP(request)
 
     def health(self, stub):
         request = schemas_pb2.Empty()
         return stub.Health(request)
-
-    def mlp_keys(self, stub):
-        request = schemas_pb2.Empty()
-        return stub.MLPKeys(request)
 
     def init_model_flag(self, stub):
         request = schemas_pb2.Empty()
@@ -159,7 +134,8 @@ class RPCServer:
             return [response.cost_time for response in response_list]
         return response_list.cost_time
 
+
 if __name__ == "__main__":
     # for test
     server = RPCServer(["localhost:50051", "localhost:50052"])
-    server.post_sync(0, "/forward", {"uuid": "123", "hidden_states": [[1., 2., 3.]]})
+    server.post_sync(0, "/forward", {"uuid": "123", "hidden_states": [[1.0, 2.0, 3.0]]})

@@ -3,6 +3,16 @@ from typing import *
 from pydantic import BaseModel
 
 
+class NodeConfig(BaseModel):
+    start_layer_idx: int
+    end_layer_idx: int
+    checkpoint_path: str
+    prev_rank: int
+    next_start_rank: int
+    next_end_rank: int
+    rank: int = None
+
+
 class LayerConfig(BaseModel):
     config: dict
     layer_idx_start: int
