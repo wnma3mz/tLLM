@@ -17,7 +17,7 @@ class TokenizerUtils:
     def preprocess(self, text: str = None, messages: List[Dict[str, str]] = None) -> TokenizerResult:
         if messages:
             text = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        input_ids = self.tokenizer.encode(text, return_tensors="pt")
+        input_ids = self.tokenizer.encode(text, add_special_tokens=True)
         return TokenizerResult(input_ids=input_ids, input_str=text)
 
     def preprocess_old(self, messages: List[List[Dict[str, str]]]) -> TokenizerResult:

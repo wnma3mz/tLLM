@@ -37,8 +37,21 @@
 
 在保证通信带宽的前提下，速度应当更快
 
-| PP,TP   | TinyLlama-1.1B-Chat-v1.0 | 34B | LLaMA3-70B |
-| ---- | --------- | --- | ---------- |
-| 1,1(baseline) |    6.37 token/s; 17.98 token/s      |     |            |
-| 2,1(单机模拟) | 5.91 token/s|     |            |
-| 2,2(单机模拟) | 5.46 token/s |     |            |
+bfloat 16 (need update)
+| PP,TP   | Llama-3.2-3B-Instruct | Meta-Llama-3-8B-Instruct | Meta-Llama-3-70B-Instruct |
+| ---- | --------- | --- | ---------- | 
+| 2,1(实际) | 3.66 token/s                | | | | |
+| 2,2(实际) |                 | | | | |
+
+
+float 32
+| PP,TP   | TinyLlama-1.1B-Chat-v1.0 | Llama-3.2-1B-Instruct |
+| ---- | --------- | --- | 
+| 1,1(baseline) |    6.37 token/s; 17.98 token/s      |     | 
+| 2,1(单机模拟) | 5.91 token/s|     |    
+| 2,2(单机模拟) | 5.46 token/s |     |   
+| 2,1(实际) | 6.59 token/s | 5.43 token/s    |  
+| 2,2(实际) | 6.44 token/s | 5.63 token/s    |  
+
+
+

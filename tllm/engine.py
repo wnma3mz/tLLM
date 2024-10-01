@@ -41,9 +41,10 @@ class MyLlamaForCausalLM(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.vocab_size = config.vocab_size
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        dtype = torch.bfloat16
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size).to(dtype)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False).to(dtype)
+        self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps).to(dtype)
 
     @classmethod
     def from_pretrained(cls, model_path: str, weight_path: str, server: RPCManager, **kwargs):
@@ -55,7 +56,6 @@ class MyLlamaForCausalLM(nn.Module):
         cls.pp_size = len(cls.server.url_list)
 
         state_dict = torch.load(weight_path)
-
         model.embed_tokens.load_state_dict({"weight": state_dict.pop("model.embed_tokens.weight")})
         model.norm.load_state_dict({"weight": state_dict.pop("model.norm.weight")})
         model.lm_head.load_state_dict({"weight": state_dict.pop("lm_head.weight")})

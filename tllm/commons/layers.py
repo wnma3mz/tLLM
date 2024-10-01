@@ -68,8 +68,9 @@ class RowParallelLayer(BaseParallelLayer):
         self.layer = nn.Linear(row_size // self.world_size, col_size, bias=False)
 
     def load_weight(self, w: Optional[torch.Tensor] = None):
-        w_list = w.chunk(self.world_size, dim=1)
-        w = w_list[self.rank]
+        if self.world_size > 1:
+            w_list = w.chunk(self.world_size, dim=1)
+            w = w_list[self.rank]
         self.load_state_dict({"layer.weight": w})
 
     @torch.no_grad()

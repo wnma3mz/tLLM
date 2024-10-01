@@ -71,8 +71,8 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
         """
         s1 = time.time()
         hidden_states = protobuf_to_list(request.hidden_states)
-
         hidden_states = torch.tensor(hidden_states, dtype=self.model.dtype)
+
         serialized_data = list(pickle.dumps((hidden_states.shape, request.uuid)))
         tensor_data = torch.ByteTensor(serialized_data)
         for rank in range(1, self.config.comm.world_size):
@@ -132,11 +132,12 @@ if __name__ == "__main__":
 
     s1 = time.time()
     state_dict = LlamaForCausalLM.from_pretrained(
-        args.model_path, trust_remote_code=True, device_map="cpu"
+        args.model_path, trust_remote_code=True, device_map="cpu", torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
     ).state_dict()
     model = MyLlamaModel(config)
     model.load_state_dict(state_dict)
     logging.info(f"[Rank: {config.comm.rank}] Cost time {time.time() - s1}")
     model.eval()
+    del state_dict
 
     start_grpc_server(config, model, args.port, comm.rank, args.pp_rank)
