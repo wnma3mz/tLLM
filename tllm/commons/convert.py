@@ -1,6 +1,6 @@
 from typing import List
 
-from rpc import schemas_pb2, schemas_pb2_grpc
+from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 
 
 def protobuf_to_list(proto_message):

@@ -4,6 +4,30 @@ import torch
 import torch.distributed as dist
 
 
+class SingleNodeCommunicator:
+    def __init__(self) -> None:
+        self.rank = 0
+        self.world_size = 1
+
+    def is_rank0(self):
+        return True
+
+    def print_rank0(self, *args):
+        print(*args)
+
+    def all_reduce(self, x: torch.Tensor) -> torch.Tensor:
+        return x
+
+    def all_gather(self, x: torch.Tensor):
+        return x
+
+    def gather(self, x: torch.Tensor):
+        return x
+
+    def broadcast(self, x: torch.Tensor):
+        return x
+
+
 class Communicator:
     def __init__(self, init_method=None, rank=None, world_size=None, is_torchrun: bool = False) -> None:
         if init_method is not None:

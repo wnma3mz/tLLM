@@ -17,6 +17,6 @@ class ChatCompletionRequest(BaseModel):
 class ChatCompletionResponse(BaseModel):
     token: List[int]
     cost_time: float
-    finish_reason: str
+    finish_reason: Optional[str]
     usage: Dict[str, int]
     text: str

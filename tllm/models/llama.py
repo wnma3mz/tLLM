@@ -1,11 +1,12 @@
 from typing import *
 
-from cache_manager import CacheManager
-from commons.layers import MyLlamaDecoderLayer
 import torch
 import torch.nn as nn
 from transformers.cache_utils import Cache, DynamicCache
 from transformers.modeling_outputs import BaseModelOutputWithPast
+
+from tllm.commons.cache_manager import CacheManager
+from tllm.commons.layers import MyLlamaDecoderLayer
 
 
 class Decoder(nn.Module):

@@ -3,7 +3,8 @@
 import warnings
 
 import grpc
-from src2.rpc_comm import schemas_pb2 as src2_dot_rpc__comm_dot_schemas__pb2
+
+from tllm.rpc import schemas_pb2 as tllm_dot_rpc_dot_schemas__pb2
 
 GRPC_GENERATED_VERSION = "1.66.2"
 GRPC_VERSION = grpc.__version__
@@ -19,7 +20,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f"The grpc package installed is at version {GRPC_VERSION},"
-        + f" but the generated code in src2/rpc_comm/schemas_pb2_grpc.py depends on"
+        + f" but the generated code in tllm/rpc/schemas_pb2_grpc.py depends on"
         + f" grpcio>={GRPC_GENERATED_VERSION}."
         + f" Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}"
         + f" or downgrade your generated code using grpcio-tools<={GRPC_VERSION}."
@@ -37,26 +38,26 @@ class RPCServiceStub(object):
         """
         self.InitModel = channel.unary_unary(
             "/schemas.RPCService/InitModel",
-            request_serializer=src2_dot_rpc__comm_dot_schemas__pb2.ModelConfig.SerializeToString,
-            response_deserializer=src2_dot_rpc__comm_dot_schemas__pb2.StatusResponse.FromString,
+            request_serializer=tllm_dot_rpc_dot_schemas__pb2.ModelConfig.SerializeToString,
+            response_deserializer=tllm_dot_rpc_dot_schemas__pb2.StatusResponse.FromString,
             _registered_method=True,
         )
         self.Forward = channel.unary_unary(
             "/schemas.RPCService/Forward",
-            request_serializer=src2_dot_rpc__comm_dot_schemas__pb2.ForwardRequest.SerializeToString,
-            response_deserializer=src2_dot_rpc__comm_dot_schemas__pb2.ForwardResponse.FromString,
+            request_serializer=tllm_dot_rpc_dot_schemas__pb2.ForwardRequest.SerializeToString,
+            response_deserializer=tllm_dot_rpc_dot_schemas__pb2.ForwardResponse.FromString,
             _registered_method=True,
         )
         self.Health = channel.unary_unary(
             "/schemas.RPCService/Health",
-            request_serializer=src2_dot_rpc__comm_dot_schemas__pb2.Empty.SerializeToString,
-            response_deserializer=src2_dot_rpc__comm_dot_schemas__pb2.HealthResponse.FromString,
+            request_serializer=tllm_dot_rpc_dot_schemas__pb2.Empty.SerializeToString,
+            response_deserializer=tllm_dot_rpc_dot_schemas__pb2.HealthResponse.FromString,
             _registered_method=True,
         )
         self.InitModelFlag = channel.unary_unary(
             "/schemas.RPCService/InitModelFlag",
-            request_serializer=src2_dot_rpc__comm_dot_schemas__pb2.Empty.SerializeToString,
-            response_deserializer=src2_dot_rpc__comm_dot_schemas__pb2.InitModelFlagResponse.FromString,
+            request_serializer=tllm_dot_rpc_dot_schemas__pb2.Empty.SerializeToString,
+            response_deserializer=tllm_dot_rpc_dot_schemas__pb2.InitModelFlagResponse.FromString,
             _registered_method=True,
         )
 
@@ -93,23 +94,23 @@ def add_RPCServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
         "InitModel": grpc.unary_unary_rpc_method_handler(
             servicer.InitModel,
-            request_deserializer=src2_dot_rpc__comm_dot_schemas__pb2.ModelConfig.FromString,
-            response_serializer=src2_dot_rpc__comm_dot_schemas__pb2.StatusResponse.SerializeToString,
+            request_deserializer=tllm_dot_rpc_dot_schemas__pb2.ModelConfig.FromString,
+            response_serializer=tllm_dot_rpc_dot_schemas__pb2.StatusResponse.SerializeToString,
         ),
         "Forward": grpc.unary_unary_rpc_method_handler(
             servicer.Forward,
-            request_deserializer=src2_dot_rpc__comm_dot_schemas__pb2.ForwardRequest.FromString,
-            response_serializer=src2_dot_rpc__comm_dot_schemas__pb2.ForwardResponse.SerializeToString,
+            request_deserializer=tllm_dot_rpc_dot_schemas__pb2.ForwardRequest.FromString,
+            response_serializer=tllm_dot_rpc_dot_schemas__pb2.ForwardResponse.SerializeToString,
         ),
         "Health": grpc.unary_unary_rpc_method_handler(
             servicer.Health,
-            request_deserializer=src2_dot_rpc__comm_dot_schemas__pb2.Empty.FromString,
-            response_serializer=src2_dot_rpc__comm_dot_schemas__pb2.HealthResponse.SerializeToString,
+            request_deserializer=tllm_dot_rpc_dot_schemas__pb2.Empty.FromString,
+            response_serializer=tllm_dot_rpc_dot_schemas__pb2.HealthResponse.SerializeToString,
         ),
         "InitModelFlag": grpc.unary_unary_rpc_method_handler(
             servicer.InitModelFlag,
-            request_deserializer=src2_dot_rpc__comm_dot_schemas__pb2.Empty.FromString,
-            response_serializer=src2_dot_rpc__comm_dot_schemas__pb2.InitModelFlagResponse.SerializeToString,
+            request_deserializer=tllm_dot_rpc_dot_schemas__pb2.Empty.FromString,
+            response_serializer=tllm_dot_rpc_dot_schemas__pb2.InitModelFlagResponse.SerializeToString,
         ),
     }
     generic_handler = grpc.method_handlers_generic_handler("schemas.RPCService", rpc_method_handlers)
@@ -138,8 +139,8 @@ class RPCService(object):
             request,
             target,
             "/schemas.RPCService/InitModel",
-            src2_dot_rpc__comm_dot_schemas__pb2.ModelConfig.SerializeToString,
-            src2_dot_rpc__comm_dot_schemas__pb2.StatusResponse.FromString,
+            tllm_dot_rpc_dot_schemas__pb2.ModelConfig.SerializeToString,
+            tllm_dot_rpc_dot_schemas__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -168,8 +169,8 @@ class RPCService(object):
             request,
             target,
             "/schemas.RPCService/Forward",
-            src2_dot_rpc__comm_dot_schemas__pb2.ForwardRequest.SerializeToString,
-            src2_dot_rpc__comm_dot_schemas__pb2.ForwardResponse.FromString,
+            tllm_dot_rpc_dot_schemas__pb2.ForwardRequest.SerializeToString,
+            tllm_dot_rpc_dot_schemas__pb2.ForwardResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -198,8 +199,8 @@ class RPCService(object):
             request,
             target,
             "/schemas.RPCService/Health",
-            src2_dot_rpc__comm_dot_schemas__pb2.Empty.SerializeToString,
-            src2_dot_rpc__comm_dot_schemas__pb2.HealthResponse.FromString,
+            tllm_dot_rpc_dot_schemas__pb2.Empty.SerializeToString,
+            tllm_dot_rpc_dot_schemas__pb2.HealthResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -228,8 +229,8 @@ class RPCService(object):
             request,
             target,
             "/schemas.RPCService/InitModelFlag",
-            src2_dot_rpc__comm_dot_schemas__pb2.Empty.SerializeToString,
-            src2_dot_rpc__comm_dot_schemas__pb2.InitModelFlagResponse.FromString,
+            tllm_dot_rpc_dot_schemas__pb2.Empty.SerializeToString,
+            tllm_dot_rpc_dot_schemas__pb2.InitModelFlagResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import *
 import uuid
 
@@ -6,8 +7,34 @@ import torch.nn as nn
 from transformers import AutoConfig
 from transformers.models.llama.modeling_llama import LlamaRMSNorm
 
+from tllm.generate.decode_utils import DecodeUtils
 from tllm.rpc.manager import RPCManager
 from tllm.utils import tensor_to_list
+
+finish_reason_type = Literal["length", "stop", None]
+
+
+@dataclass
+class GenerateResult:
+    output_ids: List[int]
+    finish_reason: Optional[finish_reason_type] = None
+    output_text: Optional[str] = None
+
+
+@dataclass
+class GenerateEnd:
+    finish_reason: finish_reason_type
+    is_end: bool
+
+
+def is_generate_end(output_ids: List[int], eos_token_id: int, max_new_tokens: int) -> GenerateEnd:
+    if len(output_ids) >= max_new_tokens:
+        return GenerateEnd(finish_reason="length", is_end=True)
+
+    if output_ids[-1] == eos_token_id:
+        return GenerateEnd(finish_reason="stop", is_end=True)
+
+    return GenerateEnd(finish_reason=None, is_end=False)
 
 
 class MyLlamaForCausalLM(nn.Module):
@@ -23,6 +50,7 @@ class MyLlamaForCausalLM(nn.Module):
         config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
         model = cls(config)
 
+        cls.config = config
         cls.server = server
         cls.pp_size = len(cls.server.url_list)
 
@@ -53,21 +81,23 @@ class MyLlamaForCausalLM(nn.Module):
         return logits, None
 
     @torch.no_grad()
-    def generate(self, input_ids: torch.Tensor, **kwargs) -> Tuple[List[int], None]:
+    def generate(self, input_ids: torch.Tensor, sampler: DecodeUtils, **kwargs) -> GenerateResult:
         # input_ids: bs x seq_len
         max_new_tokens = kwargs.get("max_new_tokens", 16)
         input_embeds = self.embed_tokens(input_ids)
-        token_list: List[int] = []
-        cnt = 0
+        output_ids: List[int] = []
+        finish_reason = None
         uuid_str = str(uuid.uuid4())
         while True:
             logits, _ = self(input_embeds, uuid_str)
-            cnt += 1
-            if cnt >= max_new_tokens:
-                break
-            next_token = torch.argmax(logits[:, -1], dim=1)
-            token_list.append(next_token[0].tolist())
-            print("token", token_list[-1])
-            input_embeds = self.embed_tokens(next_token).unsqueeze(0)
+            generate_ids = sampler.decode(logits)
+            output_ids.append(generate_ids[0])
 
-        return token_list, None
+            end = is_generate_end(output_ids, eos_token_id=self.config.eos_token_id, max_new_tokens=max_new_tokens)
+            if end.is_end:
+                finish_reason = end.finish_reason
+                break
+
+            input_embeds = self.embed_tokens(torch.tensor(generate_ids)).unsqueeze(0)
+
+        return GenerateResult(output_ids=output_ids, finish_reason=finish_reason)

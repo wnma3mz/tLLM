@@ -1,14 +1,14 @@
 import argparse
 from concurrent import futures
 import logging
+import os
 import pickle
 import time
 from typing import *
 
-from google.protobuf import json_format, struct_pb2
 import grpc
 
-from tllm.commons.communicator import Communicator
+from tllm.commons.communicator import Communicator, SingleNodeCommunicator
 from tllm.commons.convert import list_to_protobuf, protobuf_to_list
 from tllm.models.llama import MyLlamaModel
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
@@ -31,7 +31,9 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
         # self.ip_addr = get_ip_address()
         self.ip_addr = "localhost"
         self.prefix_log_str = f"IP: [{self.ip_addr}]"
-        tensor_data = torch.empty(83, dtype=torch.uint8)  # TODO 优化，同步 uuid str 和 shape
+        # TODO 优化，同步 uuid str 和 shape，会导致 libc++abi: terminating due to uncaught exception of type gloo::EnforceNotMet:
+        # tensor_data = torch.empty(86, dtype=torch.uint8)
+        tensor_data = torch.empty(83, dtype=torch.uint8)
         if self.rank == 0:
             pass
         else:
@@ -114,14 +116,14 @@ def start_grpc_server(config, model, port, rank, pp_rank):
     if config.comm.is_rank0():
         schemas_pb2_grpc.add_RPCServiceServicer_to_server(rpc_servicer, server)
         server.add_insecure_port(f"[::]:{port}")
-        print(f"Starting gRPC server on port {port}")
+        logging.info(f"Starting gRPC server on port {port}")
         server.start()
         server.wait_for_termination()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    comm = Communicator(is_torchrun=True)
+    comm = Communicator(is_torchrun=True) if "WORLD_SIZE" in os.environ else SingleNodeCommunicator()
 
     config = AutoConfig.from_pretrained(args.model_path, trust_remote_code=True)
     config.decoder_start_layer_idx = args.start_layer_idx
@@ -134,7 +136,7 @@ if __name__ == "__main__":
     ).state_dict()
     model = MyLlamaModel(config)
     model.load_state_dict(state_dict)
-    print(f"[Rank: {config.comm.rank}] Cost time {time.time() - s1}")
+    logging.info(f"[Rank: {config.comm.rank}] Cost time {time.time() - s1}")
     model.eval()
 
     start_grpc_server(config, model, args.port, comm.rank, args.pp_rank)

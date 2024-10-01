@@ -2,10 +2,11 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 from typing import *
 
-from commons.convert import list_to_protobuf, protobuf_to_list
 from google.protobuf import json_format, struct_pb2
 import grpc
-from rpc import schemas_pb2, schemas_pb2_grpc
+
+from tllm.commons.convert import list_to_protobuf, protobuf_to_list
+from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 
 
 class RPCManager:

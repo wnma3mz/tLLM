@@ -35,11 +35,11 @@ class DecodeUtils:
         self.method = method
         assert self.method in ["greedy", "beam_search"]
 
-    def decode(self, input_ids: List[int]) -> str:
+    def decode(self, logits: torch.Tensor) -> List[int]:
         if self.method == "greedy":
-            return self.greedy_decode(input_ids)
+            return self.greedy_decode(logits)
         elif self.method == "beam_search":
-            return self.beam_search_decode(input_ids)
+            return self.beam_search_decode(logits)
 
     def greedy_decode(self, logits: torch.Tensor) -> List[int]:
         # logits shape: [batch_size, sequence_length, vocab_size]
