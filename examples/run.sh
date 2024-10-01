@@ -1,16 +1,21 @@
 #!/bin/bash
-MODEL_PATH=/Users/lujianghu/Documents/TinyLlama-1.1B-Chat-v1.0
-WEIGHT_PATH=/Users/lujianghu/Documents/TinyLlama-1.1B-Chat-v1.0/master_weight.pt
+MODE_SIZE=$1
 
-MODEL_PATH=/Users/lujianghu/Documents/Llama-3.2-1B-Instruct
-WEIGHT_PATH=/Users/lujianghu/Documents/Llama-3.2-1B-Instruct/master_weight.pt
-
-MODEL_PATH=/Users/lujianghu/Documents/Llama-3.2-3B-Instruct
-WEIGHT_PATH=/Users/lujianghu/Documents/Llama-3.2-3B-Instruct/master_weight.pt
-
-MODEL_PATH=/Users/lujianghu/Documents/Meta-Llama-3-8B-Instruct
-WEIGHT_PATH=/Users/lujianghu/Documents/Meta-Llama-3-8B-Instruct/master_weight.pt
-
+if [ $MODE_SIZE == "1.1" ]; then
+    MODEL_PATH=/Users/lujianghu/Documents/TinyLlama-1.1B-Chat-v1.0
+elif [ $MODE_SIZE == "1" ]; then
+    MODEL_PATH=/Users/lujianghu/Documents/Llama-3.2-1B-Instruct
+elif [ $MODE_SIZE == "3" ]; then
+    MODEL_PATH=/Users/lujianghu/Documents/Llama-3.2-3B-Instruct
+elif [ $MODE_SIZE == "8" ]; then
+    MODEL_PATH=/Users/lujianghu/Documents/Meta-Llama-3-8B-Instruct
+elif [ $MODE_SIZE == "70" ]; then
+    MODEL_PATH=/Users/lujianghu/Documents/Meta-Llama-3-70B-Instruct
+else 
+    echo "Invalid mode size"
+    exit 1
+fi
+WEIGHT_PATH=$MODEL_PATH/master_weight.pt
 CONFIG_PATH=./examples/config.json
 
 export PYTHONPATH="./":$PYTHONPATH;
