@@ -4,11 +4,11 @@
         "url": "localhost:25001",
         "tp_size": 2,
         "master_port": 29501,
-        "layer_idx": [0, 11]
+        "layer_idx": [0, 1]
     },
     {
         "pp_rank": 1,
-        "url": "192.168.0.101:25002",
+        "url": "localhost:25002",
         "tp_size": 2,
         "master_port": 29502,
         "layer_idx": [11, 22]

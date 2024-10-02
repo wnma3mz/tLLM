@@ -54,3 +54,6 @@ Llama-3.2-1B-Instruct 单机时间：10.96 token/s
 Llama-3.2-1B-Instruct 单机时间：5.73 token/s（包含首token生成的时间, transformers 框架 TTFT 时间不方便记录）
 
 TODO: Meta-Llama-3-8B-Instruct in GPU
+
+多维数组实现（float32）: 单机通信在 0.002 s 左右 （seq-len=1）
+bytes 实现（float32）: 单机通信在 0.001 s 左右 （seq-len=1）

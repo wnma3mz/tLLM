@@ -2,31 +2,12 @@ syntax = "proto3";
 
 package schemas;
 
-message Array {
-    repeated float elements = 1;  // One-dimensional array of integers
+
+message BFloat16Tensor {
+    bytes data = 1;  // 使用 bytes 存储 bfloat16 数据
+    repeated int32 shape = 2;  // 形状信息
 }
 
-message Matrix {
-    repeated Array rows = 1;  // Two-dimensional array of integers
-}
-
-message Tensor {
-    repeated Matrix layers = 1;  // Three-dimensional array of integers
-}
-
-message BlockTensor {
-    repeated Tensor blocks = 1;  // Four-dimensional array of integers
-}
-
-message MultiDimensionalArray {
-    // Union type to represent any dimensional array
-    oneof multi_array {
-        Array array = 1;
-        Matrix matrix = 2;
-        Tensor tensor = 3;
-        BlockTensor block_tensor = 4;
-    }
-}
 
 message ModelConfig {
     string model_name = 1;
@@ -39,7 +20,7 @@ message ModelConfig {
 
 message ForwardRequest {
     string uuid = 1;
-    MultiDimensionalArray hidden_states = 2;
+    BFloat16Tensor hidden_states = 2;
 }
 
 message StatusResponse {
@@ -50,7 +31,7 @@ message StatusResponse {
 message ForwardResponse {
     string msg = 1;
     int32 status = 2;
-    MultiDimensionalArray output = 3;
+    BFloat16Tensor output = 3;
     float cost_time = 4;
 }
 

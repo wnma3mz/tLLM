@@ -1,3 +1,6 @@
+from google.protobuf.internal import containers as _containers
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import message as _message
 from typing import (
     ClassVar as _ClassVar,
     Iterable as _Iterable,
@@ -5,9 +8,6 @@ from typing import (
     Optional as _Optional,
     Union as _Union,
 )
-
-from google.protobuf import descriptor as _descriptor, message as _message
-from google.protobuf.internal import containers as _containers
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
@@ -34,6 +34,14 @@ class BlockTensor(_message.Message):
     BLOCKS_FIELD_NUMBER: _ClassVar[int]
     blocks: _containers.RepeatedCompositeFieldContainer[Tensor]
     def __init__(self, blocks: _Optional[_Iterable[_Union[Tensor, _Mapping]]] = ...) -> None: ...
+
+class BFloat16Tensor(_message.Message):
+    __slots__ = ("data", "shape")
+    DATA_FIELD_NUMBER: _ClassVar[int]
+    SHAPE_FIELD_NUMBER: _ClassVar[int]
+    data: bytes
+    shape: _containers.RepeatedScalarFieldContainer[int]
+    def __init__(self, data: _Optional[bytes] = ..., shape: _Optional[_Iterable[int]] = ...) -> None: ...
 
 class MultiDimensionalArray(_message.Message):
     __slots__ = ("array", "matrix", "tensor", "block_tensor")
@@ -82,9 +90,9 @@ class ForwardRequest(_message.Message):
     UUID_FIELD_NUMBER: _ClassVar[int]
     HIDDEN_STATES_FIELD_NUMBER: _ClassVar[int]
     uuid: str
-    hidden_states: MultiDimensionalArray
+    hidden_states: BFloat16Tensor
     def __init__(
-        self, uuid: _Optional[str] = ..., hidden_states: _Optional[_Union[MultiDimensionalArray, _Mapping]] = ...
+        self, uuid: _Optional[str] = ..., hidden_states: _Optional[_Union[BFloat16Tensor, _Mapping]] = ...
     ) -> None: ...
 
 class StatusResponse(_message.Message):
@@ -103,13 +111,13 @@ class ForwardResponse(_message.Message):
     COST_TIME_FIELD_NUMBER: _ClassVar[int]
     msg: str
     status: int
-    output: MultiDimensionalArray
+    output: BFloat16Tensor
     cost_time: float
     def __init__(
         self,
         msg: _Optional[str] = ...,
         status: _Optional[int] = ...,
-        output: _Optional[_Union[MultiDimensionalArray, _Mapping]] = ...,
+        output: _Optional[_Union[BFloat16Tensor, _Mapping]] = ...,
         cost_time: _Optional[float] = ...,
     ) -> None: ...
 

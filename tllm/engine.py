@@ -9,11 +9,13 @@ import torch.nn as nn
 from transformers import AutoConfig
 from transformers.models.llama.modeling_llama import LlamaRMSNorm
 
+from tllm.commons.convert import deserialize_bfloat16_tensor, serialize_bfloat16_tensor
 from tllm.generate.decode_utils import DecodeUtils
 from tllm.rpc.manager import RPCManager
-from tllm.utils import tensor_to_list
 
 finish_reason_type = Literal["length", "stop", None]
+
+logging.basicConfig(level=logging.INFO)
 
 
 @dataclass
@@ -32,9 +34,9 @@ class GenerateEnd:
 
 @dataclass
 class ForwardResult:
-    hidden_states: Optional[torch.Tensor] = None
     logits: torch.Tensor
     comm_cost_time_list: Optional[List[float]] = None
+    hidden_states: Optional[torch.Tensor] = None
 
 
 def is_generate_end(output_ids: List[int], eos_token_id: int, max_new_tokens: int) -> GenerateEnd:
@@ -73,8 +75,10 @@ class MyLlamaForCausalLM(nn.Module):
         model.eval()
         return model
 
-    def _prepare_forward_data(self, uuid_str: str, hidden_states: torch.Tensor) -> Dict[str, Any]:
-        return {"uuid": uuid_str, "hidden_states": tensor_to_list(hidden_states)}
+    def _prepare_forward_data(self, uuid_str: str, hidden_states: torch.Tensor, need_serialize: bool) -> Dict[str, Any]:
+        if need_serialize:
+            hidden_states = serialize_bfloat16_tensor(hidden_states)
+        return {"uuid": uuid_str, "hidden_states": hidden_states}
 
     def forward(self, inputs_embeds: torch.Tensor, uuid_str: str) -> ForwardResult:
         hidden_states = inputs_embeds
@@ -82,11 +86,10 @@ class MyLlamaForCausalLM(nn.Module):
         for pp_idx in range(self.pp_size):
             s1 = time.time()
             outputs = self.server.post_sync(
-                pp_idx, "/forward", data=self._prepare_forward_data(uuid_str, hidden_states)
+                pp_idx, "/forward", data=self._prepare_forward_data(uuid_str, hidden_states, need_serialize=pp_idx == 0)
             )
+            hidden_states = deserialize_bfloat16_tensor(outputs.output) if pp_idx == 0 else outputs.output
             s2 = time.time()
-            assert self.server.is_success(outputs), "Forward failed"
-            hidden_states = outputs.hidden_states
             comm_cost_time_list.append(s2 - s1 - outputs.cost_time)
 
         hidden_states = torch.tensor(hidden_states).to(inputs_embeds.dtype).to(self.norm.weight.device)

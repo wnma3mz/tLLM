@@ -9,7 +9,12 @@ from typing import *
 import grpc
 
 from tllm.commons.communicator import Communicator, SingleNodeCommunicator
-from tllm.commons.convert import list_to_protobuf, protobuf_to_list
+from tllm.commons.convert import (
+    deserialize_bfloat16_tensor,
+    list_to_protobuf,
+    protobuf_to_list,
+    serialize_bfloat16_tensor,
+)
 from tllm.models.llama import MyLlamaModel
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.utils import get_ip_address, tensor_to_list
@@ -66,12 +71,11 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
     def Forward(self, request: schemas_pb2.ForwardRequest, context: grpc.ServicerContext):
         """
         @param request: ForwardRequest
-            hidden_states: torch.Tensor
+            hidden_states: bytes
             uuid: str
         """
         s1 = time.time()
-        hidden_states = protobuf_to_list(request.hidden_states)
-        hidden_states = torch.tensor(hidden_states, dtype=self.model.dtype)
+        hidden_states = deserialize_bfloat16_tensor(request.hidden_states)
 
         serialized_data = list(pickle.dumps((hidden_states.shape, request.uuid)))
         tensor_data = torch.ByteTensor(serialized_data)
@@ -81,7 +85,7 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
 
         output = self.model(hidden_states, request.uuid)
 
-        return_output = list_to_protobuf(tensor_to_list(output))
+        return_output = serialize_bfloat16_tensor(output)
         cost_time = time.time() - s1
         logging.info(f"{self.prefix_log_str} Forward pass cost time: {cost_time:.2f} s")
 

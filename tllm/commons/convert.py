@@ -1,6 +1,9 @@
 from typing import List
 
+import torch
+
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
+from tllm.rpc.schemas_pb2 import BFloat16Tensor
 
 
 def protobuf_to_list(proto_message):
@@ -80,3 +83,17 @@ def list_to_protobuf(data: List):
         raise ValueError("Input data must be a list.")
 
     return multi_array_proto
+
+
+def serialize_bfloat16_tensor(tensor) -> BFloat16Tensor:
+    # TODO: support bfloat16
+    tensor_proto = BFloat16Tensor()
+    tensor_proto.shape.extend(tensor.shape)  # 添加形状
+    tensor_proto.data = tensor.to(torch.float32).numpy().tobytes()
+    return tensor_proto
+
+
+def deserialize_bfloat16_tensor(tensor_proto) -> torch.Tensor:
+    data = torch.frombuffer(tensor_proto.data, dtype=torch.float32).to(torch.bfloat16)
+    tensor_data = data.view(*tensor_proto.shape)
+    return tensor_data
