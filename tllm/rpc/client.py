@@ -2,27 +2,19 @@ import argparse
 from concurrent import futures
 import logging
 import os
-import pickle
 import time
 from typing import *
 
 import grpc
 
 from tllm.commons.communicator import Communicator, SingleNodeCommunicator
-from tllm.commons.convert import (
-    deserialize_bfloat16_tensor,
-    list_to_protobuf,
-    protobuf_to_list,
-    serialize_bfloat16_tensor,
-)
+from tllm.commons.convert import deserialize_bfloat16_tensor, serialize_bfloat16_tensor
 from tllm.models.llama import MyLlamaModel
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
-from tllm.utils import get_ip_address, tensor_to_list
 
 logging.basicConfig(level=logging.INFO)
 
 import torch
-import torch.distributed as dist
 from transformers import AutoConfig, LlamaForCausalLM
 
 
@@ -33,22 +25,17 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
         self.rank = rank
         self.pp_rank = pp_rank
         self.init_model_flag = False
-        # self.ip_addr = get_ip_address()
         self.ip_addr = "localhost"
         self.prefix_log_str = f"IP: [{self.ip_addr}]"
-        # TODO 优化，同步 uuid str 和 shape，会导致 libc++abi: terminating due to uncaught exception of type gloo::EnforceNotMet:
-        # tensor_data = torch.empty(86, dtype=torch.uint8)
-        tensor_data = torch.empty(83, dtype=torch.uint8)
+        uuid_shape_list = [None, None]
         if self.rank == 0:
             pass
         else:
             while True:
-                dist.recv(tensor_data, src=0)
-                serialized_data = bytes(tensor_data.numpy())
-                hidden_states_shape, uuid = pickle.loads(serialized_data)
-
+                self.config.comm.broadcast_object(uuid_shape_list)
+                uuid, hidden_states_shape = uuid_shape_list
                 hidden_states = torch.empty(hidden_states_shape, dtype=self.model.dtype)
-                dist.recv(hidden_states, src=0)
+                self.config.comm.broadcast(hidden_states)
 
                 _ = self.model.forward(hidden_states, uuid)
 
@@ -77,11 +64,8 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
         s1 = time.time()
         hidden_states = deserialize_bfloat16_tensor(request.hidden_states)
 
-        serialized_data = list(pickle.dumps((hidden_states.shape, request.uuid)))
-        tensor_data = torch.ByteTensor(serialized_data)
-        for rank in range(1, self.config.comm.world_size):
-            dist.send(tensor_data, dst=rank)
-            dist.send(hidden_states, dst=rank)
+        self.config.comm.broadcast_object([request.uuid, tuple(hidden_states.shape)])
+        self.config.comm.broadcast(hidden_states)
 
         output = self.model(hidden_states, request.uuid)
 
@@ -134,11 +118,12 @@ if __name__ == "__main__":
     config.decoder_end_layer_idx = args.end_layer_idx
     config.comm = comm
 
+    dtype = torch.bfloat16
     s1 = time.time()
     state_dict = LlamaForCausalLM.from_pretrained(
-        args.model_path, trust_remote_code=True, device_map="cpu", torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
+        args.model_path, trust_remote_code=True, device_map="cpu", torch_dtype=dtype, low_cpu_mem_usage=True
     ).state_dict()
-    model = MyLlamaModel(config)
+    model = MyLlamaModel(config).to(dtype)
     model.load_state_dict(state_dict)
     logging.info(f"[Rank: {config.comm.rank}] Cost time {time.time() - s1}")
     model.eval()

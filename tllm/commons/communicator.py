@@ -68,3 +68,6 @@ class Communicator:
 
     def broadcast(self, x: torch.Tensor):
         dist.broadcast(x, src=0)
+
+    def broadcast_object(self, obj_list: List[Any]):
+        dist.broadcast_object_list(obj_list, src=0)

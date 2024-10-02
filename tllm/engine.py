@@ -88,11 +88,13 @@ class MyLlamaForCausalLM(nn.Module):
             outputs = self.server.post_sync(
                 pp_idx, "/forward", data=self._prepare_forward_data(uuid_str, hidden_states, need_serialize=pp_idx == 0)
             )
-            hidden_states = deserialize_bfloat16_tensor(outputs.output) if pp_idx == 0 else outputs.output
+            hidden_states = (
+                deserialize_bfloat16_tensor(outputs.output) if pp_idx == self.pp_size - 1 else outputs.output
+            )
             s2 = time.time()
             comm_cost_time_list.append(s2 - s1 - outputs.cost_time)
 
-        hidden_states = torch.tensor(hidden_states).to(inputs_embeds.dtype).to(self.norm.weight.device)
+        hidden_states = hidden_states.to(self.norm.weight.device)
         hidden_states = self.norm(hidden_states)
         logits = self.lm_head(hidden_states)
         return ForwardResult(logits=logits, comm_cost_time_list=comm_cost_time_list)
@@ -121,8 +123,8 @@ class MyLlamaForCausalLM(nn.Module):
             input_embeds = self.embed_tokens(torch.tensor(generate_ids)).unsqueeze(0)
             if len(output_ids) == 1:
                 ttft_end_time = time.time()
-                logging.info(f"ttft communication cost time: {comm_cost_time_list}")
+                logging.info(f"ttft communication cost time: {",".join([f'{x:.4f}' for x in comm_cost_time_list])}")
             else:
-                logging.info(f"tpot communication cost time: {comm_cost_time_list}")
+                logging.info(f"tpot communication cost time: {",".join([f'{x:.4f}' for x in comm_cost_time_list])}")
 
         return GenerateResult(output_ids=output_ids, finish_reason=finish_reason, ttft=ttft_end_time - ttft_start_time)
