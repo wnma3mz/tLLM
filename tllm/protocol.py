@@ -20,3 +20,4 @@ class ChatCompletionResponse(BaseModel):
     finish_reason: Optional[str]
     usage: Dict[str, int]
     text: str
+    ttft: float

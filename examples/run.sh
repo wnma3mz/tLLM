@@ -1,16 +1,16 @@
 #!/bin/bash
+BASE_PATH=/Users/lujianghu/Documents/
 MODE_SIZE=$1
 
-if [ $MODE_SIZE == "1.1" ]; then
-    MODEL_PATH=/Users/lujianghu/Documents/TinyLlama-1.1B-Chat-v1.0
-elif [ $MODE_SIZE == "1" ]; then
-    MODEL_PATH=/Users/lujianghu/Documents/Llama-3.2-1B-Instruct
+
+if [ $MODE_SIZE == "1" ]; then
+    MODEL_PATH=$BASE_PATH/Llama-3.2-1B-Instruct
 elif [ $MODE_SIZE == "3" ]; then
-    MODEL_PATH=/Users/lujianghu/Documents/Llama-3.2-3B-Instruct
+    MODEL_PATH=$BASE_PATH/Llama-3.2-3B-Instruct
 elif [ $MODE_SIZE == "8" ]; then
-    MODEL_PATH=/Users/lujianghu/Documents/Meta-Llama-3-8B-Instruct
+    MODEL_PATH=$BASE_PATH/Meta-Llama-3-8B-Instruct
 elif [ $MODE_SIZE == "70" ]; then
-    MODEL_PATH=/Users/lujianghu/Documents/Meta-Llama-3-70B-Instruct
+    MODEL_PATH=$BASE_PATH/Meta-Llama-3-70B-Instruct
 else 
     echo "Invalid mode size"
     exit 1

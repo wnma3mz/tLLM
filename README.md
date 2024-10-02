@@ -9,10 +9,7 @@
 - [x] pipeline-parallel by grpc
 - [x] tensor-parallel by torch.dist
 - [x] Merge Linear
-- [ ] Performance Testing
-    - [ ] CPU llama-1B
-    - [ ] GPU llama-1B
-    - [ ] CPU llama-8B
+- [x] Performance Testing
 - [ ] Async Generation
     - [ ] Queuing mechanism
 - [ ] Decoding Strategy
@@ -37,21 +34,23 @@
 
 在保证通信带宽的前提下，速度应当更快
 
-bfloat 16 (need update)
-| PP,TP   | Llama-3.2-3B-Instruct | Meta-Llama-3-8B-Instruct | Meta-Llama-3-70B-Instruct |
-| ---- | --------- | --- | ---------- | 
-| 2,1(实际) | 3.66 token/s                | | | | |
-| 2,2(实际) |                 | | | | |
+由于 tokenizer 可能不同，所以输入 tokens 有一点出入，但基本差不多。
 
-
-float 32
-| PP,TP   | TinyLlama-1.1B-Chat-v1.0 | Llama-3.2-1B-Instruct |
+生成 token 速度（减去首token生成的时间）
+bfloat 16 CPU
+| PP,TP   | Llama-3.2-1B-Instruct | Llama-3.2-3B-Instruct |
 | ---- | --------- | --- | 
-| 1,1(baseline) |    6.37 token/s; 17.98 token/s      |     | 
-| 2,1(单机模拟) | 5.91 token/s|     |    
-| 2,2(单机模拟) | 5.46 token/s |     |   
-| 2,1(实际) | 6.59 token/s | 5.43 token/s    |  
-| 2,2(实际) | 6.44 token/s | 5.63 token/s    |  
+| 2,1(实际) | 8.04 token/s | 3.01 token/s |
+| 2,2(实际) | 7.38 token/s | 2.51 token/s |
+
+包含首 token 生成时间
+| PP,TP   | Llama-3.2-1B-Instruct | Llama-3.2-3B-Instruct |
+| ---- | --------- | --- | 
+| 2,1(实际) | 5.49 token/s  | 2.42 token/s  |
+| 2,2(实际) | 5.53 token/s  | 2.46 token/s  |
 
 
+Llama-3.2-1B-Instruct 单机时间：10.96 token/s
+Llama-3.2-1B-Instruct 单机时间：5.73 token/s（包含首token生成的时间, transformers 框架 TTFT 时间不方便记录）
 
+TODO: Meta-Llama-3-8B-Instruct in GPU

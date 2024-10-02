@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+import logging
+import time
 from typing import *
 import uuid
 
@@ -19,12 +21,20 @@ class GenerateResult:
     output_ids: List[int]
     finish_reason: Optional[finish_reason_type] = None
     output_text: Optional[str] = None
+    ttft: Optional[float] = None
 
 
 @dataclass
 class GenerateEnd:
     finish_reason: finish_reason_type
     is_end: bool
+
+
+@dataclass
+class ForwardResult:
+    hidden_states: Optional[torch.Tensor] = None
+    logits: torch.Tensor
+    comm_cost_time_list: Optional[List[float]] = None
 
 
 def is_generate_end(output_ids: List[int], eos_token_id: int, max_new_tokens: int) -> GenerateEnd:
@@ -66,19 +76,23 @@ class MyLlamaForCausalLM(nn.Module):
     def _prepare_forward_data(self, uuid_str: str, hidden_states: torch.Tensor) -> Dict[str, Any]:
         return {"uuid": uuid_str, "hidden_states": tensor_to_list(hidden_states)}
 
-    def forward(self, inputs_embeds: torch.Tensor, uuid_str: str) -> Tuple[torch.Tensor, None]:
+    def forward(self, inputs_embeds: torch.Tensor, uuid_str: str) -> ForwardResult:
         hidden_states = inputs_embeds
+        comm_cost_time_list = []
         for pp_idx in range(self.pp_size):
+            s1 = time.time()
             outputs = self.server.post_sync(
                 pp_idx, "/forward", data=self._prepare_forward_data(uuid_str, hidden_states)
             )
+            s2 = time.time()
             assert self.server.is_success(outputs), "Forward failed"
-            hidden_states = self.server.fetch_list_output(outputs)
+            hidden_states = outputs.hidden_states
+            comm_cost_time_list.append(s2 - s1 - outputs.cost_time)
 
         hidden_states = torch.tensor(hidden_states).to(inputs_embeds.dtype).to(self.norm.weight.device)
         hidden_states = self.norm(hidden_states)
         logits = self.lm_head(hidden_states)
-        return logits, None
+        return ForwardResult(logits=logits, comm_cost_time_list=comm_cost_time_list)
 
     @torch.no_grad()
     def generate(self, input_ids: torch.Tensor, sampler: DecodeUtils, **kwargs) -> GenerateResult:
@@ -88,8 +102,11 @@ class MyLlamaForCausalLM(nn.Module):
         output_ids: List[int] = []
         finish_reason = None
         uuid_str = str(uuid.uuid4())
+        ttft_start_time, ttft_end_time = time.time(), time.time()
         while True:
-            logits, _ = self(input_embeds, uuid_str)
+            forward_result = self(input_embeds, uuid_str)
+            logits = forward_result.logits
+            comm_cost_time_list = forward_result.comm_cost_time_list
             generate_ids = sampler.decode(logits)
             output_ids.append(generate_ids[0])
 
@@ -99,5 +116,10 @@ class MyLlamaForCausalLM(nn.Module):
                 break
 
             input_embeds = self.embed_tokens(torch.tensor(generate_ids)).unsqueeze(0)
+            if len(output_ids) == 1:
+                ttft_end_time = time.time()
+                logging.info(f"ttft communication cost time: {comm_cost_time_list}")
+            else:
+                logging.info(f"tpot communication cost time: {comm_cost_time_list}")
 
-        return GenerateResult(output_ids=output_ids, finish_reason=finish_reason)
+        return GenerateResult(output_ids=output_ids, finish_reason=finish_reason, ttft=ttft_end_time - ttft_start_time)

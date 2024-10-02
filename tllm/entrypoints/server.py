@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 import os
 import time
 from typing import *
@@ -20,7 +21,6 @@ app = FastAPI()
 
 @app.post("/v1/chat/completions")
 async def generate(request: ChatCompletionRequest) -> ChatCompletionResponse:
-    # input_id_list = app.tok.preprocess_old(messages=request.messages).input_ids
     input_id_list = app.tok.preprocess(messages=request.messages).input_ids
 
     input_ids = torch.tensor(input_id_list).unsqueeze(0)
@@ -28,14 +28,16 @@ async def generate(request: ChatCompletionRequest) -> ChatCompletionResponse:
     output = app.model.generate(
         input_ids, max_new_tokens=request.max_tokens, do_sample=request.do_sample, sampler=DecodeUtils("greedy")
     )
-    print("output", output)
-    return ChatCompletionResponse(
+    response = ChatCompletionResponse(
         token=output.output_ids,
         cost_time=time.time() - s1,
+        ttft=output.ttft,
         finish_reason=output.finish_reason,
         usage={"prompt_tokens": len(input_id_list), "completion_tokens": len(output.output_ids)},
         text="",
     )
+    logging.info(f"response: {response}")
+    return response
 
 
 @app.post("/health")
