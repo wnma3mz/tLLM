@@ -8,9 +8,20 @@ from fastapi import Request
 import torch
 
 from tllm.engine import MyLlamaForCausalLM
+from tllm.entrypoints.protocol import (
+    ChatCompletionRequest,
+    ChatCompletionResponse,
+    ChatCompletionResponseChoice,
+    ChatCompletionResponseStreamChoice,
+    ChatCompletionStreamResponse,
+    ChatMessage,
+    DeltaMessage,
+    ModelCard,
+    ModelPermission,
+    UsageInfo,
+    random_uuid,
+)
 from tllm.generate.decode_utils import DecodeUtils
-from tllm.generate.token_utils import TokenizerUtils
-from tllm.protocol import ChatCompletionRequest, ChatCompletionResponse
 from tllm.rpc.manager import RPCManager
 
 
@@ -54,59 +65,78 @@ class OpenAIServing:
         url_list = parse_url_list(args.config_path)
         server = RPCManager(url_list)
         self.model = MyLlamaForCausalLM.from_pretrained(args.model_path, args.weight_path, server)
-        self.tok = TokenizerUtils(args.model_path)
+        self.model_name = os.path.basename(args.model_path)
+
+    def show_available_models(self):
+        return [ModelCard(id=self.model_name, max_model_len=8192, root="tllm", permission=[ModelPermission()])]
 
     async def create_chat_completion(self, request: ChatCompletionRequest, raw_request: Request):
-
-        input_id_list = self.tok.preprocess(messages=request.messages).input_ids
-
-        input_ids = torch.tensor(input_id_list).unsqueeze(0)
-        result_generator = self.model.generate(
-            input_ids, max_new_tokens=request.max_tokens, do_sample=request.do_sample, sampler=DecodeUtils("greedy")
-        )
-        raw_request.prompt_tokens = len(input_id_list)
+        request_id = f"chat-{random_uuid()}"
+        input_ids = self.model.preprocess(request.messages)
+        result_generator = self.model.generate(input_ids, request_id, sampler=DecodeUtils("greedy"))
 
         if request.stream:
-            return self.chat_completion_stream_generator(request, raw_request, result_generator)
+            return self.chat_completion_stream_generator(request, raw_request, request_id, result_generator)
         else:
-            return await self.chat_completion_full_generator(request, raw_request, result_generator)
+            return await self.chat_completion_full_generator(request, raw_request, request_id, result_generator)
 
     async def chat_completion_stream_generator(
-        self, request: ChatCompletionRequest, raw_request: Request, result_generator: AsyncIterator
+        self, request: ChatCompletionRequest, raw_request: Request, request_id: str, result_generator: AsyncIterator
     ) -> AsyncIterator[str]:
-        s1 = time.time()
+        created_time = int(time.time())
+        previous_texts = [""] * 1
         async for res in result_generator:
-            chunk = ChatCompletionResponse(
-                token=res.output_ids,
-                cost_time=time.time() - s1,
-                ttft=res.ttft,
-                finish_reason=res.finish_reason,
-                usage={"prompt_tokens": raw_request.prompt_tokens, "completion_tokens": 1},
-                text="",
+            output = res.outputs[0]
+            i = output.index
+
+            delta_text = output.text[len(previous_texts[i]) :]
+            previous_texts[i] = output.text
+            choice_data = ChatCompletionResponseStreamChoice(
+                index=i, delta=DeltaMessage(content=delta_text), logprobs=None, finish_reason=None
+            )
+            chunk = ChatCompletionStreamResponse(
+                id=request_id, model=self.model_name, created=created_time, choices=[choice_data]
             )
             data = chunk.model_dump_json(exclude_unset=True)
             yield f"data: {data}\n\n"
         yield "data: [DONE]\n\n"
 
     async def chat_completion_full_generator(
-        self, request: ChatCompletionRequest, raw_request: Request, result_generator: AsyncIterator
+        self, request: ChatCompletionRequest, raw_request: Request, request_id: str, result_generator: AsyncIterator
     ) -> ChatCompletionResponse:
-        output_token = []
         final_res = None
-        s1 = time.time()
+        role = "assistant"
+        created_time = int(time.time())
         async for res in result_generator:
             if raw_request is not None and await raw_request.is_disconnected():
                 # Abort the request if the client disconnects.
                 return self.create_error_response("Client disconnected")
-            output_token.append(res.output_ids)
             final_res = res
 
+        output = final_res.outputs[0]
+        message = ChatMessage(role=role, content=output.text)
+
+        choice_data = ChatCompletionResponseChoice(
+            index=output.index,
+            message=message,
+            logprobs=None,
+            finish_reason=output.finish_reason,
+            stop_reason=output.stop_reason,
+        )
+
+        num_prompt_tokens = len(final_res.prompt_token_ids)
+        num_generated_tokens = sum(len(output.token_ids) for output in final_res.outputs)
+
+        usage = UsageInfo(
+            prompt_tokens=num_prompt_tokens,
+            completion_tokens=num_generated_tokens,
+            total_tokens=num_prompt_tokens + num_generated_tokens,
+        )
         response = ChatCompletionResponse(
-            token=output_token,
-            cost_time=time.time() - s1,
-            ttft=final_res.ttft,
-            finish_reason=final_res.finish_reason,
-            usage={"prompt_tokens": raw_request.prompt_tokens, "completion_tokens": len(output_token)},
-            text="",
+            id=request_id,
+            created=created_time,
+            model=self.model_name,
+            choices=[choice_data],
+            usage=usage,
         )
         return response

@@ -12,18 +12,21 @@
 - [x] Sequence KV Cache
 - [x] Performance Testing
 - [x] Multi-Sequence Batch=1
+- [ ] OpenAI API format
+    - [x] chat completion(stream)
+    - [x] chat completion(non-stream)
+    - [ ] using anythingLLM
 - [ ] Async Generation
     - [ ] Queuing mechanism
 - [ ] Continuous Batch
 - [x] Streaming Output
-- [ ] OpenAI API format
-- [ ] split model before load
 - [x] Decoding Strategy
     - [x] Top-K Sampling
     - [x] Top-P Sampling
     - [x] Temperature Sampling
 - [ ] Model
     - [x] LLaMA
+- [ ] split model before load
 - [ ] Multi-Model
     - [ ] LLaVA
 - [ ] Web UI

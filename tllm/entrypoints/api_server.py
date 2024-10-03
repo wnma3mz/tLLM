@@ -1,21 +1,14 @@
 import argparse
-import json
 import logging
-import os
 import time
 from typing import *
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
-import torch
 import uvicorn
 
-from tllm.engine import MyLlamaForCausalLM
+from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionResponse
 from tllm.entrypoints.server_chat import OpenAIServing, start_client
-from tllm.generate.decode_utils import DecodeUtils
-from tllm.generate.token_utils import TokenizerUtils
-from tllm.protocol import ChatCompletionRequest, ChatCompletionResponse
-from tllm.rpc.manager import RPCManager
 from tllm.utils import setup_seed
 
 app = FastAPI()
@@ -43,6 +36,18 @@ async def status(request: Dict[str, float]):
     cost_time = request.get("cost_time", 0)
     pp_rank = request.get("pp_rank", 0)
     return {"cost_time": cost_time, "pp_rank": pp_rank}
+
+
+@app.get("/v1/models")
+async def show_available_models():
+    models = await openai_serving_chat.show_available_models()
+    return JSONResponse(content=models.model_dump())
+
+
+@app.get("/version")
+async def show_version():
+    ver = {"version": 0.1}
+    return JSONResponse(content=ver)
 
 
 def parse_args():

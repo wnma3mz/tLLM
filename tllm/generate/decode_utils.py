@@ -1,7 +1,10 @@
+from dataclasses import dataclass
 from typing import *
 
 import torch
 import torch.nn.functional as F
+
+from tllm.generate.sampling_params import SamplingParams
 
 
 def top_k_sampling(logits: torch.Tensor, k: int = 10):
@@ -35,7 +38,7 @@ class DecodeUtils:
         self.method = method
         assert self.method in ["greedy", "beam_search", "sampling"]
 
-    def decode(self, logits: torch.Tensor, sampling_params: Optional[Dict[str, Any]] = None) -> List[int]:
+    def decode(self, logits: torch.Tensor, sampling_params: Optional[SamplingParams] = None) -> List[int]:
         if self.method == "greedy":
             return self.greedy_decode(logits)
         elif self.method == "beam_search":
@@ -47,10 +50,10 @@ class DecodeUtils:
         # logits shape: [batch_size, sequence_length, vocab_size]
         return torch.argmax(logits[:, -1], dim=-1).tolist()
 
-    def sampling_decode(self, logits: torch.Tensor, sampling_params: Dict[str, Any]) -> List[int]:
-        top_k = sampling_params["top_k"]
-        top_p = sampling_params["top_p"]
-        temperature = sampling_params["temperature"]
+    def sampling_decode(self, logits: torch.Tensor, sampling_params: SamplingParams) -> List[int]:
+        top_k = sampling_params.top_k
+        top_p = sampling_params.top_p
+        temperature = sampling_params.temperature
         temperature_scaled_logits = temperature_scaling(logits, temperature)
         # Apply top-k sampling
         if top_k > 0:
@@ -65,13 +68,13 @@ class DecodeUtils:
     def beam_search_decode(
         self,
         logits: torch.Tensor,
-        sampling_params: Dict[str, Any],
+        sampling_params: SamplingParams,
     ) -> List[List[int]]:
-        max_len = sampling_params["max_len"]
-        top_k = sampling_params["top_k"]
-        top_p = sampling_params["top_p"]
-        temperature = sampling_params["temperature"]
-        beam_width = sampling_params["beam_width"]
+        max_len = sampling_params.max_tokens
+        top_k = sampling_params.top_k
+        top_p = sampling_params.top_p
+        temperature = sampling_params.temperature
+        beam_width = sampling_params.n
         batch_size, sequence_length, vocab_size = logits.size()
 
         # Initialize the beam search

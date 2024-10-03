@@ -15,7 +15,7 @@ class Engine:
             if i >= 5:
                 break
             i += 1
-            await asyncio.sleep(1)  # 使用异步延迟
+            await asyncio.sleep(0.1)  # 使用异步延迟
             yield i
         yield "end"
 
@@ -40,12 +40,13 @@ async def stream_response(request: Request):
         return StreamingResponse(stream_results())
     else:
         final_output = []
+        final_res = None
         async for request_output in results_generator:
             if await request.is_disconnected():
                 # Abort the request if the client disconnects.
                 return Response(status_code=499)
             final_output.append(request_output)
-
+            final_res = request_output
         ret = {"text": final_output}
         return JSONResponse(ret)
 

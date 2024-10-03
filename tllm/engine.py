@@ -3,7 +3,6 @@ from dataclasses import dataclass
 import logging
 import time
 from typing import *
-import uuid
 
 import torch
 import torch.nn as nn
@@ -12,6 +11,7 @@ from transformers.models.llama.modeling_llama import LlamaRMSNorm
 
 from tllm.commons.convert import deserialize_bfloat16_tensor, serialize_bfloat16_tensor
 from tllm.generate.decode_utils import DecodeUtils
+from tllm.generate.token_utils import TokenizerUtils
 from tllm.rpc.manager import RPCManager
 from tllm.rpc.protocol import SeqInput
 
@@ -32,6 +32,46 @@ class GenerateResult:
 class GenerateEnd:
     finish_reason: finish_reason_type
     is_end: bool
+
+
+@dataclass
+class ChatCompletionResponse:
+    token: List[int]
+    cost_time: float
+    finish_reason: Optional[str]
+    usage: Dict[str, int]
+    text: str
+    ttft: float
+
+
+@dataclass
+class CompletionOutput:
+    index: int
+    text: str
+    token_ids: Tuple[int, ...]
+    cumulative_logprob: Optional[float] = None
+    logprobs: Optional[List[float]] = None
+    finish_reason: Optional[str] = None
+    stop_reason: Union[int, str, None] = None
+
+
+@dataclass
+class RequestOutput:
+    def __init__(
+        self,
+        request_id: str,
+        prompt: Optional[str],
+        prompt_token_ids: List[int],
+        outputs: List[CompletionOutput],
+        finished: bool,
+        prompt_logprobs: Optional[List[float]] = None,
+    ) -> None:
+        self.request_id = request_id
+        self.prompt = prompt
+        self.prompt_token_ids = prompt_token_ids
+        self.prompt_logprobs = prompt_logprobs
+        self.outputs = outputs
+        self.finished = finished
 
 
 @dataclass
@@ -68,6 +108,7 @@ class MyLlamaForCausalLM(nn.Module):
         cls.config = config
         cls.server = server
         cls.pp_size = len(cls.server.url_list)
+        cls.tok = TokenizerUtils(model_path)
 
         state_dict = torch.load(weight_path)
         model.embed_tokens.load_state_dict({"weight": state_dict.pop("model.embed_tokens.weight")})
@@ -104,24 +145,31 @@ class MyLlamaForCausalLM(nn.Module):
         logits = self.lm_head(hidden_states)
         return ForwardResult(logits=logits, comm_cost_time_list=comm_cost_time_list)
 
+    def preprocess(self, messages: List[Dict[str, Any]]) -> torch.Tensor:
+        input_id_list = self.tok.preprocess(messages=messages).input_ids
+        input_ids = torch.tensor(input_id_list).unsqueeze(0)
+        return input_ids
+
     @torch.no_grad()
-    async def generate(self, input_ids: torch.Tensor, sampler: DecodeUtils, **kwargs) -> AsyncGenerator:
+    async def generate(
+        self, input_ids: torch.Tensor, request_id: str, sampler: DecodeUtils, **kwargs
+    ) -> AsyncGenerator:
         # input_ids: bs x seq_len
         max_new_tokens = kwargs.get("max_new_tokens", 16)
         input_embeds = self.embed_tokens(input_ids)
         output_ids: List[int] = []
+        output_text: str = ""
         finish_reason = None
-        uuid_str = str(uuid.uuid4())
-        ttft_start_time, ttft_end_time = time.time(), time.time()
-
         seq_len = input_embeds.shape[1]
-        seq_input = SeqInput(uuid_str_list=[uuid_str], seq_len_list=[seq_len])
+        seq_input = SeqInput(uuid_str_list=[request_id], seq_len_list=[seq_len])
         while True:
             forward_result = self(input_embeds, seq_input)
             logits = forward_result.logits
             comm_cost_time_list = forward_result.comm_cost_time_list
             generate_ids = sampler.decode(logits)
+            generate_texts = [self.tok.decode(x) for x in generate_ids]
             output_ids.append(generate_ids[0])
+            output_text += generate_texts[0]
 
             end = is_generate_end(output_ids, eos_token_id=self.config.eos_token_id, max_new_tokens=max_new_tokens)
             if end.is_end:
@@ -131,14 +179,31 @@ class MyLlamaForCausalLM(nn.Module):
             input_embeds = self.embed_tokens(torch.tensor(generate_ids)).unsqueeze(0)
             seq_input.seq_len_list = [1]
             if len(output_ids) == 1:
-                ttft_end_time = time.time()
                 logging.info(f"ttft communication cost time: {",".join([f'{x:.4f}' for x in comm_cost_time_list])}")
             else:
                 logging.info(f"tpot communication cost time: {",".join([f'{x:.4f}' for x in comm_cost_time_list])}")
 
-            await asyncio.sleep(1)
-            yield GenerateResult(
-                output_ids=output_ids, finish_reason=finish_reason, ttft=ttft_end_time - ttft_start_time
+            await asyncio.sleep(0.1)
+            yield RequestOutput(
+                request_id=request_id,
+                prompt=None,
+                prompt_token_ids=input_ids[0].tolist(),
+                outputs=[
+                    CompletionOutput(
+                        index=0, text=generate_texts[0], token_ids=generate_ids[0], finish_reason=finish_reason
+                    )
+                ],
+                finished=False,
+                prompt_logprobs=None,
             )
 
-        yield GenerateResult(output_ids=output_ids, finish_reason=finish_reason, ttft=ttft_end_time - ttft_start_time)
+        yield RequestOutput(
+            request_id=request_id,
+            prompt=None,
+            prompt_token_ids=input_ids[0].tolist(),
+            outputs=[
+                CompletionOutput(index=0, text=output_text, token_ids=tuple(output_ids), finish_reason=finish_reason)
+            ],
+            finished=True,
+            prompt_logprobs=None,
+        )

@@ -4,9 +4,9 @@ import time
 import torch
 
 from tllm.engine import MyLlamaForCausalLM
+from tllm.entrypoints.protocol import ChatCompletionRequest
 from tllm.generate.decode_utils import DecodeUtils
 from tllm.generate.token_utils import TokenizerUtils
-from tllm.protocol import ChatCompletionRequest
 from tllm.rpc.manager import RPCManager
 
 if __name__ == "__main__":
