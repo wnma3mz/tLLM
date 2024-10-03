@@ -17,6 +17,7 @@ from tllm.entrypoints.protocol import (
     ChatMessage,
     DeltaMessage,
     ModelCard,
+    ModelList,
     ModelPermission,
     UsageInfo,
     random_uuid,
@@ -67,8 +68,9 @@ class OpenAIServing:
         self.model = MyLlamaForCausalLM.from_pretrained(args.model_path, args.weight_path, server)
         self.model_name = os.path.basename(args.model_path)
 
-    def show_available_models(self):
-        return [ModelCard(id=self.model_name, max_model_len=8192, root="tllm", permission=[ModelPermission()])]
+    async def show_available_models(self):
+        model_cards = [ModelCard(id=self.model_name, max_model_len=8192, root="tllm", permission=[ModelPermission()])]
+        return ModelList(data=model_cards)
 
     async def create_chat_completion(self, request: ChatCompletionRequest, raw_request: Request):
         request_id = f"chat-{random_uuid()}"

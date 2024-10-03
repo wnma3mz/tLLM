@@ -12,10 +12,10 @@
 - [x] Sequence KV Cache
 - [x] Performance Testing
 - [x] Multi-Sequence Batch=1
-- [ ] OpenAI API format
+- [x] OpenAI API format
     - [x] chat completion(stream)
     - [x] chat completion(non-stream)
-    - [ ] using anythingLLM
+    - [x] using anythingLLM
 - [ ] Async Generation
     - [ ] Queuing mechanism
 - [ ] Continuous Batch
@@ -36,8 +36,9 @@
     - [ ] LoRA Training
 - [ ] Shard Storage
 
-### Performance
+Some bugs for decode text
 
+### Performance
 
 - 2 GHz 四核Intel Core i5, 16 GB 3733 MHz LPDDR4X
     - Llama-3.2-1B-Instruct 单机时间：10.96 token/s
