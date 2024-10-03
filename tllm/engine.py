@@ -12,6 +12,7 @@ from transformers.models.llama.modeling_llama import LlamaRMSNorm
 from tllm.commons.convert import deserialize_bfloat16_tensor, serialize_bfloat16_tensor
 from tllm.generate.decode_utils import DecodeUtils
 from tllm.rpc.manager import RPCManager
+from tllm.rpc.protocol import SeqInput
 
 finish_reason_type = Literal["length", "stop", None]
 
@@ -75,22 +76,25 @@ class MyLlamaForCausalLM(nn.Module):
         model.eval()
         return model
 
-    def _prepare_forward_data(self, uuid_str: str, hidden_states: torch.Tensor, need_serialize: bool) -> Dict[str, Any]:
+    def _prepare_forward_data(
+        self, seq_input: SeqInput, hidden_states: torch.Tensor, need_serialize: bool
+    ) -> Dict[str, Any]:
         if need_serialize:
             hidden_states = serialize_bfloat16_tensor(hidden_states)
-        return {"uuid": uuid_str, "hidden_states": hidden_states}
+        return {"uuid": seq_input.uuid_str_list, "seq_len": seq_input.seq_len_list, "hidden_states": hidden_states}
 
-    def forward(self, inputs_embeds: torch.Tensor, uuid_str: str) -> ForwardResult:
+    def forward(self, inputs_embeds: torch.Tensor, seq_input: SeqInput) -> ForwardResult:
         hidden_states = inputs_embeds
         comm_cost_time_list = []
+        last_pp_idx = self.pp_size - 1
         for pp_idx in range(self.pp_size):
             s1 = time.time()
             outputs = self.server.post_sync(
-                pp_idx, "/forward", data=self._prepare_forward_data(uuid_str, hidden_states, need_serialize=pp_idx == 0)
+                pp_idx,
+                "/forward",
+                data=self._prepare_forward_data(seq_input, hidden_states, need_serialize=pp_idx == 0),
             )
-            hidden_states = (
-                deserialize_bfloat16_tensor(outputs.output) if pp_idx == self.pp_size - 1 else outputs.output
-            )
+            hidden_states = deserialize_bfloat16_tensor(outputs.output) if pp_idx == last_pp_idx else outputs.output
             s2 = time.time()
             comm_cost_time_list.append(s2 - s1 - outputs.cost_time)
 
@@ -108,8 +112,11 @@ class MyLlamaForCausalLM(nn.Module):
         finish_reason = None
         uuid_str = str(uuid.uuid4())
         ttft_start_time, ttft_end_time = time.time(), time.time()
+
+        seq_len = input_embeds.shape[1]
+        seq_input = SeqInput(uuid_str_list=[uuid_str], seq_len_list=[seq_len])
         while True:
-            forward_result = self(input_embeds, uuid_str)
+            forward_result = self(input_embeds, seq_input)
             logits = forward_result.logits
             comm_cost_time_list = forward_result.comm_cost_time_list
             generate_ids = sampler.decode(logits)
@@ -121,6 +128,7 @@ class MyLlamaForCausalLM(nn.Module):
                 break
 
             input_embeds = self.embed_tokens(torch.tensor(generate_ids)).unsqueeze(0)
+            seq_input.seq_len_list = [1]
             if len(output_ids) == 1:
                 ttft_end_time = time.time()
                 logging.info(f"ttft communication cost time: {",".join([f'{x:.4f}' for x in comm_cost_time_list])}")

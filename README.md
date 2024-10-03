@@ -12,7 +12,14 @@
 - [x] Performance Testing
 - [ ] Async Generation
     - [ ] Queuing mechanism
-- [ ] Decoding Strategy
+- [ ] Continuous Batch
+- [ ] split model before load
+- [ ] Streaming Output
+- [ ] OpenAI API format
+- [x] Decoding Strategy
+    - [x] Top-K Sampling
+    - [x] Top-P Sampling
+    - [x] Temperature Sampling
 - [ ] Model
     - [x] LLaMA
 - [ ] Multi-Model
@@ -23,13 +30,14 @@
 - [ ] MLX Framework
     - [ ] LORA Training
 - [ ] Shard Storage
-- [ ] split model before load
-- [ ] Streaming Output
 
 ### Performance
 
 
 - 2 GHz 四核Intel Core i5, 16 GB 3733 MHz LPDDR4X
+    - Llama-3.2-1B-Instruct 单机时间：10.96 token/s
+    - Llama-3.2-1B-Instruct 单机时间：5.73 token/s（包含首token生成的时间, transformers 框架 TTFT 时间不方便记录）
+
 - Apple M3 Pro, 18 GB
 
 在保证通信带宽的前提下，速度应当更快
@@ -47,11 +55,9 @@ bfloat 16 CPU
 | PP,TP   | Llama-3.2-1B-Instruct | Llama-3.2-3B-Instruct |
 | ---- | --------- | --- | 
 | 2,1(实际) | 5.49 token/s  | 2.42 token/s  |
-| 2,2(实际) | 5.53 token/s  | 2.46 token/s  |
+| 2,2(实际) | 5.66 token/s  | 2.46 token/s  |
 
 
-Llama-3.2-1B-Instruct 单机时间：10.96 token/s
-Llama-3.2-1B-Instruct 单机时间：5.73 token/s（包含首token生成的时间, transformers 框架 TTFT 时间不方便记录）
 
 TODO: Meta-Llama-3-8B-Instruct in GPU
 

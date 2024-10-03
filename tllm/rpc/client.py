@@ -11,6 +11,7 @@ from tllm.commons.communicator import Communicator, SingleNodeCommunicator
 from tllm.commons.convert import deserialize_bfloat16_tensor, serialize_bfloat16_tensor
 from tllm.models.llama import MyLlamaModel
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
+from tllm.rpc.protocol import SeqInput
 
 logging.basicConfig(level=logging.INFO)
 
@@ -33,11 +34,11 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
         else:
             while True:
                 self.config.comm.broadcast_object(uuid_shape_list)
-                uuid, hidden_states_shape = uuid_shape_list
+                seq_input, hidden_states_shape = uuid_shape_list
                 hidden_states = torch.empty(hidden_states_shape, dtype=self.model.dtype)
                 self.config.comm.broadcast(hidden_states)
 
-                _ = self.model.forward(hidden_states, uuid)
+                _ = self.model.forward(hidden_states, seq_input=seq_input)
 
     def InitModel(self, request: schemas_pb2.ModelConfig, context: grpc.ServicerContext):
         """
@@ -64,10 +65,11 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
         s1 = time.time()
         hidden_states = deserialize_bfloat16_tensor(request.hidden_states)
 
-        self.config.comm.broadcast_object([request.uuid, tuple(hidden_states.shape)])
+        seq_input = SeqInput(uuid_str_list=list(request.uuid), seq_len_list=list(request.seq_len))
+        self.config.comm.broadcast_object([seq_input, tuple(hidden_states.shape)])
         self.config.comm.broadcast(hidden_states)
 
-        output = self.model(hidden_states, request.uuid)
+        output = self.model(hidden_states, seq_input)
 
         return_output = serialize_bfloat16_tensor(output)
         cost_time = time.time() - s1

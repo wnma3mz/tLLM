@@ -25,6 +25,8 @@ if __name__ == "__main__":
         output = model.generate(input_ids, max_new_tokens=20, do_sample=False)
     print("generate token: ", output[0])
 
+    assert False
+
     # 模拟 TTFT 时间
     cost_time_list = []
     for _ in range(10):

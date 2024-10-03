@@ -19,8 +19,9 @@ message ModelConfig {
 }
 
 message ForwardRequest {
-    string uuid = 1;
-    BFloat16Tensor hidden_states = 2;
+    repeated string uuid = 1;
+    repeated int32 seq_len = 2;
+    BFloat16Tensor hidden_states = 3;
 }
 
 message StatusResponse {

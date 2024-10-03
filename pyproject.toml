@@ -9,6 +9,9 @@ exclude = '''
     | .venv
     | build
     | dist
+    | .pyi
+    | schemas_pb2.py
+    | schemas_pb2_grpc.py
 )/
 '''
 

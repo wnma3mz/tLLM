@@ -38,7 +38,7 @@ class RPCManager:
         return stub.InitModel(request)
 
     def forward(self, stub, data):
-        request = schemas_pb2.ForwardRequest(uuid=data["uuid"], hidden_states=data["hidden_states"])
+        request = schemas_pb2.ForwardRequest(**data)
         return stub.Forward(request)
 
     def health(self, stub):

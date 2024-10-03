@@ -10,7 +10,7 @@ class CacheManager:
         self.cache_dict = {}
 
     def get(self, key) -> Any:
-        return self.cache_dict.get(key)
+        return self.cache_dict.get(key)["past_key_values"]
 
     def set(self, key, value: Any) -> None:
         self.cache_dict[key] = {"past_key_values": value, "ts": time.time()}

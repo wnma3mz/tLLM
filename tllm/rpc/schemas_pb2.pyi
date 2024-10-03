@@ -11,30 +11,6 @@ from typing import (
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
-class Array(_message.Message):
-    __slots__ = ("elements",)
-    ELEMENTS_FIELD_NUMBER: _ClassVar[int]
-    elements: _containers.RepeatedScalarFieldContainer[float]
-    def __init__(self, elements: _Optional[_Iterable[float]] = ...) -> None: ...
-
-class Matrix(_message.Message):
-    __slots__ = ("rows",)
-    ROWS_FIELD_NUMBER: _ClassVar[int]
-    rows: _containers.RepeatedCompositeFieldContainer[Array]
-    def __init__(self, rows: _Optional[_Iterable[_Union[Array, _Mapping]]] = ...) -> None: ...
-
-class Tensor(_message.Message):
-    __slots__ = ("layers",)
-    LAYERS_FIELD_NUMBER: _ClassVar[int]
-    layers: _containers.RepeatedCompositeFieldContainer[Matrix]
-    def __init__(self, layers: _Optional[_Iterable[_Union[Matrix, _Mapping]]] = ...) -> None: ...
-
-class BlockTensor(_message.Message):
-    __slots__ = ("blocks",)
-    BLOCKS_FIELD_NUMBER: _ClassVar[int]
-    blocks: _containers.RepeatedCompositeFieldContainer[Tensor]
-    def __init__(self, blocks: _Optional[_Iterable[_Union[Tensor, _Mapping]]] = ...) -> None: ...
-
 class BFloat16Tensor(_message.Message):
     __slots__ = ("data", "shape")
     DATA_FIELD_NUMBER: _ClassVar[int]
@@ -42,24 +18,6 @@ class BFloat16Tensor(_message.Message):
     data: bytes
     shape: _containers.RepeatedScalarFieldContainer[int]
     def __init__(self, data: _Optional[bytes] = ..., shape: _Optional[_Iterable[int]] = ...) -> None: ...
-
-class MultiDimensionalArray(_message.Message):
-    __slots__ = ("array", "matrix", "tensor", "block_tensor")
-    ARRAY_FIELD_NUMBER: _ClassVar[int]
-    MATRIX_FIELD_NUMBER: _ClassVar[int]
-    TENSOR_FIELD_NUMBER: _ClassVar[int]
-    BLOCK_TENSOR_FIELD_NUMBER: _ClassVar[int]
-    array: Array
-    matrix: Matrix
-    tensor: Tensor
-    block_tensor: BlockTensor
-    def __init__(
-        self,
-        array: _Optional[_Union[Array, _Mapping]] = ...,
-        matrix: _Optional[_Union[Matrix, _Mapping]] = ...,
-        tensor: _Optional[_Union[Tensor, _Mapping]] = ...,
-        block_tensor: _Optional[_Union[BlockTensor, _Mapping]] = ...,
-    ) -> None: ...
 
 class ModelConfig(_message.Message):
     __slots__ = ("model_name", "pp_rank", "layer_idx_start", "layer_idx_end", "master_url", "next_pp_rank")
@@ -86,13 +44,18 @@ class ModelConfig(_message.Message):
     ) -> None: ...
 
 class ForwardRequest(_message.Message):
-    __slots__ = ("uuid", "hidden_states")
+    __slots__ = ("uuid", "seq_len", "hidden_states")
     UUID_FIELD_NUMBER: _ClassVar[int]
+    SEQ_LEN_FIELD_NUMBER: _ClassVar[int]
     HIDDEN_STATES_FIELD_NUMBER: _ClassVar[int]
-    uuid: str
+    uuid: _containers.RepeatedScalarFieldContainer[str]
+    seq_len: _containers.RepeatedScalarFieldContainer[int]
     hidden_states: BFloat16Tensor
     def __init__(
-        self, uuid: _Optional[str] = ..., hidden_states: _Optional[_Union[BFloat16Tensor, _Mapping]] = ...
+        self,
+        uuid: _Optional[_Iterable[str]] = ...,
+        seq_len: _Optional[_Iterable[int]] = ...,
+        hidden_states: _Optional[_Union[BFloat16Tensor, _Mapping]] = ...,
     ) -> None: ...
 
 class StatusResponse(_message.Message):

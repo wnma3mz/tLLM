@@ -19,7 +19,7 @@ _sym_db = _symbol_database.Default()
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\x16tllm/rpc/schemas.proto\x12\x07schemas"\x19\n\x05\x41rray\x12\x10\n\x08\x65lements\x18\x01 \x03(\x02"&\n\x06Matrix\x12\x1c\n\x04rows\x18\x01 \x03(\x0b\x32\x0e.schemas.Array")\n\x06Tensor\x12\x1f\n\x06layers\x18\x01 \x03(\x0b\x32\x0f.schemas.Matrix".\n\x0b\x42lockTensor\x12\x1f\n\x06\x62locks\x18\x01 \x03(\x0b\x32\x0f.schemas.Tensor"-\n\x0e\x42\x46loat16Tensor\x12\x0c\n\x04\x64\x61ta\x18\x01 \x01(\x0c\x12\r\n\x05shape\x18\x02 \x03(\x05"\xbb\x01\n\x15MultiDimensionalArray\x12\x1f\n\x05\x61rray\x18\x01 \x01(\x0b\x32\x0e.schemas.ArrayH\x00\x12!\n\x06matrix\x18\x02 \x01(\x0b\x32\x0f.schemas.MatrixH\x00\x12!\n\x06tensor\x18\x03 \x01(\x0b\x32\x0f.schemas.TensorH\x00\x12,\n\x0c\x62lock_tensor\x18\x04 \x01(\x0b\x32\x14.schemas.BlockTensorH\x00\x42\r\n\x0bmulti_array"\x8c\x01\n\x0bModelConfig\x12\x12\n\nmodel_name\x18\x01 \x01(\t\x12\x0f\n\x07pp_rank\x18\x02 \x01(\x05\x12\x17\n\x0flayer_idx_start\x18\x03 \x01(\x05\x12\x15\n\rlayer_idx_end\x18\x04 \x01(\x05\x12\x12\n\nmaster_url\x18\x05 \x01(\t\x12\x14\n\x0cnext_pp_rank\x18\x06 \x01(\x05"N\n\x0e\x46orwardRequest\x12\x0c\n\x04uuid\x18\x01 \x01(\t\x12.\n\rhidden_states\x18\x02 \x01(\x0b\x32\x17.schemas.BFloat16Tensor"-\n\x0eStatusResponse\x12\x0b\n\x03msg\x18\x01 \x01(\t\x12\x0e\n\x06status\x18\x02 \x01(\x05"j\n\x0f\x46orwardResponse\x12\x0b\n\x03msg\x18\x01 \x01(\t\x12\x0e\n\x06status\x18\x02 \x01(\x05\x12\'\n\x06output\x18\x03 \x01(\x0b\x32\x17.schemas.BFloat16Tensor\x12\x11\n\tcost_time\x18\x04 \x01(\x02"-\n\x0eHealthResponse\x12\x0b\n\x03msg\x18\x01 \x01(\t\x12\x0e\n\x06status\x18\x02 \x01(\x05"4\n\x15InitModelFlagResponse\x12\x0b\n\x03msg\x18\x01 \x01(\x08\x12\x0e\n\x06status\x18\x02 \x01(\x05"\x07\n\x05\x45mpty2\xfa\x01\n\nRPCService\x12:\n\tInitModel\x12\x14.schemas.ModelConfig\x1a\x17.schemas.StatusResponse\x12<\n\x07\x46orward\x12\x17.schemas.ForwardRequest\x1a\x18.schemas.ForwardResponse\x12\x31\n\x06Health\x12\x0e.schemas.Empty\x1a\x17.schemas.HealthResponse\x12?\n\rInitModelFlag\x12\x0e.schemas.Empty\x1a\x1e.schemas.InitModelFlagResponseb\x06proto3'
+    b'\n\x16tllm/rpc/schemas.proto\x12\x07schemas"-\n\x0e\x42\x46loat16Tensor\x12\x0c\n\x04\x64\x61ta\x18\x01 \x01(\x0c\x12\r\n\x05shape\x18\x02 \x03(\x05"\x8c\x01\n\x0bModelConfig\x12\x12\n\nmodel_name\x18\x01 \x01(\t\x12\x0f\n\x07pp_rank\x18\x02 \x01(\x05\x12\x17\n\x0flayer_idx_start\x18\x03 \x01(\x05\x12\x15\n\rlayer_idx_end\x18\x04 \x01(\x05\x12\x12\n\nmaster_url\x18\x05 \x01(\t\x12\x14\n\x0cnext_pp_rank\x18\x06 \x01(\x05"_\n\x0e\x46orwardRequest\x12\x0c\n\x04uuid\x18\x01 \x03(\t\x12\x0f\n\x07seq_len\x18\x02 \x03(\x05\x12.\n\rhidden_states\x18\x03 \x01(\x0b\x32\x17.schemas.BFloat16Tensor"-\n\x0eStatusResponse\x12\x0b\n\x03msg\x18\x01 \x01(\t\x12\x0e\n\x06status\x18\x02 \x01(\x05"j\n\x0f\x46orwardResponse\x12\x0b\n\x03msg\x18\x01 \x01(\t\x12\x0e\n\x06status\x18\x02 \x01(\x05\x12\'\n\x06output\x18\x03 \x01(\x0b\x32\x17.schemas.BFloat16Tensor\x12\x11\n\tcost_time\x18\x04 \x01(\x02"-\n\x0eHealthResponse\x12\x0b\n\x03msg\x18\x01 \x01(\t\x12\x0e\n\x06status\x18\x02 \x01(\x05"4\n\x15InitModelFlagResponse\x12\x0b\n\x03msg\x18\x01 \x01(\x08\x12\x0e\n\x06status\x18\x02 \x01(\x05"\x07\n\x05\x45mpty2\xfa\x01\n\nRPCService\x12:\n\tInitModel\x12\x14.schemas.ModelConfig\x1a\x17.schemas.StatusResponse\x12<\n\x07\x46orward\x12\x17.schemas.ForwardRequest\x1a\x18.schemas.ForwardResponse\x12\x31\n\x06Health\x12\x0e.schemas.Empty\x1a\x17.schemas.HealthResponse\x12?\n\rInitModelFlag\x12\x0e.schemas.Empty\x1a\x1e.schemas.InitModelFlagResponseb\x06proto3'
 )
 
 _globals = globals()
@@ -27,32 +27,22 @@ _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "tllm.rpc.schemas_pb2", _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
     DESCRIPTOR._loaded_options = None
-    _globals["_ARRAY"]._serialized_start = 35
-    _globals["_ARRAY"]._serialized_end = 60
-    _globals["_MATRIX"]._serialized_start = 62
-    _globals["_MATRIX"]._serialized_end = 100
-    _globals["_TENSOR"]._serialized_start = 102
-    _globals["_TENSOR"]._serialized_end = 143
-    _globals["_BLOCKTENSOR"]._serialized_start = 145
-    _globals["_BLOCKTENSOR"]._serialized_end = 191
-    _globals["_BFLOAT16TENSOR"]._serialized_start = 193
-    _globals["_BFLOAT16TENSOR"]._serialized_end = 238
-    _globals["_MULTIDIMENSIONALARRAY"]._serialized_start = 241
-    _globals["_MULTIDIMENSIONALARRAY"]._serialized_end = 428
-    _globals["_MODELCONFIG"]._serialized_start = 431
-    _globals["_MODELCONFIG"]._serialized_end = 571
-    _globals["_FORWARDREQUEST"]._serialized_start = 573
-    _globals["_FORWARDREQUEST"]._serialized_end = 651
-    _globals["_STATUSRESPONSE"]._serialized_start = 653
-    _globals["_STATUSRESPONSE"]._serialized_end = 698
-    _globals["_FORWARDRESPONSE"]._serialized_start = 700
-    _globals["_FORWARDRESPONSE"]._serialized_end = 806
-    _globals["_HEALTHRESPONSE"]._serialized_start = 808
-    _globals["_HEALTHRESPONSE"]._serialized_end = 853
-    _globals["_INITMODELFLAGRESPONSE"]._serialized_start = 855
-    _globals["_INITMODELFLAGRESPONSE"]._serialized_end = 907
-    _globals["_EMPTY"]._serialized_start = 909
-    _globals["_EMPTY"]._serialized_end = 916
-    _globals["_RPCSERVICE"]._serialized_start = 919
-    _globals["_RPCSERVICE"]._serialized_end = 1169
+    _globals["_BFLOAT16TENSOR"]._serialized_start = 35
+    _globals["_BFLOAT16TENSOR"]._serialized_end = 80
+    _globals["_MODELCONFIG"]._serialized_start = 83
+    _globals["_MODELCONFIG"]._serialized_end = 223
+    _globals["_FORWARDREQUEST"]._serialized_start = 225
+    _globals["_FORWARDREQUEST"]._serialized_end = 320
+    _globals["_STATUSRESPONSE"]._serialized_start = 322
+    _globals["_STATUSRESPONSE"]._serialized_end = 367
+    _globals["_FORWARDRESPONSE"]._serialized_start = 369
+    _globals["_FORWARDRESPONSE"]._serialized_end = 475
+    _globals["_HEALTHRESPONSE"]._serialized_start = 477
+    _globals["_HEALTHRESPONSE"]._serialized_end = 522
+    _globals["_INITMODELFLAGRESPONSE"]._serialized_start = 524
+    _globals["_INITMODELFLAGRESPONSE"]._serialized_end = 576
+    _globals["_EMPTY"]._serialized_start = 578
+    _globals["_EMPTY"]._serialized_end = 585
+    _globals["_RPCSERVICE"]._serialized_start = 588
+    _globals["_RPCSERVICE"]._serialized_end = 838
 # @@protoc_insertion_point(module_scope)

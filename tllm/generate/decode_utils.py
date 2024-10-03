@@ -1,4 +1,4 @@
-from typing import List
+from typing import *
 
 import torch
 import torch.nn.functional as F
@@ -33,27 +33,45 @@ def temperature_scaling(logits: torch.Tensor, temperature: float = 1.0):
 class DecodeUtils:
     def __init__(self, method: str) -> None:
         self.method = method
-        assert self.method in ["greedy", "beam_search"]
+        assert self.method in ["greedy", "beam_search", "sampling"]
 
-    def decode(self, logits: torch.Tensor) -> List[int]:
+    def decode(self, logits: torch.Tensor, sampling_params: Optional[Dict[str, Any]] = None) -> List[int]:
         if self.method == "greedy":
             return self.greedy_decode(logits)
         elif self.method == "beam_search":
-            return self.beam_search_decode(logits)
+            return self.beam_search_decode(logits, sampling_params)
+        elif self.method == "sampling":
+            return self.sampling_decode(logits, sampling_params)
 
     def greedy_decode(self, logits: torch.Tensor) -> List[int]:
         # logits shape: [batch_size, sequence_length, vocab_size]
         return torch.argmax(logits[:, -1], dim=-1).tolist()
 
+    def sampling_decode(self, logits: torch.Tensor, sampling_params: Dict[str, Any]) -> List[int]:
+        top_k = sampling_params["top_k"]
+        top_p = sampling_params["top_p"]
+        temperature = sampling_params["temperature"]
+        temperature_scaled_logits = temperature_scaling(logits, temperature)
+        # Apply top-k sampling
+        if top_k > 0:
+            temperature_scaled_logits = top_k_sampling(temperature_scaled_logits, k=top_k)
+
+        # Apply top-p sampling (nucleus sampling)
+        if top_p < 1.0:
+            temperature_scaled_logits = top_p_sampling(temperature_scaled_logits, p=top_p)
+
+        return torch.argmax(temperature_scaled_logits, dim=-1).tolist()
+
     def beam_search_decode(
         self,
         logits: torch.Tensor,
-        beam_width: int = 3,
-        max_len: int = 20,
-        top_k: int = 0,
-        top_p: float = 1.0,
-        temperature: float = 1.0,
+        sampling_params: Dict[str, Any],
     ) -> List[List[int]]:
+        max_len = sampling_params["max_len"]
+        top_k = sampling_params["top_k"]
+        top_p = sampling_params["top_p"]
+        temperature = sampling_params["temperature"]
+        beam_width = sampling_params["beam_width"]
         batch_size, sequence_length, vocab_size = logits.size()
 
         # Initialize the beam search

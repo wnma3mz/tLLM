@@ -1,4 +1,4 @@
-transformers==4.36.2
+transformers==4.45.1
 torch
 grpcio==1.66.2
 grpcio-tools==1.66.2
