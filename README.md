@@ -6,16 +6,18 @@
 
 使用 torch.dist 实现 张量并行，使用 rpc 实现流水并行，仅通信 hidden_states
 
-- [x] pipeline-parallel by grpc
-- [x] tensor-parallel by torch.dist
 - [x] Merge Linear
+- [x] Pipeline Parallel by grpc
+- [x] Tensor Parallel by torch.dist
+- [x] Sequence KV Cache
 - [x] Performance Testing
+- [x] Multi-Sequence Batch=1
 - [ ] Async Generation
     - [ ] Queuing mechanism
 - [ ] Continuous Batch
-- [ ] split model before load
-- [ ] Streaming Output
+- [x] Streaming Output
 - [ ] OpenAI API format
+- [ ] split model before load
 - [x] Decoding Strategy
     - [x] Top-K Sampling
     - [x] Top-P Sampling
@@ -28,7 +30,7 @@
     - [ ] Node Status
 - [ ] KV Token Cache
 - [ ] MLX Framework
-    - [ ] LORA Training
+    - [ ] LoRA Training
 - [ ] Shard Storage
 
 ### Performance

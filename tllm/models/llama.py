@@ -77,6 +77,7 @@ class MyLlamaModel(nn.Module):
     def load_state_dict(self, state_dict: Dict) -> None:
         self.decoder.load_state_dict(state_dict)
 
+    @torch.no_grad()
     def forward(self, hidden_states: torch.Tensor, seq_input: SeqInput) -> torch.Tensor:
         """
         @param hidden_states: bs x seq_len x hidden_size

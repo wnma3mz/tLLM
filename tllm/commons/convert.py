@@ -89,7 +89,7 @@ def serialize_bfloat16_tensor(tensor) -> BFloat16Tensor:
     # TODO: support bfloat16
     tensor_proto = BFloat16Tensor()
     tensor_proto.shape.extend(tensor.shape)  # 添加形状
-    tensor_proto.data = tensor.to(torch.float32).numpy().tobytes()
+    tensor_proto.data = tensor.to(torch.float32).detach().numpy().tobytes()
     return tensor_proto
 
 

@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass
 import logging
 import time
@@ -104,7 +105,7 @@ class MyLlamaForCausalLM(nn.Module):
         return ForwardResult(logits=logits, comm_cost_time_list=comm_cost_time_list)
 
     @torch.no_grad()
-    def generate(self, input_ids: torch.Tensor, sampler: DecodeUtils, **kwargs) -> GenerateResult:
+    async def generate(self, input_ids: torch.Tensor, sampler: DecodeUtils, **kwargs) -> AsyncGenerator:
         # input_ids: bs x seq_len
         max_new_tokens = kwargs.get("max_new_tokens", 16)
         input_embeds = self.embed_tokens(input_ids)
@@ -135,4 +136,9 @@ class MyLlamaForCausalLM(nn.Module):
             else:
                 logging.info(f"tpot communication cost time: {",".join([f'{x:.4f}' for x in comm_cost_time_list])}")
 
-        return GenerateResult(output_ids=output_ids, finish_reason=finish_reason, ttft=ttft_end_time - ttft_start_time)
+            await asyncio.sleep(1)
+            yield GenerateResult(
+                output_ids=output_ids, finish_reason=finish_reason, ttft=ttft_end_time - ttft_start_time
+            )
+
+        yield GenerateResult(output_ids=output_ids, finish_reason=finish_reason, ttft=ttft_end_time - ttft_start_time)

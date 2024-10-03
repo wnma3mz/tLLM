@@ -22,7 +22,7 @@ export PYTHONPATH="./":$PYTHONPATH;
 export OMP_NUM_THREADS=8;
 
 
-python3 -m tllm.entrypoints.server --port 8000 --model_path $MODEL_PATH --weight_path $WEIGHT_PATH --config_path $CONFIG_PATH
-# python3 -m tllm.entrypoints.server --port 8000 --model_path $MODEL_PATH --weight_path $WEIGHT_PATH --config_path $CONFIG_PATH --need_start_client
+python3 -m tllm.entrypoints.api_server --port 8000 --model_path $MODEL_PATH --weight_path $WEIGHT_PATH --config_path $CONFIG_PATH
+# python3 -m tllm.entrypoints.api_server --port 8000 --model_path $MODEL_PATH --weight_path $WEIGHT_PATH --config_path $CONFIG_PATH --need_start_client
 
 
