@@ -81,11 +81,11 @@ class ForwardResult:
     hidden_states: Optional[torch.Tensor] = None
 
 
-def is_generate_end(output_ids: List[int], eos_token_id: int, max_new_tokens: int) -> GenerateEnd:
+def is_generate_end(output_ids: List[int], eos_token_ids: Set[int], max_new_tokens: int) -> GenerateEnd:
     if len(output_ids) >= max_new_tokens:
         return GenerateEnd(finish_reason="length", is_end=True)
 
-    if output_ids[-1] == eos_token_id:
+    if output_ids[-1] in eos_token_ids:
         return GenerateEnd(finish_reason="stop", is_end=True)
 
     return GenerateEnd(finish_reason=None, is_end=False)
@@ -106,9 +106,18 @@ class MyLlamaForCausalLM(nn.Module):
         model = cls(config)
 
         cls.config = config
+        cls.eos_token_ids = set()
+
+        if hasattr(config, "eos_token_ids"):
+            cls.eos_token_ids |= (
+                set(config.eos_token_id) if isinstance(config.eos_token_id, list) else {config.eos_token_id}
+            )
+
         cls.server = server
         cls.pp_size = len(cls.server.url_list)
         cls.tok = TokenizerUtils(model_path)
+        if cls.tok.tokenizer.eos_token_id:
+            cls.eos_token_ids.add(cls.tok.tokenizer.eos_token_id)
 
         state_dict = torch.load(weight_path)
         model.embed_tokens.load_state_dict({"weight": state_dict.pop("model.embed_tokens.weight")})
@@ -167,14 +176,15 @@ class MyLlamaForCausalLM(nn.Module):
             logits = forward_result.logits
             comm_cost_time_list = forward_result.comm_cost_time_list
             generate_ids = sampler.decode(logits)
-            generate_texts = [self.tok.decode(x) for x in generate_ids]
+            generate_texts = [self.tok.decode([x]) for x in generate_ids]
             output_ids.append(generate_ids[0])
-            output_text += generate_texts[0]
 
-            end = is_generate_end(output_ids, eos_token_id=self.config.eos_token_id, max_new_tokens=max_new_tokens)
+            end = is_generate_end(output_ids, eos_token_ids=self.eos_token_ids, max_new_tokens=max_new_tokens)
             if end.is_end:
                 finish_reason = end.finish_reason
                 break
+
+            output_text += generate_texts[0]  # 不添加 end text
 
             input_embeds = self.embed_tokens(torch.tensor(generate_ids)).unsqueeze(0)
             seq_input.seq_len_list = [1]
@@ -201,9 +211,7 @@ class MyLlamaForCausalLM(nn.Module):
             request_id=request_id,
             prompt=None,
             prompt_token_ids=input_ids[0].tolist(),
-            outputs=[
-                CompletionOutput(index=0, text=output_text, token_ids=tuple(output_ids), finish_reason=finish_reason)
-            ],
+            outputs=[CompletionOutput(index=0, text="", token_ids=tuple(output_ids), finish_reason=finish_reason)],
             finished=True,
             prompt_logprobs=None,
         )

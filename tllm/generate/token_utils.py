@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import re
 from typing import Dict, List
 
 from transformers import AutoTokenizer
@@ -13,6 +14,7 @@ class TokenizerResult:
 class TokenizerUtils:
     def __init__(self, tok_path: str):
         self.tokenizer = AutoTokenizer.from_pretrained(tok_path, trust_remote_code=True, use_fast=False)
+        self.buffer = []
 
     def preprocess(self, text: str = None, messages: List[Dict[str, str]] = None) -> TokenizerResult:
         if messages:
@@ -31,4 +33,19 @@ class TokenizerUtils:
         return TokenizerResult(input_ids=input_ids, input_str=text)
 
     def decode(self, input_ids: List[int]) -> str:
-        return self.tokenizer.decode(input_ids)
+        if not input_ids:
+            return ""
+
+        # 将新token添加到buffer
+        self.buffer.extend(input_ids)
+
+        if len(self.buffer) == len(input_ids):
+            # 第一次解码,解码所有tokens
+            decoded = self.tokenizer.decode(self.buffer)
+        else:
+            # 增量解码,只解码新的tokens
+            prev_text = self.tokenizer.decode(self.buffer[: -len(input_ids)])
+            new_text = self.tokenizer.decode(self.buffer)
+            decoded = new_text[len(prev_text) :]
+
+        return decoded

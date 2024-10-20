@@ -3,6 +3,8 @@ for i in {1..10}; do
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer common" \
     -d '{
+      "model": "tt",
+      "stream": true,
       "messages": [
         {
           "role": "user",

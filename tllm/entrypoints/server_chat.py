@@ -86,15 +86,18 @@ class OpenAIServing:
         self, request: ChatCompletionRequest, raw_request: Request, request_id: str, result_generator: AsyncIterator
     ) -> AsyncIterator[str]:
         created_time = int(time.time())
-        previous_texts = [""] * 1
+        n = 1
+        previous_texts = [""] * n
         async for res in result_generator:
             output = res.outputs[0]
             i = output.index
 
-            delta_text = output.text[len(previous_texts[i]) :]
+            delta_text = output.text
             previous_texts[i] = output.text
+
+            # 最后一次返回为空字符串，且 finish_reason 不能为 None
             choice_data = ChatCompletionResponseStreamChoice(
-                index=i, delta=DeltaMessage(content=delta_text), logprobs=None, finish_reason=None
+                index=i, delta=DeltaMessage(content=delta_text), logprobs=None, finish_reason=output.finish_reason
             )
             chunk = ChatCompletionStreamResponse(
                 id=request_id, model=self.model_name, created=created_time, choices=[choice_data]
