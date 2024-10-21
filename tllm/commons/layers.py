@@ -110,6 +110,7 @@ class MyLlamaMLP(nn.Module):
         self.gate_up_proj.load_weight(combined_weights)
 
     def forward(self, x):
+        # x: [batch_size, seq_len, hidden_size]
         gate_out, up_out = self.gate_up_proj(x)
         intermediate_states = self.act_fn(gate_out) * up_out
         return self.comm.all_reduce(self.down_proj(intermediate_states))

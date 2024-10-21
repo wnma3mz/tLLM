@@ -32,7 +32,7 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
         if self.rank == 0:
             pass
         else:
-            while True:
+            while self.comm.world_size > 1:
                 self.config.comm.broadcast_object(uuid_shape_list)
                 seq_input, hidden_states_shape = uuid_shape_list
                 hidden_states = torch.empty(hidden_states_shape, dtype=self.model.dtype)

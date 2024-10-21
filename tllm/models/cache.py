@@ -52,5 +52,5 @@ class SeqDynamicCache:
             key_states_list.append(key)
             value_states_list.append(value)
 
-        cat_key_states, cat_value_states = torch.cat(key_states_list, dim=1), torch.cat(value_states_list, dim=1)
+        cat_key_states, cat_value_states = torch.cat(key_states_list, dim=-2), torch.cat(value_states_list, dim=-2)
         return cat_key_states, cat_value_states

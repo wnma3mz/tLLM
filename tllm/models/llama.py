@@ -9,26 +9,31 @@ from tllm.commons.cache_manager import CacheManager
 from tllm.commons.layers import AttentionCache, MyLlamaDecoderLayer
 from tllm.models.cache import SeqDynamicCache
 from tllm.rpc.protocol import SeqInput
+from tllm.utils import build_mask
 
 
-def build_mask(seq_len_list: List[int]) -> torch.Tensor:
-    """
-    构造多个请求的 casual mask
-    @param seq_len_list: 每个请求的 seq_len
+def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, device: str) -> AttentionCache:
+    position_ids_list = []
+    past_key_values = SeqDynamicCache()
+    actual_seq_len_list = []
+    for uuid_str, seq_len in zip(seq_input.uuid_str_list, seq_input.seq_len_list):
+        if uuid_str in cache_manager.cache_dict:
+            kv_cache = cache_manager.get(uuid_str)
+            position_ids = torch.tensor([kv_cache.get_seq_length()], dtype=torch.long).unsqueeze(0)
+            actual_seq_len_list.append([seq_len, kv_cache.get_seq_length() + 1])
+        else:
+            kv_cache = None
+            position_ids = torch.arange(seq_len, dtype=torch.long).unsqueeze(0)
+            actual_seq_len_list.append([seq_len, seq_len])
+        past_key_values.add(uuid_str, seq_len, kv_cache)
+        position_ids_list.append(position_ids)
 
-    @return: 一个 mask，形状为 total_length x total_length，其中 total_length 是所有请求的 seq_len 之和
-    """
-    mask_list = [torch.ones(seq_len, seq_len, dtype=torch.bool).tril(diagonal=0) for seq_len in seq_len_list]
-    total_length = sum(seq_len_list)
-
-    combined_mask = torch.zeros((total_length, total_length), dtype=torch.bool)
-
-    start_index = 0
-    for mask in mask_list:
-        combined_mask[start_index : start_index + mask.size(0), start_index : start_index + mask.size(1)] = mask
-        start_index += mask.size(0)
-
-    return combined_mask
+    return AttentionCache(
+        position_ids=torch.cat(position_ids_list, dim=-1).to(device),
+        past_key_value=past_key_values,
+        uuid_str_list=seq_input.uuid_str_list,
+        attn_mask=build_mask(actual_seq_len_list),
+    )
 
 
 class Decoder(nn.Module):
@@ -88,34 +93,9 @@ class MyLlamaModel(nn.Module):
 
         @return: bs x seq_len x hidden_size
         """
-        position_ids_list = []
-        past_key_values = SeqDynamicCache()
-        max_position_ids, max_seq_len = None, -1
-        seq_len_list = []
-        for uuid_str, seq_len in zip(seq_input.uuid_str_list, seq_input.seq_len_list):
-            if uuid_str in self.cache_manager.cache_dict:
-                kv_cache = self.cache_manager.get(uuid_str)
-                position_ids = torch.tensor([kv_cache.get_seq_length()], dtype=torch.long).unsqueeze(0)
-                past_key_values.add(uuid_str, seq_len, cache=kv_cache)
-            else:
-                seq_len = hidden_states.size(1)
-                position_ids = torch.arange(seq_len, dtype=torch.long).unsqueeze(0)
-                past_key_values.add(uuid_str, seq_len)
-            if seq_len > max_seq_len:
-                max_seq_len = seq_len
-                max_position_ids = position_ids
-            position_ids_list.append(position_ids)
-            seq_len_list.append(seq_len)
-
-        attention_cache = AttentionCache(
-            position_ids=torch.cat(position_ids_list, dim=0).to(self.device),
-            past_key_value=past_key_values,
-            uuid_str_list=seq_input.uuid_str_list,
-            attn_mask=build_mask(seq_len_list),
-        )
-
+        attention_cache = build_forward_cache(seq_input, self.cache_manager, self.device)
         hidden_states = hidden_states.to(self.device)
-        position_embeddings = self.rotary_emb(hidden_states, max_position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, attention_cache.position_ids)
         output = self.decoder(hidden_states, position_embeddings=position_embeddings, attention_cache=attention_cache)
 
         for uuid_str, seq_len in zip(seq_input.uuid_str_list, seq_input.seq_len_list):
