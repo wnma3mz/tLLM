@@ -5,9 +5,7 @@ import time
 from typing import *
 
 from fastapi import Request
-import torch
 
-from tllm.engine import MyLlamaForCausalLM
 from tllm.entrypoints.protocol import (
     ChatCompletionRequest,
     ChatCompletionResponse,
@@ -23,7 +21,6 @@ from tllm.entrypoints.protocol import (
     random_uuid,
 )
 from tllm.generate.decode_utils import DecodeUtils
-from tllm.rpc.manager import RPCManager
 
 
 def start_client(config_path: str, model_path: str) -> None:
@@ -62,10 +59,8 @@ def parse_url_list(config_path: str) -> List[str]:
 
 class OpenAIServing:
 
-    def __init__(self, args):
-        url_list = parse_url_list(args.config_path)
-        server = RPCManager(url_list)
-        self.model = MyLlamaForCausalLM.from_pretrained(args.model_path, args.weight_path, server)
+    def __init__(self, engine, args):
+        self.engine = engine
         self.model_name = os.path.basename(args.model_path)
 
     async def show_available_models(self):
@@ -74,8 +69,8 @@ class OpenAIServing:
 
     async def create_chat_completion(self, request: ChatCompletionRequest, raw_request: Request):
         request_id = f"chat-{random_uuid()}"
-        input_ids = self.model.preprocess(request.messages)
-        result_generator = self.model.generate(input_ids, request_id, sampler=DecodeUtils("greedy"))
+        input_ids = self.engine.preprocess(request.messages)
+        result_generator = self.engine.generate(input_ids, request_id, sampler=DecodeUtils("greedy"))
 
         if request.stream:
             return self.chat_completion_stream_generator(request, raw_request, request_id, result_generator)
