@@ -1,19 +1,40 @@
 import argparse
+from contextlib import asynccontextmanager
 import logging
+import os
 import time
 from typing import *
 
-from fastapi import FastAPI, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 import uvicorn
 
+from tllm.engine import MyLlamaForCausalLM
 from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionResponse
-from tllm.entrypoints.server_chat import OpenAIServing, start_client
+from tllm.entrypoints.server_chat import OpenAIServing, parse_url_list, start_client
+from tllm.rpc.manager import RPCManager
 from tllm.utils import setup_seed
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 启动时开始处理队列
+    await engine.start()
+    yield
+    # 关闭时停止处理队列
+    await engine.stop()
+
+
+app = FastAPI(lifespan=lifespan)
 
 openai_serving_chat: OpenAIServing
+
+
+def init_engine(args):
+    url_list = parse_url_list(args.config_path)
+    server = RPCManager(url_list)
+    model = MyLlamaForCausalLM.from_pretrained(args.model_path, args.weight_path, server)
+    return ...
 
 
 @app.post("/v1/chat/completions")
@@ -75,9 +96,11 @@ if __name__ == "__main__":
     setup_seed(42)
     args = parse_args()
 
+    engine = init_engine(args)
+
     s1 = time.time()
     if args.need_start_client:
         start_client(args.config_path, args.model_path)
     print(f"init cost time {time.time() - s1}")
-    openai_serving_chat = OpenAIServing(args)
+    openai_serving_chat = OpenAIServing(engine, args)
     uvicorn.run(app, host="0.0.0.0", port=args.port, reload=False)
