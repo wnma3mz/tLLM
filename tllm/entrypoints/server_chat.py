@@ -6,6 +6,7 @@ from typing import *
 
 from fastapi import Request
 
+from tllm.engine import AsyncEngine, RequestOutput, SequenceRequestData
 from tllm.entrypoints.protocol import (
     ChatCompletionRequest,
     ChatCompletionResponse,
@@ -59,7 +60,7 @@ def parse_url_list(config_path: str) -> List[str]:
 
 class OpenAIServing:
 
-    def __init__(self, engine, args):
+    def __init__(self, engine: AsyncEngine, args):
         self.engine = engine
         self.model_name = os.path.basename(args.model_path)
 
@@ -70,7 +71,9 @@ class OpenAIServing:
     async def create_chat_completion(self, request: ChatCompletionRequest, raw_request: Request):
         request_id = f"chat-{random_uuid()}"
         input_ids = self.engine.preprocess(request.messages)
-        result_generator = self.engine.generate(input_ids, request_id, sampler=DecodeUtils("greedy"))
+
+        sequence_data = SequenceRequestData(request_id=request_id, input_ids=input_ids, sampler=DecodeUtils("greedy"))
+        result_generator = self.engine.generate_stream(sequence_data)
 
         if request.stream:
             return self.chat_completion_stream_generator(request, raw_request, request_id, result_generator)
@@ -84,6 +87,7 @@ class OpenAIServing:
         n = 1
         previous_texts = [""] * n
         async for res in result_generator:
+            res: RequestOutput
             output = res.outputs[0]
             i = output.index
 

@@ -9,7 +9,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 import uvicorn
 
-from tllm.engine import MyLlamaForCausalLM
+from tllm.engine import AsyncEngine, MyLlamaForCausalLM
 from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionResponse
 from tllm.entrypoints.server_chat import OpenAIServing, parse_url_list, start_client
 from tllm.rpc.manager import RPCManager
@@ -34,7 +34,8 @@ def init_engine(args):
     url_list = parse_url_list(args.config_path)
     server = RPCManager(url_list)
     model = MyLlamaForCausalLM.from_pretrained(args.model_path, args.weight_path, server)
-    return ...
+    engine = AsyncEngine(model)
+    return engine
 
 
 @app.post("/v1/chat/completions")

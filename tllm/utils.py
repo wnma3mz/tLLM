@@ -38,14 +38,6 @@ def get_ip_address() -> str:
     return socket.gethostbyname(socket.gethostname())
 
 
-def create_decoder_attention_mask(size: int) -> torch.Tensor:
-    # Create a lower triangular matrix with ones below the diagonal
-    mask = torch.tril(torch.ones(size, size)).transpose(0, 1)
-    # Fill the diagonal with ones as well
-    mask = mask.masked_fill(mask == 0, float("-inf"))
-    return mask
-
-
 def tensor_to_list(tensor: Optional[torch.Tensor]) -> List:
     if tensor is None:
         return None
@@ -67,11 +59,16 @@ def build_mask(seq_len_list: List[Tuple[int, int]]) -> torch.Tensor:
 
     @return: 一个 mask，形状为 total_length x total_length，其中 total_length 是所有请求的 seq_len 之和
     """
-    mask_list = [torch.ones(L, S, dtype=torch.bool).tril(diagonal=0) for (L, S) in seq_len_list]
+    mask_list = [
+        torch.ones(L, S, dtype=torch.bool).tril(diagonal=0) if L > 1 else torch.ones((L, S), dtype=torch.bool)
+        for (L, S) in seq_len_list
+    ]
     total_L, total_S = 0, 0
     for L, S in seq_len_list:
         total_L += L
         total_S += S
+    if all(L == 1 for L, _ in seq_len_list):
+        return None
 
     combined_mask = torch.zeros((total_L, total_S), dtype=torch.bool)
 

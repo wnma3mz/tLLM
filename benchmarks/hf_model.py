@@ -24,7 +24,9 @@ if __name__ == "__main__":
     with torch.no_grad():
         output = model.generate(input_ids, max_new_tokens=20, do_sample=False)
     print("generate token: ", output[0])
-
+    # 40,   2846,   1120,
+    #    264,   4221,   1646,     11,    358,   1541,    956,    617,  16024,
+    #    477,  21958,     11,    719,    358,   2846,  31301,  10489])
     assert False
 
     # 模拟 TTFT 时间

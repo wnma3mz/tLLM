@@ -16,9 +16,10 @@
     - [x] chat completion(stream)
     - [x] chat completion(non-stream)
     - [x] using anythingLLM
-- [ ] Async Generation
-    - [ ] Queuing mechanism
-- [ ] Continuous Batch
+- [x] Async Generation
+    - [x] Queuing mechanism
+    - [ ] Test Cases
+- [x] Continuous Batch
 - [x] Streaming Output
 - [x] Decoding Strategy
     - [x] Top-K Sampling
@@ -27,16 +28,15 @@
 - [ ] Model
     - [x] LLaMA
 - [ ] split model before load
+- [ ] MLX Framework
+    - [ ] With Torch Inference
+    - [ ] LoRA Training
+- [ ] Web UI
+    - [ ] Node Status    
 - [ ] Multi-Model
     - [ ] LLaVA
-- [ ] Web UI
-    - [ ] Node Status
 - [ ] KV Token Cache
-- [ ] MLX Framework
-    - [ ] LoRA Training
 - [ ] Shard Storage
-
-Some bugs for decode text
 
 ### Performance
 
