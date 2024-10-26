@@ -1,7 +1,5 @@
 import argparse
 from contextlib import asynccontextmanager
-import logging
-import os
 import time
 from typing import *
 
@@ -9,11 +7,9 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 import uvicorn
 
-from tllm.engine import AsyncEngine, MyLlamaForCausalLM
 from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionResponse
-from tllm.entrypoints.server_chat import OpenAIServing, parse_url_list, start_client
-from tllm.rpc.manager import RPCManager
-from tllm.utils import setup_seed
+from tllm.entrypoints.server_chat import OpenAIServing
+from tllm.utils import init_engine, logger, setup_seed, start_client
 
 
 @asynccontextmanager
@@ -26,21 +22,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
-
 openai_serving_chat: OpenAIServing
-
-
-def init_engine(args):
-    url_list = parse_url_list(args.config_path)
-    server = RPCManager(url_list)
-    model = MyLlamaForCausalLM.from_pretrained(args.model_path, args.weight_path, server)
-    engine = AsyncEngine(model)
-    return engine
 
 
 @app.post("/v1/chat/completions")
 async def create_chat_completion(request: ChatCompletionRequest, raw_request: Request) -> ChatCompletionResponse:
-    # logging.info("messages:", request.messages)
     generator = await openai_serving_chat.create_chat_completion(request, raw_request)
     if request.stream:
         return StreamingResponse(content=generator, media_type="text/event-stream")
@@ -101,7 +87,7 @@ if __name__ == "__main__":
 
     s1 = time.time()
     if args.need_start_client:
-        start_client(args.config_path, args.model_path)
+        start_client(logger, args.config_path, args.model_path)
     print(f"init cost time {time.time() - s1}")
     openai_serving_chat = OpenAIServing(engine, args)
     uvicorn.run(app, host="0.0.0.0", port=args.port, reload=False)

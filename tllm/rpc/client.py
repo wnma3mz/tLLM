@@ -1,22 +1,19 @@
 import argparse
 from concurrent import futures
-import logging
 import os
 import time
 from typing import *
 
 import grpc
+import torch
+from transformers import AutoConfig, LlamaForCausalLM
 
 from tllm.commons.communicator import Communicator, SingleNodeCommunicator
 from tllm.commons.convert import deserialize_bfloat16_tensor, serialize_bfloat16_tensor
 from tllm.models.llama import MyLlamaModel
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.rpc.protocol import SeqInput
-
-logging.basicConfig(level=logging.INFO)
-
-import torch
-from transformers import AutoConfig, LlamaForCausalLM
+from tllm.utils import setup_logger
 
 
 class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
@@ -73,7 +70,7 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
 
         return_output = serialize_bfloat16_tensor(output)
         cost_time = time.time() - s1
-        logging.info(f"{self.prefix_log_str} Forward pass cost time: {cost_time:.2f} s")
+        logger.info(f"{self.prefix_log_str} Forward pass cost time: {cost_time:.2f} s")
 
         return schemas_pb2.ForwardResponse(
             msg="Forward pass completed",
@@ -106,13 +103,14 @@ def start_grpc_server(config, model, port, rank, pp_rank):
     if config.comm.is_rank0():
         schemas_pb2_grpc.add_RPCServiceServicer_to_server(rpc_servicer, server)
         server.add_insecure_port(f"[::]:{port}")
-        logging.info(f"Starting gRPC server on port {port}")
+        logger.info(f"Starting gRPC server on port {port}")
         server.start()
         server.wait_for_termination()
 
 
 if __name__ == "__main__":
     args = parse_args()
+    logger = setup_logger("client_" + __name__)
     comm = Communicator(is_torchrun=True) if "WORLD_SIZE" in os.environ else SingleNodeCommunicator()
 
     config = AutoConfig.from_pretrained(args.model_path, trust_remote_code=True)
@@ -127,7 +125,7 @@ if __name__ == "__main__":
     ).state_dict()
     model = MyLlamaModel(config).to(dtype)
     model.load_state_dict(state_dict)
-    logging.info(f"[Rank: {config.comm.rank}] Cost time {time.time() - s1}")
+    logger.info(f"[Rank: {config.comm.rank}] Cost time {time.time() - s1}")
     model.eval()
     del state_dict
 

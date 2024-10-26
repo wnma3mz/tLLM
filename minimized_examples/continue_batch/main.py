@@ -85,12 +85,19 @@ if __name__ == "__main__":
     output_122 = torch.cat([output_1, output_22], dim=1)
     print(f"is_same: {torch.allclose(output_122, cat_output)}")
 
+    # 请求部分处于 prefill 阶段，部分处于 decode 阶段
+    cat_hidden_states = torch.cat([hidden_states_11, hidden_states_2], dim=1)
+    cat_output = model(cat_hidden_states, SeqInput(uuid_str_list=["11", "44"], seq_len_list=[1, 2]))
+    output_122 = torch.cat([output_11, output_2], dim=1)
+    print(f"is_same: {torch.allclose(output_122, cat_output)}")
+
     # 请求全处于 decode 阶段
     cat_hidden_states = torch.cat([hidden_states_11, hidden_states_22], dim=1)
     cat_output = model(cat_hidden_states, SeqInput(uuid_str_list=["11", "22"], seq_len_list=[1, 1]))
     output_1122 = torch.cat([output_11, output_22], dim=1)
     print(output_1122)
     print(cat_output)
+    print("diff ", torch.sum(output_1122 - cat_output))
     print(f"is_same: {torch.allclose(output_1122, cat_output)}")  # 存在误差，会返回 False。TODO
 
     assert False

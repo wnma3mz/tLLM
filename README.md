@@ -18,7 +18,7 @@
     - [x] using anythingLLM
 - [x] Async Generation
     - [x] Queuing mechanism
-    - [ ] Test Cases
+    - [x] Test Cases
 - [x] Continuous Batch
 - [x] Streaming Output
 - [x] Decoding Strategy

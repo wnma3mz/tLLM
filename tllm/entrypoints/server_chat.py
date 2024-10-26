@@ -1,12 +1,10 @@
-import json
-import logging
 import os
 import time
 from typing import *
 
 from fastapi import Request
 
-from tllm.engine import AsyncEngine, RequestOutput, SequenceRequestData
+from tllm.engine import AsyncEngine, SequenceRequestData
 from tllm.entrypoints.protocol import (
     ChatCompletionRequest,
     ChatCompletionResponse,
@@ -22,40 +20,7 @@ from tllm.entrypoints.protocol import (
     random_uuid,
 )
 from tllm.generate.decode_utils import DecodeUtils
-
-
-def start_client(config_path: str, model_path: str) -> None:
-    # 启动 client
-    with open(config_path, "r") as f:
-        config_list = json.load(f)
-
-    os.system("rm -rf grpc_*.log")
-    for pp_config in config_list:
-        port = pp_config["url"].rsplit(":", 1)[-1]
-        start_layer_idx, end_layer_idx = pp_config["layer_idx"]
-        # TODO 远程启动
-        if pp_config["tp_size"] > 1:
-            cmd = f"torchrun --nproc_per_node={pp_config['tp_size']} --master_port={pp_config['master_port']} tllm/rpc/client.py --start_layer_idx={start_layer_idx} --end_layer_idx={end_layer_idx} --model_path {model_path} --port {port} > grpc_{port}.log 2>&1 &"
-        else:
-            # 几乎等效于 torchrun --nproc_per_node=1
-            cmd = f"python3 tllm/rpc/client.py --start_layer_idx={start_layer_idx} --end_layer_idx={end_layer_idx} --model_path {model_path} --port {port} > grpc_{port}.log 2>&1 &"  #
-        # 异步启动
-        print(f"begin start client {pp_config['pp_rank']}")
-        os.popen(cmd)
-        # 监听是否启动成功
-        while True:
-            if os.path.exists(f"grpc_{port}.log"):
-                with open(f"grpc_{port}.log", "r") as f:
-                    if "Starting gRPC server on port" in f.read():
-                        break
-            time.sleep(1)
-        print(f"start client {pp_config['pp_rank']} success")
-
-
-def parse_url_list(config_path: str) -> List[str]:
-    with open(config_path, "r") as f:
-        config_list = json.load(f)
-    return [pp_config["url"] for pp_config in config_list]
+from tllm.models.protocol import RequestOutput
 
 
 class OpenAIServing:

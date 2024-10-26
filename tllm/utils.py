@@ -1,9 +1,16 @@
 import argparse
+import json
+import logging
+import os
 import socket
+import time
 from typing import *
 
 import torch
 
+from tllm.engine import AsyncEngine
+from tllm.models.llama import MyLlamaForCausalLM
+from tllm.rpc.manager import RPCManager
 from tllm.schemas import NodeConfig
 
 
@@ -52,30 +59,61 @@ def list_to_tensor(lst: Optional[List]) -> torch.Tensor:
     return torch.tensor(lst)
 
 
-def build_mask(seq_len_list: List[Tuple[int, int]]) -> torch.Tensor:
-    """
-    构造多个请求的 casual mask
-    @param seq_len_list: 每个请求的 seq_len
+def setup_logger(name, level=logging.INFO):
+    logger = logging.getLogger(name)
+    logger.setLevel(level)  # 或者其他日志级别
 
-    @return: 一个 mask，形状为 total_length x total_length，其中 total_length 是所有请求的 seq_len 之和
-    """
-    mask_list = [
-        torch.ones(L, S, dtype=torch.bool).tril(diagonal=0) if L > 1 else torch.ones((L, S), dtype=torch.bool)
-        for (L, S) in seq_len_list
-    ]
-    total_L, total_S = 0, 0
-    for L, S in seq_len_list:
-        total_L += L
-        total_S += S
-    if all(L == 1 for L, _ in seq_len_list):
-        return None
+    ch = logging.StreamHandler()
+    ch.setLevel(level)  # 控制台输出日志级别
 
-    combined_mask = torch.zeros((total_L, total_S), dtype=torch.bool)
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    ch.setFormatter(formatter)
 
-    l_index, r_index = 0, 0
-    for mask in mask_list:
-        combined_mask[l_index : l_index + mask.size(0), r_index : r_index + mask.size(1)] = mask
-        l_index += mask.size(0)
-        r_index += mask.size(1)
+    logger.addHandler(ch)
 
-    return combined_mask
+    return logger
+
+
+def start_client(config_path: str, model_path: str) -> None:
+    # 启动 client
+    with open(config_path, "r") as f:
+        config_list = json.load(f)
+
+    os.system("rm -rf grpc_*.log")
+    for pp_config in config_list:
+        port = pp_config["url"].rsplit(":", 1)[-1]
+        start_layer_idx, end_layer_idx = pp_config["layer_idx"]
+        # TODO 启动远程服务
+        if pp_config["tp_size"] > 1:
+            cmd = f"torchrun --nproc_per_node={pp_config['tp_size']} --master_port={pp_config['master_port']} tllm/rpc/client.py --start_layer_idx={start_layer_idx} --end_layer_idx={end_layer_idx} --model_path {model_path} --port {port} > grpc_{port}.log 2>&1 &"
+        else:
+            # 几乎等效于 torchrun --nproc_per_node=1
+            cmd = f"python3 tllm/rpc/client.py --start_layer_idx={start_layer_idx} --end_layer_idx={end_layer_idx} --model_path {model_path} --port {port} > grpc_{port}.log 2>&1 &"  #
+        # 异步启动
+        logger.info(f"begin start client {pp_config['pp_rank']}")
+        os.popen(cmd)
+        # 监听是否启动成功
+        while True:
+            if os.path.exists(f"grpc_{port}.log"):
+                with open(f"grpc_{port}.log", "r") as f:
+                    if "Starting gRPC server on port" in f.read():
+                        break
+            time.sleep(1)
+        logger.info(f"start client {pp_config['pp_rank']} success")
+
+
+def parse_url_list(config_path: str) -> List[str]:
+    with open(config_path, "r") as f:
+        config_list = json.load(f)
+    return [pp_config["url"] for pp_config in config_list]
+
+
+def init_engine(args):
+    url_list = parse_url_list(args.config_path)
+    server = RPCManager(url_list)
+    model = MyLlamaForCausalLM.from_pretrained(logger, args.model_path, args.weight_path, server)
+    engine = AsyncEngine(logger, model)
+    return engine
+
+
+logger = setup_logger(__name__, logging.DEBUG)
