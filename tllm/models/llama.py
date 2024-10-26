@@ -133,6 +133,7 @@ class MyLlamaForCausalLM(nn.Module):
         model = cls(config)
 
         cls.config = config
+        cls.num_layers = config.num_hidden_layers
         cls.logger = logger
         cls.eos_token_ids = set()
 
@@ -146,7 +147,7 @@ class MyLlamaForCausalLM(nn.Module):
         cls.tok = TokenizerUtils(model_path)
         if cls.tok.tokenizer.eos_token_id:
             cls.eos_token_ids.add(cls.tok.tokenizer.eos_token_id)
-        # print("eos_token_ids", cls.eos_token_ids, cls.tok.tokenizer.convert_ids_to_tokens(list(cls.eos_token_ids)))
+        # cls.logger.debug("eos_token_ids", cls.eos_token_ids, cls.tok.tokenizer.convert_ids_to_tokens(list(cls.eos_token_ids)))
 
         state_dict = torch.load(weight_path)
         model.embed_tokens.load_state_dict({"weight": state_dict.pop("model.embed_tokens.weight")})

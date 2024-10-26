@@ -31,8 +31,8 @@
 - [ ] MLX Framework
     - [ ] With Torch Inference
     - [ ] LoRA Training
-- [ ] Web UI
-    - [ ] Node Status    
+- [x] Web UI
+    - [x] Node Status
 - [ ] Multi-Model
     - [ ] LLaVA
 - [ ] KV Token Cache

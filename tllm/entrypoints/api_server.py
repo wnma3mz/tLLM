@@ -3,10 +3,12 @@ from contextlib import asynccontextmanager
 import time
 from typing import *
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 import uvicorn
 
+from tllm.entrypoints.model_manager import ModelManager
 from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionResponse
 from tllm.entrypoints.server_chat import OpenAIServing
 from tllm.utils import init_engine, logger, setup_seed, start_client
@@ -23,6 +25,21 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 openai_serving_chat: OpenAIServing
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 在生产环境中应该设置具体的域名
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/")
+async def get_index():
+    with open("tllm/static/index.html", "r") as f:
+        html_content = f.read()
+    return HTMLResponse(content=html_content)
 
 
 @app.post("/v1/chat/completions")
@@ -69,6 +86,39 @@ async def show_version():
     return JSONResponse(content=ver)
 
 
+@app.websocket("/ws/monitor")
+async def monitor_websocket(websocket: WebSocket):
+    await websocket.accept()
+    model_manager.monitor_websockets.add(websocket)
+    try:
+        await websocket.send_json(model_manager.get_state())
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        model_manager.monitor_websockets.remove(websocket)
+
+
+@app.websocket("/ws/client/{client_id}")
+async def client_websocket(websocket: WebSocket, client_id: str):
+    await websocket.accept()
+    model_manager.websockets[client_id] = websocket
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+            if data["type"] == "register_layers":
+                model_manager.clients[client_id] = (data["start_idx"], data["end_idx"])
+                model_manager.add_layer_count(model_manager.clients[client_id])
+                await model_manager.broadcast_state()
+    except WebSocketDisconnect:
+        if client_id in model_manager.clients:
+            model_manager.delete_layer_count(model_manager.clients[client_id])
+            del model_manager.clients[client_id]
+        if client_id in model_manager.websockets:
+            del model_manager.websockets[client_id]
+        await model_manager.broadcast_state()
+
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=str, required=True)
@@ -88,6 +138,11 @@ if __name__ == "__main__":
     s1 = time.time()
     if args.need_start_client:
         start_client(logger, args.config_path, args.model_path)
-    print(f"init cost time {time.time() - s1}")
+    logger.info(f"init cost time {time.time() - s1}")
     openai_serving_chat = OpenAIServing(engine, args)
+
+    model_name = openai_serving_chat.model_name
+    total_layers = engine.model.num_layers
+    model_manager = ModelManager(total_layers=total_layers, model_name=model_name)
+
     uvicorn.run(app, host="0.0.0.0", port=args.port, reload=False)

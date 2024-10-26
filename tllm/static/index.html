@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Model Layer Monitor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .header {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .layer-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .layer-card {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .layer-count {
+            font-size: 2em;
+            font-weight: bold;
+            color: #2196F3;
+            margin: 10px 0;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            margin-left: 10px;
+        }
+        .status.connected {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .status.disconnected {
+            background-color: #f44336;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>
+            <span id="modelName">Model Name</span>
+            <span id="connectionStatus" class="status"></span>
+        </h1>
+        <p>Total Layers: <span id="totalLayers">-</span></p>
+        <p>Connected Clients: <span id="connectedClients">-</span></p>
+        <p>Has Full Model: <span id="hasFullModel">-</span></p>
+    </div>
+
+    <div id="layerGrid" class="layer-grid">
+        <!-- Layer cards will be dynamically added here -->
+    </div>
+
+    <script>
+        let ws;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+
+        function connectWebSocket() {
+            ws = new WebSocket(`ws://${window.location.host}/ws/monitor`);
+            
+            ws.onopen = () => {
+                document.getElementById('connectionStatus').textContent = 'Connected';
+                document.getElementById('connectionStatus').className = 'status connected';
+                reconnectAttempts = 0;
+            };
+
+            ws.onclose = () => {
+                document.getElementById('connectionStatus').textContent = 'Disconnected';
+                document.getElementById('connectionStatus').className = 'status disconnected';
+                
+                if (reconnectAttempts < maxReconnectAttempts) {
+                    reconnectAttempts++;
+                    setTimeout(connectWebSocket, 2000);
+                }
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                updateUI(data);
+            };
+        }
+
+        function updateUI(data) {
+            // 更新基本信息
+            document.getElementById('modelName').textContent = data.model_name;
+            document.getElementById('totalLayers').textContent = data.total_layers;
+            document.getElementById('connectedClients').textContent = data.connected_clients;
+            document.getElementById('hasFullModel').textContent = data.has_full_model;
+
+            // 更新层信息
+            const layerGrid = document.getElementById('layerGrid');
+            layerGrid.innerHTML = '';
+
+            // 创建所有层的卡片
+            for (let i = 0; i < data.total_layers; i++) {
+                const count = data.layer_statistics[i] || 0;
+                
+                const card = document.createElement('div');
+                card.className = 'layer-card';
+                card.innerHTML = `
+                    <h2>Layer ${i}</h2>
+                    <div class="layer-count">${count}</div>
+                    <p></p>
+                `;
+                
+                layerGrid.appendChild(card);
+            }
+        }
+
+        // 启动WebSocket连接
+        connectWebSocket();
+    </script>
+</body>
+</html>

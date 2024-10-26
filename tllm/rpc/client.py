@@ -3,15 +3,16 @@ from concurrent import futures
 import os
 import time
 from typing import *
+import uuid
 
 import grpc
 import torch
-from transformers import AutoConfig, LlamaForCausalLM
+from transformers import AutoConfig
 
 from tllm.commons.communicator import Communicator, SingleNodeCommunicator
 from tllm.commons.convert import deserialize_bfloat16_tensor, serialize_bfloat16_tensor
-from tllm.models.llama import MyLlamaModel
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
+from tllm.rpc.model_client import ModelClient
 from tllm.rpc.protocol import SeqInput
 from tllm.utils import setup_logger
 
@@ -90,6 +91,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=50051)
+    parser.add_argument("--master_url", type=str, default="ws://localhost:8000")
     parser.add_argument("--start_layer_idx", type=int, default=0, help="start layer idx")
     parser.add_argument("--end_layer_idx", type=int, default=11, help="end layer idx")
     parser.add_argument("--pp_rank", type=int, default=0, help="pp rank")
@@ -117,6 +119,19 @@ if __name__ == "__main__":
     config.decoder_start_layer_idx = args.start_layer_idx
     config.decoder_end_layer_idx = args.end_layer_idx
     config.comm = comm
+
+    model_client = ModelClient(
+        logger=logger,
+        server_url=args.master_url,
+        start_idx=args.start_layer_idx,
+        end_idx=args.end_layer_idx,
+        client_id=f"client-{str(uuid.uuid4())[:8]}-pp{args.start_layer_idx}-{args.end_layer_idx}",
+    )
+    model_client.start()
+
+    from transformers import LlamaForCausalLM
+
+    from tllm.models.llama import MyLlamaModel
 
     dtype = torch.bfloat16
     s1 = time.time()
