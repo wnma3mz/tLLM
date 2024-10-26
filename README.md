@@ -6,21 +6,25 @@
 
 使用 torch.dist 实现 张量并行，使用 rpc 实现流水并行，仅通信 hidden_states
 
-- [x] Merge Linear
-- [x] Pipeline Parallel by grpc
-- [x] Tensor Parallel by torch.dist
-- [x] Sequence KV Cache
-- [x] Performance Testing
-- [x] Multi-Sequence Batch=1
+RoadMap
+
+- [ ] Speed Up
+    - [x] Merge Linear
+    - [x] Pipeline Parallel by grpc
+    - [x] Tensor Parallel by torch.dist
+    - [x] Sequence KV Cache
+    - [x] Performance Testing
+    - [ ] Support Flash Attention
 - [x] OpenAI API format
+    - [x] Streaming Output
     - [x] chat completion(stream)
     - [x] chat completion(non-stream)
     - [x] using anythingLLM
 - [x] Async Generation
+    - [x] Multi-Sequence Batch=1
     - [x] Queuing mechanism
+    - [x] Continuous Batch
     - [x] Test Cases
-- [x] Continuous Batch
-- [x] Streaming Output
 - [x] Decoding Strategy
     - [x] Top-K Sampling
     - [x] Top-P Sampling
@@ -33,9 +37,13 @@
     - [ ] LoRA Training
 - [x] Web UI
     - [x] Node Status
+    - [ ] Display Multi Model
 - [ ] Multi-Model
     - [ ] LLaVA
-- [ ] KV Token Cache
+- [ ] KV Cache
+    - [x] Request/Sequence Cache
+    - [ ] Token-Level Cache
+        - [ ] Prefix-tree Cache
 - [ ] Shard Storage
 
 ### Performance
