@@ -10,16 +10,16 @@ import torch
 from transformers import AutoConfig
 
 from tllm.commons.communicator import Communicator, SingleNodeCommunicator
-from tllm.commons.convert import deserialize_bfloat16_tensor, serialize_bfloat16_tensor
+from tllm.commons.convert import deserialize_tensor, serialize_tensor
+from tllm.models.protocol import SeqInput
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.rpc.model_client import ModelClient
-from tllm.rpc.protocol import SeqInput
 from tllm.utils import setup_logger
 
 
 class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
-    def __init__(self, config, model, rank: int, pp_rank: int):
-        self.config = config
+    def __init__(self, comm: Communicator, model, rank: int, pp_rank: int):
+        self.comm = comm
         self.model = model
         self.rank = rank
         self.pp_rank = pp_rank
@@ -31,24 +31,14 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
             pass
         else:
             while self.comm.world_size > 1:
-                self.config.comm.broadcast_object(uuid_shape_list)
+                self.comm.broadcast_object(uuid_shape_list)
                 seq_input, hidden_states_shape = uuid_shape_list
                 hidden_states = torch.empty(hidden_states_shape, dtype=self.model.dtype)
-                self.config.comm.broadcast(hidden_states)
+                self.comm.broadcast(hidden_states)
 
                 _ = self.model.forward(hidden_states, seq_input=seq_input)
 
     def InitModel(self, request: schemas_pb2.ModelConfig, context: grpc.ServicerContext):
-        """
-        初始化模型，并 load 权重，需要同步至其他 TP
-        @param request: ModelConfig
-            model_name: str
-            pp_rank: int
-            layer_idx_start: int
-            layer_idx_end: int
-            master_url: str
-            next_pp_rank: int
-        """
         self.init_model_flag = True
         self.master_url = request.master_url
         self.next_pp_rank = request.next_pp_rank
@@ -59,24 +49,25 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
         @param request: ForwardRequest
             hidden_states: bytes
             uuid: str
+            seq_len: int
         """
         s1 = time.time()
-        hidden_states = deserialize_bfloat16_tensor(request.hidden_states)
+        hidden_states = deserialize_tensor(request.hidden_states)
 
         seq_input = SeqInput(uuid_str_list=list(request.uuid), seq_len_list=list(request.seq_len))
-        self.config.comm.broadcast_object([seq_input, tuple(hidden_states.shape)])
-        self.config.comm.broadcast(hidden_states)
+        self.comm.broadcast_object([seq_input, tuple(hidden_states.shape)])
+        self.comm.broadcast(hidden_states)
 
-        output = self.model(hidden_states, seq_input)
+        output_hidden_states = self.model(hidden_states, seq_input)
 
-        return_output = serialize_bfloat16_tensor(output)
+        output = serialize_tensor(output_hidden_states)
         cost_time = time.time() - s1
         logger.info(f"{self.prefix_log_str} Forward pass cost time: {cost_time:.2f} s")
 
         return schemas_pb2.ForwardResponse(
             msg="Forward pass completed",
             status=200,
-            output=return_output,
+            output=output,
             cost_time=cost_time,
         )
 
@@ -99,10 +90,10 @@ def parse_args():
     return parser.parse_args()
 
 
-def start_grpc_server(config, model, port, rank, pp_rank):
+def start_grpc_server(comm: Communicator, model, port: int, rank: int, pp_rank: int):
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
-    rpc_servicer = RPCServicer(config, model, rank, pp_rank)
-    if config.comm.is_rank0():
+    rpc_servicer = RPCServicer(comm, model, rank, pp_rank)
+    if comm.is_rank0():
         schemas_pb2_grpc.add_RPCServiceServicer_to_server(rpc_servicer, server)
         server.add_insecure_port(f"[::]:{port}")
         logger.info(f"Starting gRPC server on port {port}")
@@ -129,4 +120,4 @@ if __name__ == "__main__":
     model_client.start()
     model = model_client.load_model(config, args.model_path, torch.bfloat16)
 
-    start_grpc_server(config, model, args.port, comm.rank, args.pp_rank)
+    start_grpc_server(comm, model, args.port, comm.rank, args.pp_rank)

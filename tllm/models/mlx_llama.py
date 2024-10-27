@@ -3,11 +3,10 @@ from typing import *
 import mlx.core as mx
 import mlx.nn as nn
 
-from tllm.commons.cache_manager import CacheManager
 from tllm.commons.mlx_layers import MyTransformerBlock
-from tllm.models.cache import AttentionCache, SeqMLXDynamicCache
+from tllm.models.cache import AttentionCache, CacheManager, SeqMLXDynamicCache
+from tllm.models.protocol import SeqInput
 from tllm.models.utils import build_mask
-from tllm.rpc.protocol import SeqInput
 
 
 def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_layers: int) -> AttentionCache:
@@ -25,7 +24,7 @@ def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_la
     return AttentionCache(
         past_key_value=past_key_values,
         uuid_str_list=seq_input.uuid_str_list,
-        attn_mask=build_mask(actual_seq_len_list),  # TODO
+        attn_mask=build_mask(actual_seq_len_list),  # TODO mlx create_attention_mask
     )
 
 
@@ -40,12 +39,7 @@ class Decoder(nn.Module):
             for layer_idx in range(start_layer_idx, end_layer_idx)
         ]
 
-    def __call__(
-        self,
-        h: mx.array,
-        mask=None,
-        cache=None,
-    ):
+    def __call__(self, h: mx.array, mask, cache):
         for layer, c in zip(self.layers, cache):
             h = layer(h, mask, cache=c)
         return h
@@ -64,15 +58,6 @@ class MyMLXLlamaModel(nn.Module):
     #     self.decoder.load_state_dict(state_dict)
 
     def __call__(self, hidden_states: mx.array, seq_input: SeqInput) -> mx.array:
-        """
-        @param hidden_states: bs x seq_len x hidden_size
-        @param seq_input:
-            uuid_str_list: List[str]: 每个请求的 uuid
-            seq_len_list: List[int]: 每个请求的 seq_len
-            如果 uuid_str 存在，则使用缓存的 kv cache，否则使用新的 kv cache
-
-        @return: bs x seq_len x hidden_size
-        """
         attention_cache = build_forward_cache(seq_input, self.cache_manager, self.num_layers)
         hidden_states = hidden_states.to(self.device)
         output = self.decoder(hidden_states, mask=attention_cache.attn_mask, cache=attention_cache)

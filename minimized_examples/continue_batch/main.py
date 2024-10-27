@@ -6,10 +6,9 @@ import torch
 from transformers import AutoConfig, AutoTokenizer, LlamaForCausalLM
 
 from tllm.commons.communicator import SingleNodeCommunicator
-from tllm.generate.decode_utils import DecodeUtils
 from tllm.generate.token_utils import TokenizerUtils
 from tllm.models.llama import MyLlamaModel
-from tllm.rpc.protocol import SeqInput
+from tllm.models.protocol import SeqInput
 
 # PYTHONPATH='./' python3 minimized_examples/continue_batch/main.py
 

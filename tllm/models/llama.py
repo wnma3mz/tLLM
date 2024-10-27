@@ -6,15 +6,14 @@ import torch.nn as nn
 from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.models.llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
 
-from tllm.commons.cache_manager import CacheManager
-from tllm.commons.convert import deserialize_bfloat16_tensor, serialize_bfloat16_tensor
+from tllm.commons.convert import deserialize_tensor, serialize_tensor
 from tllm.commons.layers import MyLlamaDecoderLayer
 from tllm.generate.token_utils import TokenizerUtils
-from tllm.models.cache import AttentionCache, SeqDynamicCache
-from tllm.models.protocol import ForwardResult
+from tllm.models.cache import AttentionCache, CacheManager, SeqDynamicCache
+from tllm.models.protocol import ForwardResult, SeqInput
 from tllm.models.utils import build_mask
 from tllm.rpc.manager import RPCManager
-from tllm.rpc.protocol import SeqInput
+from tllm.rpc.schemas_pb2 import BFloat16Tensor
 
 
 def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, device: str) -> AttentionCache:
@@ -157,25 +156,22 @@ class MyLlamaForCausalLM(nn.Module):
 
     def _prepare_forward_data(
         self, seq_input: SeqInput, hidden_states: torch.Tensor, need_serialize: bool
-    ) -> Dict[str, Any]:
+    ) -> Dict[str, Union[List[str], List[int], BFloat16Tensor]]:
         if need_serialize:
-            hidden_states = serialize_bfloat16_tensor(hidden_states)
+            hidden_states = serialize_tensor(hidden_states)
         return {"uuid": seq_input.uuid_str_list, "seq_len": seq_input.seq_len_list, "hidden_states": hidden_states}
 
     def forward(self, inputs_embeds: torch.Tensor, seq_input: SeqInput) -> ForwardResult:
         hidden_states = inputs_embeds
         comm_cost_time_list = []
-        last_pp_idx = self.pp_size - 1
         for pp_idx in range(self.pp_size):
             s1 = time.time()
-            outputs = self.server.post_sync(
-                pp_idx,
-                "/forward",
-                data=self._prepare_forward_data(seq_input, hidden_states, need_serialize=pp_idx == 0),
+            response = self.server.post_sync(
+                pp_idx, "/forward", data=self._prepare_forward_data(seq_input, hidden_states, pp_idx == 0)
             )
-            hidden_states = deserialize_bfloat16_tensor(outputs.output) if pp_idx == last_pp_idx else outputs.output
+            hidden_states = deserialize_tensor(response.output) if pp_idx == self.pp_size - 1 else response.output
             s2 = time.time()
-            comm_cost_time_list.append(s2 - s1 - outputs.cost_time)
+            comm_cost_time_list.append(s2 - s1 - response.cost_time)
 
         hidden_states = hidden_states.to(self.norm.weight.device)
         # hidden_states: bsz x seq_len x hidden_size

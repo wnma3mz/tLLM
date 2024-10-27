@@ -4,9 +4,8 @@ from typing import *
 
 import torch
 
-from tllm.models.protocol import SequenceRequestData
+from tllm.models.protocol import SeqInput, SequenceRequestData
 from tllm.models.utils import is_generate_end
-from tllm.rpc.protocol import SeqInput
 
 
 @torch.no_grad()

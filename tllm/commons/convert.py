@@ -85,15 +85,16 @@ def list_to_protobuf(data: List):
     return multi_array_proto
 
 
-def serialize_bfloat16_tensor(tensor) -> BFloat16Tensor:
+# TODO: support mx.array
+def serialize_tensor(tensor: torch.Tensor) -> BFloat16Tensor:
     # TODO: support bfloat16
     tensor_proto = BFloat16Tensor()
     tensor_proto.shape.extend(tensor.shape)  # 添加形状
-    tensor_proto.data = tensor.to(torch.float32).detach().numpy().tobytes()
+    tensor_proto.data = tensor.to(torch.float16).detach().numpy().tobytes()
     return tensor_proto
 
 
-def deserialize_bfloat16_tensor(tensor_proto) -> torch.Tensor:
-    data = torch.frombuffer(tensor_proto.data, dtype=torch.float32).to(torch.bfloat16)
+def deserialize_tensor(tensor_proto: BFloat16Tensor) -> torch.Tensor:
+    data = torch.frombuffer(tensor_proto.data, dtype=torch.float16).to(torch.bfloat16)
     tensor_data = data.view(*tensor_proto.shape)
     return tensor_data

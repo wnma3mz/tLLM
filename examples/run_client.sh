@@ -2,6 +2,7 @@
 MASTER_PORT=29501
 GRPC_PORT=25001
 BASE_PATH=/Users/lujianghu/Documents/
+MASTER_URL=ws://localhost:8000
 MODE_SIZE=$1
 TP=$2
 PP_IDX=$3
@@ -61,7 +62,7 @@ export OMP_NUM_THREADS=8;
 export PYTHONPATH="./":$PYTHONPATH;
 
 if [ $PP_IDX == "0" ]; then
-    torchrun --nproc_per_node=$TP --master_port=$MASTER_PORT tllm/rpc/client.py --port=$GRPC_PORT --start_layer_idx=$START_LAYER_IDX --end_layer_idx=$END_LAYER_IDX --model_path $MODEL_PATH
+    torchrun --nproc_per_node=$TP --master_port=$MASTER_PORT tllm/rpc/client.py --port=$GRPC_PORT --start_layer_idx=$START_LAYER_IDX --end_layer_idx=$END_LAYER_IDX --model_path $MODEL_PATH --master_url $MASTER_URL
 elif [ $PP_IDX == "1" ]; then
-    torchrun --nproc_per_node=$TP --master_port=$(($MASTER_PORT+1)) tllm/rpc/client.py --port=$(($GRPC_PORT+1)) --start_layer_idx=$START_LAYER_IDX --end_layer_idx=$END_LAYER_IDX --model_path $MODEL_PATH
+    torchrun --nproc_per_node=$TP --master_port=$(($MASTER_PORT+1)) tllm/rpc/client.py --port=$(($GRPC_PORT+1)) --start_layer_idx=$START_LAYER_IDX --end_layer_idx=$END_LAYER_IDX --model_path $MODEL_PATH --master_url $MASTER_URL
 fi

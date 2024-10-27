@@ -1,5 +1,6 @@
 import argparse
 from contextlib import asynccontextmanager
+import os
 import time
 from typing import *
 
@@ -37,7 +38,9 @@ app.add_middleware(
 
 @app.get("/")
 async def get_index():
-    with open("tllm/static/index.html", "r") as f:
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    html_path = os.path.join(current_dir, "..", "static", "index.html")
+    with open(html_path, "r") as f:
         html_content = f.read()
     return HTMLResponse(content=html_content)
 
@@ -65,13 +68,6 @@ async def create_completion(request: ChatCompletionRequest, raw_request: Request
 @app.post("/health")
 async def health():
     return Response(status_code=200)
-
-
-@app.post("/status")
-async def status(request: Dict[str, float]):
-    cost_time = request.get("cost_time", 0)
-    pp_rank = request.get("pp_rank", 0)
-    return {"cost_time": cost_time, "pp_rank": pp_rank}
 
 
 @app.get("/v1/models")

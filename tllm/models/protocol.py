@@ -8,27 +8,15 @@ finish_reason_type = Literal["length", "stop", None]
 
 
 @dataclass
-class GenerateResult:
-    output_ids: List[int]
-    finish_reason: Optional[finish_reason_type] = None
-    output_text: Optional[str] = None
-    ttft: Optional[float] = None
+class SeqInput:
+    uuid_str_list: List[str]
+    seq_len_list: List[int]
 
 
 @dataclass
 class GenerateEnd:
     finish_reason: finish_reason_type
     is_end: bool
-
-
-@dataclass
-class ChatCompletionResponse:
-    token: List[int]
-    cost_time: float
-    finish_reason: Optional[str]
-    usage: Dict[str, int]
-    text: str
-    ttft: float
 
 
 @dataclass
@@ -44,6 +32,7 @@ class CompletionOutput:
 
 @dataclass
 class RequestOutput:
+    # 转换为 HTTP 接口的数据结构
     def __init__(
         self,
         request_id: str,

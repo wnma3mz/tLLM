@@ -9,7 +9,7 @@ class SingleNodeCommunicator:
         self.rank = 0
         self.world_size = 1
 
-    def is_rank0(self):
+    def is_rank0(self) -> bool:
         return True
 
     def print_rank0(self, *args):
@@ -27,8 +27,11 @@ class SingleNodeCommunicator:
     def broadcast(self, x: torch.Tensor):
         return x
 
+    def broadcast_object(self, x: List[Any]):
+        return x
 
-class Communicator:
+
+class Communicator(SingleNodeCommunicator):
     def __init__(self, init_method=None, rank=None, world_size=None, is_torchrun: bool = False) -> None:
         if init_method is not None:
             dist.init_process_group("gloo", init_method=init_method, rank=rank, world_size=world_size)
@@ -38,7 +41,7 @@ class Communicator:
         self.world_size = dist.get_world_size()
         self.rank = dist.get_rank()
 
-    def is_rank0(self):
+    def is_rank0(self) -> bool:
         return dist.get_rank() == 0
 
     def print_rank0(self, *args):
