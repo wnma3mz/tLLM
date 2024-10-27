@@ -51,7 +51,7 @@ class ModelClient:
         self._loop = loop
         return loop
 
-    async def connect(self):
+    async def connect(self, cnt: int):
         """建立WebSocket连接"""
         try:
             self.websocket = await websockets.connect(f"{self.server_url}/ws/client/{self.client_id}")
@@ -71,12 +71,15 @@ class ModelClient:
             self.running = True
             return True
         except Exception as e:
-            self.logger.info(f"Connection failed: {e}")
+            if cnt == 0:
+                self.logger.info(f"Connection failed: {e}")
             return False
 
     async def _run_async(self):
-        while not await self.connect():
+        try_cnt = 0
+        while not await self.connect(try_cnt):
             await asyncio.sleep(1)
+            try_cnt += 1
             continue
 
         try:

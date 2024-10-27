@@ -4,12 +4,72 @@ from typing import *
 
 import torch
 
-from tllm.models.llama import MyLlamaForCausalLM
 from tllm.models.protocol import SequenceRequestData
+from tllm.models.utils import is_generate_end
+from tllm.rpc.protocol import SeqInput
+
+
+@torch.no_grad()
+async def generate_utils(model, sequence_request_list: List[SequenceRequestData]) -> AsyncGenerator:
+    """
+    @params:
+        sequence_request_list: List[Params]
+            Params:
+                input_ids: torch.Tensor
+
+    """
+    uuid_str_list, input_ids_list, seq_len_list = [], [], []
+    for sequence_request in sequence_request_list:
+        uuid_str_list.append(sequence_request.request_id)
+        # 如果是 prefilling，则为 input_ids
+        # 否则，为 output_ids[-1]
+        # input_ids: bsz x seq_len
+        if len(sequence_request.output_ids) == 0:
+            input_ids_list.append(sequence_request.input_ids)
+            seq_len_list.append(sequence_request.input_ids.shape[-1])
+        else:
+            input_ids_list.append(torch.tensor([sequence_request.output_ids[-1]]).unsqueeze(0))
+            seq_len_list.append(1)
+
+    input_ids = torch.cat(input_ids_list, dim=-1)
+    input_embeds = model.embed_tokens(input_ids)
+
+    seq_input = SeqInput(uuid_str_list=uuid_str_list, seq_len_list=seq_len_list)
+    forward_result = model(input_embeds, seq_input)
+    logits = forward_result.logits
+
+    # 根据 seq 拆开，之后直接在 sampler 中处理
+    seq_logits_list = torch.split(logits, seq_input.seq_len_list, dim=1)
+    for seq_logits, sequence_request in zip(seq_logits_list, sequence_request_list):
+        generate_ids = sequence_request.sampler.decode(seq_logits)
+        generate_texts = [model.tok.decode([x]) for x in generate_ids]
+
+        sequence_request.output_ids.append(generate_ids[0])
+        sequence_request.generate_ids = generate_ids
+        sequence_request.generate_texts = generate_texts
+
+        end = is_generate_end(
+            sequence_request.output_ids,
+            eos_token_ids=model.eos_token_ids,
+            max_new_tokens=sequence_request.sampling_params.get("max_new_tokens", 16),
+        )
+        if end.is_end:
+            sequence_request.finish_reason_list = [end.finish_reason]
+            sequence_request.is_stop = True
+        else:
+            sequence_request.output_text += generate_texts[0]  # 不添加 end text
+
+        if len(sequence_request.output_ids) == 1:
+            sequence_request.ttft_cost_time = forward_result.comm_cost_time_list
+        else:
+            sequence_request.tpot_cost_time = forward_result.comm_cost_time_list
+
+    comm_cost_time_list = forward_result.comm_cost_time_list
+    model.logger.debug(f"communication cost time: {",".join([f'{x:.4f}' for x in comm_cost_time_list])}")
 
 
 class AsyncEngine:
-    def __init__(self, logger, model: MyLlamaForCausalLM):
+    def __init__(self, logger, model):
         self.tok = model.tok
         self.model = model
         self.prefill_queue: asyncio.Queue = asyncio.Queue()
@@ -46,7 +106,7 @@ class AsyncEngine:
                 await asyncio.sleep(0.1)
                 continue
             try:
-                await self.model.generate(sequence_data_list)
+                await generate_utils(self.model, sequence_data_list)
 
                 for sequence_data in sequence_data_list:
                     if not sequence_data.is_stop:

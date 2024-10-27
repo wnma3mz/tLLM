@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from typing import *
 
 import torch
@@ -6,13 +5,7 @@ import torch.nn as nn
 from transformers.activations import ACT2FN
 from transformers.models.llama.modeling_llama import LlamaConfig, LlamaRMSNorm, apply_rotary_pos_emb, repeat_kv
 
-
-@dataclass
-class AttentionCache:
-    uuid_str_list: List[str]
-    position_ids: torch.Tensor
-    past_key_value: "DynamicCache"
-    attn_mask: torch.Tensor
+from tllm.models.cache import AttentionCache
 
 
 class BaseParallelLayer(nn.Module):
@@ -237,7 +230,7 @@ class MyLlamaDecoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: Tuple[torch.Tensor, torch.Tensor],
         attention_cache: AttentionCache,
-    ) -> Tuple[torch.Tensor, Optional["Cache"]]:
+    ) -> Tuple[torch.Tensor, AttentionCache]:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)

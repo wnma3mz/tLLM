@@ -1,7 +1,24 @@
+from dataclasses import dataclass, field
 from typing import *
 
 import torch
 from transformers.cache_utils import DynamicCache
+
+try:
+    import mlx.core as mx
+    from mlx_lm.models.cache import KVCache, RotatingKVCache
+
+    HAS_MLX = True
+except:
+    HAS_MLX = False
+
+
+@dataclass
+class AttentionCache:
+    uuid_str_list: List[str]
+    past_key_value: Union[DynamicCache, List[Any]]
+    attn_mask: Union[torch.Tensor, "mx.array"]
+    position_ids: Optional[torch.Tensor] = field(default=None, repr=False)
 
 
 class SeqDynamicCache:
@@ -54,3 +71,40 @@ class SeqDynamicCache:
 
         cat_key_states, cat_value_states = torch.cat(key_states_list, dim=-2), torch.cat(value_states_list, dim=-2)
         return cat_key_states, cat_value_states
+
+
+def make_prompt_cache(num_layers: int, max_kv_size: Optional[int] = None) -> List[Any]:
+
+    if max_kv_size is not None:
+        return [RotatingKVCache(max_size=max_kv_size, keep=4) for _ in range(num_layers)]
+    else:
+        return [KVCache() for _ in range(num_layers)]
+
+
+if HAS_MLX:
+
+    class SeqMLXDynamicCache(SeqDynamicCache):
+        def __init__(self, num_layers: int) -> None:
+            super().__init__()
+            self.num_layers = num_layers
+
+        def add(self, uuid_str: str, seq_len: int, cache: Optional[DynamicCache] = None):
+            self.cache_dict.update(
+                {
+                    uuid_str: {
+                        "cache": make_prompt_cache(self.num_layers, max_kv_size=None) if cache is None else cache,
+                        "seq_len": seq_len,
+                    }
+                }
+            )
+
+        def update_and_fetch(
+            self,
+            key_states: mx.array,
+            value_states: mx.array,
+            layer_idx: int,
+            cache_kwargs: Optional[Dict[str, Any]] = None,
+        ) -> Tuple[mx.array, mx.array]:
+            # for mlx
+            # TODO
+            return key_states, value_states
