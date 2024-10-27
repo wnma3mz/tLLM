@@ -2,8 +2,11 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import json
 import threading
+import time
 
 import websockets
+
+from tllm.models.register import MODEL_REGISTER
 
 
 class ModelClient:
@@ -19,6 +22,27 @@ class ModelClient:
         self._loop = None
         self._thread = None
         self._executor = ThreadPoolExecutor(max_workers=1)
+
+    def load_model(self, config, model_path: str, dtype):
+        config.decoder_start_layer_idx = self.start_idx
+        config.decoder_end_layer_idx = self.end_idx
+
+        arch = config.architectures[0]
+        if arch not in MODEL_REGISTER:
+            raise ValueError(f"Model {arch} not supported")
+
+        HF_CausalLM_CLASS, _, MY_MODEL_CLASS = MODEL_REGISTER[arch]
+
+        s1 = time.time()
+        state_dict = HF_CausalLM_CLASS.from_pretrained(
+            model_path, trust_remote_code=True, device_map="cpu", torch_dtype=dtype, low_cpu_mem_usage=True
+        ).state_dict()
+        model = MY_MODEL_CLASS(config).to(dtype)
+        model.load_state_dict(state_dict)
+        self.logger.info(f"[Rank: {config.comm.rank}] Cost time {time.time() - s1}")
+        model.eval()
+        del state_dict
+        return model
 
     def _create_event_loop(self):
         """创建新的事件循环"""
@@ -51,9 +75,9 @@ class ModelClient:
             return False
 
     async def _run_async(self):
-        """异步运行客户端"""
-        if not await self.connect():
-            return
+        while not await self.connect():
+            await asyncio.sleep(1)
+            continue
 
         try:
             while self.running:

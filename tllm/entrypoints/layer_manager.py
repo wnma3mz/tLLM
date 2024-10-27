@@ -3,7 +3,7 @@ from typing import Dict, Set, Tuple
 from fastapi import WebSocket
 
 
-class ModelManager:
+class LayerManager:
     def __init__(self, total_layers: int, model_name: str):
         self.total_layers = total_layers
         self.model_name = model_name

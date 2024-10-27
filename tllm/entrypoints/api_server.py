@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 import uvicorn
 
-from tllm.entrypoints.model_manager import ModelManager
+from tllm.entrypoints.layer_manager import LayerManager
 from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionResponse
 from tllm.entrypoints.server_chat import OpenAIServing
 from tllm.utils import init_engine, logger, setup_seed, start_client
@@ -89,34 +89,34 @@ async def show_version():
 @app.websocket("/ws/monitor")
 async def monitor_websocket(websocket: WebSocket):
     await websocket.accept()
-    model_manager.monitor_websockets.add(websocket)
+    layer_manager.monitor_websockets.add(websocket)
     try:
-        await websocket.send_json(model_manager.get_state())
+        await websocket.send_json(layer_manager.get_state())
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
-        model_manager.monitor_websockets.remove(websocket)
+        layer_manager.monitor_websockets.remove(websocket)
 
 
 @app.websocket("/ws/client/{client_id}")
 async def client_websocket(websocket: WebSocket, client_id: str):
     await websocket.accept()
-    model_manager.websockets[client_id] = websocket
+    layer_manager.websockets[client_id] = websocket
 
     try:
         while True:
             data = await websocket.receive_json()
             if data["type"] == "register_layers":
-                model_manager.clients[client_id] = (data["start_idx"], data["end_idx"])
-                model_manager.add_layer_count(model_manager.clients[client_id])
-                await model_manager.broadcast_state()
+                layer_manager.clients[client_id] = (data["start_idx"], data["end_idx"])
+                layer_manager.add_layer_count(layer_manager.clients[client_id])
+                await layer_manager.broadcast_state()
     except WebSocketDisconnect:
-        if client_id in model_manager.clients:
-            model_manager.delete_layer_count(model_manager.clients[client_id])
-            del model_manager.clients[client_id]
-        if client_id in model_manager.websockets:
-            del model_manager.websockets[client_id]
-        await model_manager.broadcast_state()
+        if client_id in layer_manager.clients:
+            layer_manager.delete_layer_count(layer_manager.clients[client_id])
+            del layer_manager.clients[client_id]
+        if client_id in layer_manager.websockets:
+            del layer_manager.websockets[client_id]
+        await layer_manager.broadcast_state()
 
 
 def parse_args():
@@ -143,6 +143,6 @@ if __name__ == "__main__":
 
     model_name = openai_serving_chat.model_name
     total_layers = engine.model.num_layers
-    model_manager = ModelManager(total_layers=total_layers, model_name=model_name)
+    layer_manager = LayerManager(total_layers=total_layers, model_name=model_name)
 
     uvicorn.run(app, host="0.0.0.0", port=args.port, reload=False)

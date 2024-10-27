@@ -116,8 +116,7 @@ if __name__ == "__main__":
     comm = Communicator(is_torchrun=True) if "WORLD_SIZE" in os.environ else SingleNodeCommunicator()
 
     config = AutoConfig.from_pretrained(args.model_path, trust_remote_code=True)
-    config.decoder_start_layer_idx = args.start_layer_idx
-    config.decoder_end_layer_idx = args.end_layer_idx
+
     config.comm = comm
 
     model_client = ModelClient(
@@ -128,20 +127,6 @@ if __name__ == "__main__":
         client_id=f"client-{str(uuid.uuid4())[:8]}-pp{args.start_layer_idx}-{args.end_layer_idx}",
     )
     model_client.start()
-
-    from transformers import LlamaForCausalLM
-
-    from tllm.models.llama import MyLlamaModel
-
-    dtype = torch.bfloat16
-    s1 = time.time()
-    state_dict = LlamaForCausalLM.from_pretrained(
-        args.model_path, trust_remote_code=True, device_map="cpu", torch_dtype=dtype, low_cpu_mem_usage=True
-    ).state_dict()
-    model = MyLlamaModel(config).to(dtype)
-    model.load_state_dict(state_dict)
-    logger.info(f"[Rank: {config.comm.rank}] Cost time {time.time() - s1}")
-    model.eval()
-    del state_dict
+    model = model_client.load_model(config, args.model_path, torch.bfloat16)
 
     start_grpc_server(config, model, args.port, comm.rank, args.pp_rank)

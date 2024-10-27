@@ -128,8 +128,7 @@ class MyLlamaForCausalLM(nn.Module):
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps).to(dtype)
 
     @classmethod
-    def from_pretrained(cls, logger, model_path: str, weight_path: str, server: RPCManager, **kwargs):
-        config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
+    def from_pretrained(cls, logger, config, model_path: str, weight_path: str, server: RPCManager):
         model = cls(config)
 
         cls.config = config

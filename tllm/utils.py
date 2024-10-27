@@ -7,9 +7,10 @@ import time
 from typing import *
 
 import torch
+from transformers import AutoConfig
 
 from tllm.engine import AsyncEngine
-from tllm.models.llama import MyLlamaForCausalLM
+from tllm.models.register import MODEL_REGISTER
 from tllm.rpc.manager import RPCManager
 from tllm.schemas import NodeConfig
 
@@ -109,9 +110,15 @@ def parse_url_list(config_path: str) -> List[str]:
 
 
 def init_engine(args):
+    config = AutoConfig.from_pretrained(args.model_path, trust_remote_code=True)
+    arch = config.architectures[0]
+    if arch not in MODEL_REGISTER:
+        raise ValueError(f"Model {arch} not supported")
+    _, MY_CausalLM_CLASS, _ = MODEL_REGISTER[arch]
+
     url_list = parse_url_list(args.config_path)
     server = RPCManager(url_list)
-    model = MyLlamaForCausalLM.from_pretrained(logger, args.model_path, args.weight_path, server)
+    model = MY_CausalLM_CLASS.from_pretrained(logger, config, args.model_path, args.weight_path, server)
     engine = AsyncEngine(logger, model)
     return engine
 
