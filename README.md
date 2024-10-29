@@ -32,8 +32,9 @@ RoadMap
 - [ ] Model
     - [x] LLaMA
 - [ ] split model before load
-- [ ] MLX Framework
-    - [ ] With Torch Inference
+- [x] MLX Framework
+    - [x] With Torch Inference
+        - [ ] Some bugs with multi requests
     - [ ] LoRA Training
 - [x] Web UI
     - [x] Node Status

@@ -18,7 +18,7 @@ except:
 if HAS_MLX:
     from tllm.models.mlx_llama import MyMLXLlamaModel
 
-    MODEL_REGISTER.update({{"MLXLlamaForCausalLM": (LlamaForCausalLM, MyLlamaForCausalLM, MyMLXLlamaModel)}})
+    MODEL_REGISTER.update({"MLXLlamaForCausalLM": (LlamaForCausalLM, MyLlamaForCausalLM, MyMLXLlamaModel)})
 
     def load_weight(model_path: str) -> Dict[str, mx.array]:
         weight_files = glob.glob(os.path.join(model_path, "model*.safetensors"))
@@ -30,5 +30,5 @@ if HAS_MLX:
 
 else:
 
-    def load_weight(model_path: str) -> Dict[str, mx.array]:
+    def load_weight(model_path: str) -> Dict[str, "mx.array"]:
         return {}

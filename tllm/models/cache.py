@@ -68,8 +68,8 @@ class SeqDynamicCache:
         seq_value_states = torch.split(value_states, seq_len_list, dim=-2)
 
         key_states_list, value_states_list = [], []
-        for uuid_str, key_states, value_states in zip(uuid_str_list, seq_key_states, seq_value_states):
-            key, value = self.get_cache(uuid_str).update(key_states, value_states, layer_idx)
+        for uuid_str, key_state, value_state in zip(uuid_str_list, seq_key_states, seq_value_states):
+            key, value = self.get_cache(uuid_str).update(key_state, value_state, layer_idx)
             key_states_list.append(key)
             value_states_list.append(value)
 
@@ -94,17 +94,20 @@ if HAS_MLX:
             value_states: mx.array,
             cache_kwargs: Optional[Dict[str, Any]] = None,
         ) -> Tuple[mx.array, mx.array]:
-            # TODO test multi requests
             uuid_str_list = cache_kwargs.get("uuid_str_list", None)
             seq_len_list = [self.get_seq_len(uuid_str) for uuid_str in uuid_str_list]
-            seq_key_states = mx.split(key_states, seq_len_list, axis=-2)
-            seq_value_states = mx.split(value_states, seq_len_list, axis=-2)
-
+            # mx.split 传入参数是下标索引
+            index_list, idx = [], 0
+            for seq_len in seq_len_list[:-1]:  # 排除最后一个元素
+                idx += seq_len
+                index_list.append(idx)
+            seq_key_states = mx.split(key_states, index_list, axis=-2)
+            seq_value_states = mx.split(value_states, index_list, axis=-2)
             key_states_list, value_states_list = [], []
-            for uuid_str, key_states, value_states in zip(uuid_str_list, seq_key_states, seq_value_states):
-                key_states, value_states = self.get_cache(uuid_str).update_and_fetch(key_states, value_states)
-                key_states_list.append(key_states)
-                value_states_list.append(value_states)
+            for uuid_str, key_state, value_state in zip(uuid_str_list, seq_key_states, seq_value_states):
+                key, value = self.get_cache(uuid_str).update_and_fetch(key_state, value_state)
+                key_states_list.append(key)
+                value_states_list.append(value)
 
             cat_key_states, cat_value_states = mx.concat(key_states_list, axis=-2), mx.concat(
                 value_states_list, axis=-2

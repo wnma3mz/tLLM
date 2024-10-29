@@ -61,8 +61,8 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
         output_hidden_states = self.model(hidden_states, seq_input)
 
         output = serialize_tensor(output_hidden_states)
+
         cost_time = time.time() - s1
-        logger.info(f"{self.prefix_log_str} Forward pass cost time: {cost_time:.2f} s")
 
         return schemas_pb2.ForwardResponse(
             msg="Forward pass completed",
@@ -105,7 +105,6 @@ if __name__ == "__main__":
     args = parse_args()
     logger = setup_logger("client_" + __name__)
     comm = Communicator(is_torchrun=True) if "WORLD_SIZE" in os.environ else SingleNodeCommunicator()
-
     config = AutoConfig.from_pretrained(args.model_path, trust_remote_code=True)
 
     config.comm = comm

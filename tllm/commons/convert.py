@@ -3,9 +3,15 @@ from typing import List, Union
 import numpy as np
 import torch
 
-from tllm.models.register import HAS_MLX
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.rpc.schemas_pb2 import BFloat16Tensor
+
+try:
+    import mlx.core as mx  # type: ignore
+
+    HAS_MLX = True
+except:
+    HAS_MLX = False
 
 
 def protobuf_to_list(proto_message):
@@ -98,10 +104,11 @@ def serialize_tensor(tensor: Union[torch.Tensor, np.ndarray]) -> BFloat16Tensor:
     return tensor_proto
 
 
-def deserialize_tensor(tensor_proto: BFloat16Tensor) -> Union[torch.Tensor, np.ndarray]:
+def deserialize_tensor(tensor_proto: BFloat16Tensor) -> Union[torch.Tensor, "mx.array"]:
     if HAS_MLX:
         data = np.frombuffer(tensor_proto.data, dtype=np.float16)
-        return data.view(*tensor_proto.shape)
+        # return data.view(*tensor_proto.shape)
+        return mx.array(data, dtype=mx.bfloat16).reshape(*tensor_proto.shape)
     else:
         data = torch.frombuffer(tensor_proto.data, dtype=torch.float16).to(torch.bfloat16)
         return data.view(*tensor_proto.shape)

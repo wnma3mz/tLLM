@@ -24,7 +24,7 @@ class SingleNodeCommunicator:
     def gather(self, x: torch.Tensor):
         return x
 
-    def broadcast(self, x: torch.Tensor):
+    def broadcast(self, x: Union[torch.Tensor, "mx.array"]):
         return x
 
     def broadcast_object(self, x: List[Any]):

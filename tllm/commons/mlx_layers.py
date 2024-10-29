@@ -35,7 +35,7 @@ class MyAttention(Attention):
 
             cache_kwargs = {"uuid_str_list": cache.uuid_str_list}
             keys, values = cache.past_key_value.update_and_fetch(keys, values, cache_kwargs)
-
+        # TODO: how to work in multi requests
         output = mx.fast.scaled_dot_product_attention(queries, keys, values, scale=self.scale, mask=mask)
         output = output.transpose(0, 2, 1, 3).reshape(B, L, -1)
         return self.o_proj(output)

@@ -28,6 +28,8 @@ class ModelClient:
         config.decoder_end_layer_idx = self.end_idx
 
         arch = config.architectures[0]
+        if HAS_MLX:
+            arch = "MLX" + arch
         if arch not in MODEL_REGISTER:
             raise ValueError(f"Model {arch} not supported")
 
@@ -38,8 +40,9 @@ class ModelClient:
             import mlx.core as mx
 
             weights = load_weight(model_path)
+
             model = MY_MODEL_CLASS(config)
-            model.load_weights(list(weights.items()))
+            model.load_weights(list(weights.items()), strict=False)
             mx.eval(model.parameters())
         else:
             state_dict = HF_CausalLM_CLASS.from_pretrained(

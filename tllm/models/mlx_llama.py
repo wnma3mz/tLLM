@@ -1,8 +1,11 @@
+import math
 from typing import *
 
 import mlx.core as mx
 import mlx.nn as nn
+from mlx_lm.models.llama import ModelArgs
 import numpy as np
+from transformers import AutoConfig
 
 from tllm.commons.mlx_layers import MyTransformerBlock
 from tllm.models.cache import AttentionCache, CacheManager, SeqMLXDynamicCache
@@ -25,7 +28,7 @@ def build_mlx_mask(seq_len_list: List[Tuple[int, int]]) -> mx.array:
         l_index += mask.shape[0]
         r_index += mask.shape[1]
 
-    final_mask = mx.where(combined_mask, 0, -1e9)
+    final_mask = mx.where(combined_mask, 0, -math.inf)
     return final_mask
 
 
@@ -47,14 +50,14 @@ def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_la
             AttentionCache(
                 past_key_value=past_key_values,
                 uuid_str_list=seq_input.uuid_str_list,
-                attn_mask=build_mlx_mask(actual_seq_len_list),  # TODO test multi requests
+                attn_mask=build_mlx_mask(actual_seq_len_list),
             )
         )
     return attention_cache_list
 
 
 class Decoder(nn.Module):
-    def __init__(self, args, start_layer_idx: int, end_layer_idx: int):
+    def __init__(self, args: ModelArgs, start_layer_idx: int, end_layer_idx: int):
         super().__init__()
         self.args = args
         self.vocab_size = args.vocab_size
@@ -71,18 +74,18 @@ class Decoder(nn.Module):
 
 
 class MyMLXLlamaModel(nn.Module):
-    def __init__(self, args):
+    def __init__(self, config: AutoConfig):
         super().__init__()
+        args = ModelArgs.from_dict(config.to_dict())
         self.vocab_size = args.vocab_size
         self.cache_manager = CacheManager()
         self.args = args
-        self.model = Decoder(args, args.decoder_start_layer_idx, args.decoder_end_layer_idx)
-        self.num_layers = args.decoder_end_layer_idx - args.decoder_start_layer_idx
+        self.model = Decoder(args, config.decoder_start_layer_idx, config.decoder_end_layer_idx)
+        self.num_layers = config.decoder_end_layer_idx - config.decoder_start_layer_idx
 
-    def __call__(self, hidden_states: np.ndarray, seq_input: SeqInput) -> np.ndarray:
+    def __call__(self, hidden_states: mx.array, seq_input: SeqInput) -> np.ndarray:
         attention_cache_list = build_forward_cache(seq_input, self.cache_manager, self.num_layers)
 
-        hidden_states = mx.array(hidden_states)
         mask = attention_cache_list[0].attn_mask
         mask = mask if mask is None else mask.astype(hidden_states.dtype)
         output = self.model(hidden_states, mask=mask, cache=attention_cache_list)
@@ -93,7 +96,7 @@ class MyMLXLlamaModel(nn.Module):
                 [attention_cache.past_key_value.get_cache(uuid_str) for attention_cache in attention_cache_list],
             )
             self.cache_manager.check_alive()
-        return np.array(output)
+        return np.array(output.astype(mx.float16))
 
     @property
     def dtype(self):
