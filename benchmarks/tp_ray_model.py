@@ -161,7 +161,6 @@ class MyLlamaSdpaAttention(nn.Module):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        # TODO: speed up the following line
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,

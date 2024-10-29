@@ -1,7 +1,9 @@
-from typing import List
+from typing import List, Union
 
+import numpy as np
 import torch
 
+from tllm.models.register import HAS_MLX
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.rpc.schemas_pb2 import BFloat16Tensor
 
@@ -85,16 +87,21 @@ def list_to_protobuf(data: List):
     return multi_array_proto
 
 
-# TODO: support mx.array
-def serialize_tensor(tensor: torch.Tensor) -> BFloat16Tensor:
+def serialize_tensor(tensor: Union[torch.Tensor, np.ndarray]) -> BFloat16Tensor:
     # TODO: support bfloat16
     tensor_proto = BFloat16Tensor()
     tensor_proto.shape.extend(tensor.shape)  # 添加形状
-    tensor_proto.data = tensor.to(torch.float16).detach().numpy().tobytes()
+    if isinstance(tensor, np.ndarray):
+        tensor_proto.data = tensor.tobytes()
+    else:
+        tensor_proto.data = tensor.to(torch.float16).detach().numpy().tobytes()
     return tensor_proto
 
 
-def deserialize_tensor(tensor_proto: BFloat16Tensor) -> torch.Tensor:
-    data = torch.frombuffer(tensor_proto.data, dtype=torch.float16).to(torch.bfloat16)
-    tensor_data = data.view(*tensor_proto.shape)
-    return tensor_data
+def deserialize_tensor(tensor_proto: BFloat16Tensor) -> Union[torch.Tensor, np.ndarray]:
+    if HAS_MLX:
+        data = np.frombuffer(tensor_proto.data, dtype=np.float16)
+        return data.view(*tensor_proto.shape)
+    else:
+        data = torch.frombuffer(tensor_proto.data, dtype=torch.float16).to(torch.bfloat16)
+        return data.view(*tensor_proto.shape)

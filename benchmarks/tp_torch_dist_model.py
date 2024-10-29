@@ -149,7 +149,6 @@ class RowParallelLayer(nn.Module):
 
 
 class MyLlamaMLP(nn.Module):
-    # TODO: 融合 Col 和 Row Parallel，且在适当的时候才进行 gather/all gather/reduce
     def __init__(self, config, layer_idx: int):
         super().__init__()
         self.layer_idx = layer_idx
@@ -273,7 +272,6 @@ class MyLlamaSdpaAttention(nn.Module):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        # TODO: speed up the following line
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,

@@ -6,7 +6,7 @@ import time
 
 import websockets
 
-from tllm.models.register import MODEL_REGISTER
+from tllm.models.register import HAS_MLX, MODEL_REGISTER, load_weight
 
 
 class ModelClient:
@@ -34,14 +34,23 @@ class ModelClient:
         HF_CausalLM_CLASS, _, MY_MODEL_CLASS = MODEL_REGISTER[arch]
 
         s1 = time.time()
-        state_dict = HF_CausalLM_CLASS.from_pretrained(
-            model_path, trust_remote_code=True, device_map="cpu", torch_dtype=dtype, low_cpu_mem_usage=True
-        ).state_dict()
-        model = MY_MODEL_CLASS(config).to(dtype)
-        model.load_state_dict(state_dict)
+        if HAS_MLX:
+            import mlx.core as mx
+
+            weights = load_weight(model_path)
+            model = MY_MODEL_CLASS(config)
+            model.load_weights(list(weights.items()))
+            mx.eval(model.parameters())
+        else:
+            state_dict = HF_CausalLM_CLASS.from_pretrained(
+                model_path, trust_remote_code=True, device_map="cpu", torch_dtype=dtype, low_cpu_mem_usage=True
+            ).state_dict()
+            model = MY_MODEL_CLASS(config).to(dtype)
+            model.load_state_dict(state_dict)
+            del state_dict
+
         self.logger.info(f"[Rank: {config.comm.rank}] Cost time {time.time() - s1}")
         model.eval()
-        del state_dict
         return model
 
     def _create_event_loop(self):

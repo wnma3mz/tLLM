@@ -4,6 +4,7 @@ from typing import *
 
 import torch
 
+from tllm.generate.token_utils import TokenizerUtils
 from tllm.models.protocol import SeqInput, SequenceRequestData
 from tllm.models.utils import is_generate_end
 
@@ -64,12 +65,13 @@ async def generate_utils(model, sequence_request_list: List[SequenceRequestData]
             sequence_request.tpot_cost_time = forward_result.comm_cost_time_list
 
     comm_cost_time_list = forward_result.comm_cost_time_list
-    model.logger.debug(f"communication cost time: {",".join([f'{x:.4f}' for x in comm_cost_time_list])}")
+    comm_cost_time_str = ",".join([f"{x:.4f}" for x in comm_cost_time_list])
+    model.logger.debug(f"communication cost time: {comm_cost_time_str}")
 
 
 class AsyncEngine:
     def __init__(self, logger, model):
-        self.tok = model.tok
+        self.tok: TokenizerUtils = model.tok
         self.model = model
         self.prefill_queue: asyncio.Queue = asyncio.Queue()
         self.decoding_queue: asyncio.Queue = asyncio.Queue()

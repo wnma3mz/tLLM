@@ -7,7 +7,7 @@ from transformers.cache_utils import DynamicCache
 
 try:
     import mlx.core as mx
-    from mlx_lm.models.cache import KVCache, RotatingKVCache
+    from mlx_lm.models.cache import KVCache
 
     HAS_MLX = True
 except:
@@ -17,7 +17,7 @@ except:
 @dataclass
 class AttentionCache:
     uuid_str_list: List[str]
-    past_key_value: Union[DynamicCache, List[Any]]
+    past_key_value: Union[DynamicCache, "KVCache"]
     attn_mask: Union[torch.Tensor, "mx.array"]
     position_ids: Optional[torch.Tensor] = field(default=None, repr=False)
 
@@ -29,11 +29,14 @@ class SeqDynamicCache:
     def add(self, uuid_str: str, seq_len: int, cache: Optional[DynamicCache] = None):
         self.cache_dict.update({uuid_str: {"cache": DynamicCache() if cache is None else cache, "seq_len": seq_len}})
 
-    def get_cache(self, uuid_str: str) -> DynamicCache:
+    def get_cache(self, uuid_str: str) -> Union[DynamicCache, "KVCache"]:
         return self.cache_dict[uuid_str]["cache"]
 
     def get_seq_len(self, uuid_str: str) -> int:
         return self.cache_dict[uuid_str]["seq_len"]
+
+    def get_max_seq_len(self) -> int:
+        return max(self.get_seq_len(uuid_str) for uuid_str in self.cache_dict.keys())
 
     def update(
         self,
@@ -74,41 +77,39 @@ class SeqDynamicCache:
         return cat_key_states, cat_value_states
 
 
-def make_prompt_cache(num_layers: int, max_kv_size: Optional[int] = None) -> List[Any]:
-
-    if max_kv_size is not None:
-        return [RotatingKVCache(max_size=max_kv_size, keep=4) for _ in range(num_layers)]
-    else:
-        return [KVCache() for _ in range(num_layers)]
-
-
 if HAS_MLX:
 
     class SeqMLXDynamicCache(SeqDynamicCache):
-        def __init__(self, num_layers: int) -> None:
-            super().__init__()
-            self.num_layers = num_layers
+        def get_max_offset(self) -> int:
+            return max(self.get_cache(uuid_str).offset for uuid_str in self.cache_dict.keys())
 
-        def add(self, uuid_str: str, seq_len: int, cache: Optional[DynamicCache] = None):
-            self.cache_dict.update(
-                {
-                    uuid_str: {
-                        "cache": make_prompt_cache(self.num_layers, max_kv_size=None) if cache is None else cache,
-                        "seq_len": seq_len,
-                    }
-                }
-            )
+        def add(self, uuid_str: str, seq_len: int, cache: Optional[KVCache] = None):
+            cache = KVCache() if cache is None else cache
+            offset = cache.offset
+            self.cache_dict.update({uuid_str: {"cache": cache, "seq_len": seq_len, "offset": offset}})
 
         def update_and_fetch(
             self,
             key_states: mx.array,
             value_states: mx.array,
-            layer_idx: int,
             cache_kwargs: Optional[Dict[str, Any]] = None,
         ) -> Tuple[mx.array, mx.array]:
-            # for mlx
-            # TODO
-            return key_states, value_states
+            # TODO test multi requests
+            uuid_str_list = cache_kwargs.get("uuid_str_list", None)
+            seq_len_list = [self.get_seq_len(uuid_str) for uuid_str in uuid_str_list]
+            seq_key_states = mx.split(key_states, seq_len_list, axis=-2)
+            seq_value_states = mx.split(value_states, seq_len_list, axis=-2)
+
+            key_states_list, value_states_list = [], []
+            for uuid_str, key_states, value_states in zip(uuid_str_list, seq_key_states, seq_value_states):
+                key_states, value_states = self.get_cache(uuid_str).update_and_fetch(key_states, value_states)
+                key_states_list.append(key_states)
+                value_states_list.append(value_states)
+
+            cat_key_states, cat_value_states = mx.concat(key_states_list, axis=-2), mx.concat(
+                value_states_list, axis=-2
+            )
+            return cat_key_states, cat_value_states
 
 
 class CacheManager:
