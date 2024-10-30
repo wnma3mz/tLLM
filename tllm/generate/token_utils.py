@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-import re
 from typing import Dict, List
 
 from transformers import AutoTokenizer
@@ -19,6 +18,7 @@ class TokenizerUtils:
     def preprocess(self, text: str = None, messages: List[Dict[str, str]] = None) -> TokenizerResult:
         if messages:
             text = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        assert text is not None, "Either text or messages must be provided."
         input_ids = self.tokenizer.encode(text, add_special_tokens=True)
         return TokenizerResult(input_ids=input_ids, input_str=text)
 

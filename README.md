@@ -41,6 +41,10 @@ RoadMap
     - [ ] LoRA Training
 - [x] Web UI
     - [x] Node Status
+    - [x] ChatWeb Demo by Gradio
+        - [ ] Parameters
+        - [ ] System
+        - [ ] Button
     - [ ] Display Multi Model
 - [ ] Multi-Model
     - [ ] LLaVA

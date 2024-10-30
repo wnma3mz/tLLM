@@ -20,7 +20,17 @@ from tllm.entrypoints.protocol import (
     random_uuid,
 )
 from tllm.generate.decode_utils import DecodeUtils
+from tllm.generate.sampling_params import SamplingParams
 from tllm.models.protocol import RequestOutput
+
+
+def to_sampling_params(request: ChatCompletionRequest) -> SamplingParams:
+    return SamplingParams(
+        top_k=request.top_k,
+        top_p=request.top_p,
+        temperature=request.temperature,
+        max_tokens=request.max_tokens,
+    )
 
 
 class OpenAIServing:
@@ -35,9 +45,15 @@ class OpenAIServing:
 
     async def create_chat_completion(self, request: ChatCompletionRequest, raw_request: Request):
         request_id = f"chat-{random_uuid()}"
-        input_ids = self.engine.preprocess(request.messages)
+        messages = self.engine.parse_message(request.messages)
+        input_ids = self.engine.preprocess(messages)
 
-        sequence_data = SequenceRequestData(request_id=request_id, input_ids=input_ids, sampler=DecodeUtils("greedy"))
+        sequence_data = SequenceRequestData(
+            request_id=request_id,
+            sampling_params=to_sampling_params(request),
+            nput_ids=input_ids,
+            sampler=DecodeUtils("greedy"),
+        )
         result_generator = self.engine.generate_stream(sequence_data)
 
         if request.stream:

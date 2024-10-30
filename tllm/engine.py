@@ -51,7 +51,7 @@ async def generate_utils(model, sequence_request_list: List[SequenceRequestData]
         end = is_generate_end(
             sequence_request.output_ids,
             eos_token_ids=model.eos_token_ids,
-            max_new_tokens=sequence_request.sampling_params.get("max_new_tokens", 16),
+            max_new_tokens=sequence_request.sampling_params.max_tokens,
         )
         if end.is_end:
             sequence_request.finish_reason_list = [end.finish_reason]
@@ -79,7 +79,10 @@ class AsyncEngine:
         self.limit_size: int = 5  # 每次最多处理 5 个请求，prefill + decode
         self.logger = logger
 
-    def preprocess(self, messages: List[Dict[str, Any]]) -> torch.Tensor:
+    def parse_message(self, messages: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+        return [{"role": msg["role"], "content": msg["content"]} for msg in messages]
+
+    def preprocess(self, messages: List[Dict[str, str]]) -> torch.Tensor:
         input_id_list = self.tok.preprocess(messages=messages).input_ids
         input_ids = torch.tensor(input_id_list).unsqueeze(0)
         return input_ids

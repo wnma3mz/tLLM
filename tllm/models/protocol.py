@@ -4,6 +4,8 @@ from typing import *
 
 import torch
 
+from tllm.generate.sampling_params import SamplingParams
+
 finish_reason_type = Literal["length", "stop", None]
 
 
@@ -61,12 +63,11 @@ class ForwardResult:
 class SequenceRequestData:
     # 每个请求在输入输出模型的数据
     request_id: str
-    n: int = 1  # 需要生成的句子数量
+    sampling_params: SamplingParams
     input_ids: Optional[List[int]] = None  # 输入的 token id
     finish_reason_list: Optional[List[str]] = None
 
     sampler: Optional[Callable] = None
-    sampling_params: Optional[Dict] = None
 
     output_ids: Optional[List[int]] = None  # 最终生成的 token id
     output_text: Optional[str] = None  # 最终生成的 text
@@ -82,7 +83,6 @@ class SequenceRequestData:
     condition: asyncio.Condition = field(default_factory=asyncio.Condition)
 
     def __post_init__(self):
-        self.sampling_params = dict()
         self.output_ids = []
         self.output_text = ""
         self.generate_ids = []
