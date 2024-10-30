@@ -10,16 +10,14 @@ try:
     from mlx_lm.models.cache import KVCache
 
     HAS_MLX = True
+    CACHE_CLASS = KVCache
+    cat_func = mx.concat
+    split_func = mx.split
 except:
+    CACHE_CLASS = DynamicCache
+    cat_func = torch.cat
+    split_func = torch.split
     HAS_MLX = False
-
-
-@dataclass
-class AttentionCache:
-    uuid_str_list: List[str]
-    past_key_value: Union[DynamicCache, "KVCache"]
-    attn_mask: Union[torch.Tensor, "mx.array"]
-    position_ids: Optional[torch.Tensor] = field(default=None, repr=False)
 
 
 class SeqDynamicCache:
@@ -27,7 +25,7 @@ class SeqDynamicCache:
         self.cache_dict: Dict[Any] = {}
 
     def add(self, uuid_str: str, seq_len: int, cache: Optional[DynamicCache] = None):
-        self.cache_dict.update({uuid_str: {"cache": DynamicCache() if cache is None else cache, "seq_len": seq_len}})
+        self.cache_dict.update({uuid_str: {"cache": CACHE_CLASS() if cache is None else cache, "seq_len": seq_len}})
 
     def get_cache(self, uuid_str: str) -> Union[DynamicCache, "KVCache"]:
         return self.cache_dict[uuid_str]["cache"]
@@ -73,46 +71,64 @@ class SeqDynamicCache:
             key_states_list.append(key)
             value_states_list.append(value)
 
-        cat_key_states, cat_value_states = torch.cat(key_states_list, dim=-2), torch.cat(value_states_list, dim=-2)
+        cat_key_states, cat_value_states = cat_func(key_states_list, dim=-2), cat_func(value_states_list, dim=-2)
         return cat_key_states, cat_value_states
 
 
-if HAS_MLX:
+class SeqMLXDynamicCache(SeqDynamicCache):
+    def get_max_offset(self) -> int:
+        return max(self.get_cache(uuid_str).offset for uuid_str in self.cache_dict.keys())
 
-    class SeqMLXDynamicCache(SeqDynamicCache):
-        def get_max_offset(self) -> int:
-            return max(self.get_cache(uuid_str).offset for uuid_str in self.cache_dict.keys())
+    def add(self, uuid_str: str, seq_len: int, cache: Optional["KVCache"] = None):
+        cache = CACHE_CLASS() if cache is None else cache
+        offset = cache.offset
+        self.cache_dict.update({uuid_str: {"cache": cache, "seq_len": seq_len, "offset": offset}})
 
-        def add(self, uuid_str: str, seq_len: int, cache: Optional[KVCache] = None):
-            cache = KVCache() if cache is None else cache
-            offset = cache.offset
-            self.cache_dict.update({uuid_str: {"cache": cache, "seq_len": seq_len, "offset": offset}})
+    @property
+    def offset_list(self) -> List[int]:
+        return [self.get_cache(uuid_str).offset for uuid_str in self.cache_dict.keys()]
 
-        def update_and_fetch(
-            self,
-            key_states: mx.array,
-            value_states: mx.array,
-            cache_kwargs: Optional[Dict[str, Any]] = None,
-        ) -> Tuple[mx.array, mx.array]:
-            uuid_str_list = cache_kwargs.get("uuid_str_list", None)
-            seq_len_list = [self.get_seq_len(uuid_str) for uuid_str in uuid_str_list]
-            # mx.split 传入参数是下标索引
-            index_list, idx = [], 0
-            for seq_len in seq_len_list[:-1]:  # 排除最后一个元素
-                idx += seq_len
-                index_list.append(idx)
-            seq_key_states = mx.split(key_states, index_list, axis=-2)
-            seq_value_states = mx.split(value_states, index_list, axis=-2)
-            key_states_list, value_states_list = [], []
-            for uuid_str, key_state, value_state in zip(uuid_str_list, seq_key_states, seq_value_states):
-                key, value = self.get_cache(uuid_str).update_and_fetch(key_state, value_state)
-                key_states_list.append(key)
-                value_states_list.append(value)
+    @property
+    def index_list(self) -> List[int]:
+        seq_len_list = [self.get_seq_len(uuid_str) for uuid_str in self.cache_dict.keys()]
+        index_list, idx = [], 0
+        for seq_len in seq_len_list[:-1]:
+            idx += seq_len
+            index_list.append(idx)
+        return index_list
 
-            cat_key_states, cat_value_states = mx.concat(key_states_list, axis=-2), mx.concat(
-                value_states_list, axis=-2
-            )
-            return cat_key_states, cat_value_states
+    def update_and_fetch(
+        self,
+        seq_key_states: List["mx.array"],
+        value_states: "mx.array",
+        cache_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> Tuple["mx.array", "mx.array"]:
+        uuid_str_list = cache_kwargs.get("uuid_str_list", None)
+        # seq_key_states = split_func(key_states, self.index_list, axis=-2)
+        seq_value_states = split_func(value_states, self.index_list, axis=-2)
+        key_states_list, value_states_list = [], []
+        for uuid_str, key_state, value_state in zip(uuid_str_list, seq_key_states, seq_value_states):
+            # print(f"uuid: {uuid_str}: before key", key_state[0][0][0][0])
+            # if self.get_cache(uuid_str).keys is not None:
+            #     print(f"uuid: {uuid_str}: before key", self.get_cache(uuid_str).keys.shape)
+            # else:
+            #     print(f"uuid: {uuid_str}: before key None")
+            key, value = self.get_cache(uuid_str).update_and_fetch(key_state, value_state)
+            # print(f"uuid: {uuid_str}: after key", self.get_cache(uuid_str).keys.shape)
+            # print(f"uuid: {uuid_str}: after key", key[0][0][0][0])
+            key_states_list.append(key)
+            value_states_list.append(value)
+
+        cat_key_states, cat_value_states = cat_func(key_states_list, axis=-2), cat_func(value_states_list, axis=-2)
+        return cat_key_states, cat_value_states
+
+
+@dataclass
+class AttentionCache:
+    uuid_str_list: List[str]
+    past_key_value: Union[SeqDynamicCache, SeqMLXDynamicCache]
+    attn_mask: Union[torch.Tensor, "mx.array"]
+    position_ids: Optional[torch.Tensor] = field(default=None, repr=False)
 
 
 class CacheManager:

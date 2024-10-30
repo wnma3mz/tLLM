@@ -25,6 +25,9 @@ RoadMap
     - [x] Queuing mechanism
     - [x] Continuous Batch
     - [x] Test Cases
+    - [ ] Client Disconnect
+        - [ ] In Queue
+        - [ ] In Generation
 - [x] Decoding Strategy
     - [x] Top-K Sampling
     - [x] Top-P Sampling

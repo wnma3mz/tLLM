@@ -62,10 +62,7 @@ class Decoder(nn.Module):
         self.args = args
         self.vocab_size = args.vocab_size
         self.num_hidden_layers = args.num_hidden_layers
-        self.layers = [
-            MyTransformerBlock(args=args, layer_idx=layer_idx, offset=start_layer_idx)
-            for layer_idx in range(start_layer_idx, end_layer_idx)
-        ]
+        self.layers = [MyTransformerBlock(args=args) for _ in range(start_layer_idx, end_layer_idx)]
 
     def __call__(self, h: mx.array, mask, cache: List[Any]):
         for layer, c in zip(self.layers, cache):
