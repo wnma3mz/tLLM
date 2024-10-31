@@ -108,22 +108,20 @@ async def client_websocket(websocket: WebSocket, client_id: str):
         while True:
             data = await websocket.receive_json()
             if data["type"] == "register_layers":
-                layer_manager.clients[client_id] = (data["start_idx"], data["end_idx"])
-                layer_manager.add_layer_count(layer_manager.clients[client_id])
-
-                # 根据 layer idx 自动算 pp idx
-                client_url = f"{data['ip_addr']}:{data['port']}"  # delay 几秒后再注册
-                # openai_serving_chat.engine.model.server.update_url(0, client_url)
+                layer_manager.register_client(client_id, data["start_idx"], data["end_idx"])
 
                 await layer_manager.broadcast_state()
+                # 根据 layer idx 自动算 pp idx
+                url_list = layer_manager.get_pp_url_list()
+                if url_list is not None:
+                    for pp_idx, url in enumerate(url_list):
+                        openai_serving_chat.engine.model.server.update_url(pp_idx, url)
     except WebSocketDisconnect:
-        if client_id in layer_manager.clients:
-            layer_manager.delete_layer_count(layer_manager.clients[client_id])
-            del layer_manager.clients[client_id]
-        if client_id in layer_manager.websockets:
-            del layer_manager.websockets[client_id]
+        # 如果断开连接，删除client
+        pp_idx = layer_manager.unregister_client(client_id)
         # 删除
-        # openai_serving_chat.engine.model.server.remove_url(0)
+        if pp_idx != -1:
+            openai_serving_chat.engine.model.server.remove_url(pp_idx)
         await layer_manager.broadcast_state()
 
 

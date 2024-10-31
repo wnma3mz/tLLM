@@ -15,19 +15,18 @@ class ChatInterface:
 
     def _create_chat_column(self) -> Tuple[gr.Chatbot, gr.Textbox, gr.Button, gr.Button, gr.Button]:
         """创建聊天界面的主列"""
-        chatbot = gr.Chatbot(height=600, elem_classes="chatbot", show_label=False)
+        chatbot = gr.Chatbot(height=600, show_label=False)
 
-        with gr.Row(elem_classes="input-row"):
+        with gr.Row():
             msg = gr.Textbox(
                 show_label=False,
                 placeholder="输入消息...",
                 container=False,
-                # elem_classes="message-input",
                 scale=12,
             )
             submit_btn = gr.Button("发送", elem_classes="button-primary", scale=1)
 
-        with gr.Row(elem_classes="input-row"):
+        with gr.Row():
             stop_btn = gr.Button("停止生成", elem_classes="button-secondary", scale=1)
             clear_btn = gr.Button("清空对话", elem_classes="button-secondary", scale=1)
 

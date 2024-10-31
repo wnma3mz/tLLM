@@ -14,24 +14,6 @@ class GenerationConfig:
 custom_css = """
 footer{display:none !important}
 
-.container {
-    max-width: 800px;
-    margin: 0 auto;
-    padding: 20px;
-}
-
-.chatbot {
-    border-radius: 10px;
-    border: 1px solid #e0e0e0;
-    background: #ffffff;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-}
-
-.input-row {
-    gap: 10px;
-    margin-top: 20px;
-}
-
 .button-primary {
     background: #2563eb !important;
     border: none !important;
