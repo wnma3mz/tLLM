@@ -33,7 +33,7 @@ RoadMap
         - [x] Parameters
         - [x] System
         - [x] Button
-- [ ] Multi-Model
+- [ ] Multi-Modal
     - [ ] LLaVA
 - [x] Backend
     - [x] Client Send Url and Port
@@ -53,7 +53,7 @@ RoadMap
         - [x] using anythingLLM            
 - [ ] KV Cache
     - [x] Request/Sequence Cache
-    - [ ] Custom KV Cache Class
+    - [ ] Custom KV Cache Class (ingress)
     - [ ] Token-Level Cache
         - [ ] Prefix-tree Cache
 - [ ] Shard Storage

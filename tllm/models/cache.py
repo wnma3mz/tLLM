@@ -33,9 +33,6 @@ class SeqDynamicCache:
     def get_seq_len(self, uuid_str: str) -> int:
         return self.cache_dict[uuid_str]["seq_len"]
 
-    def get_max_seq_len(self) -> int:
-        return max(self.get_seq_len(uuid_str) for uuid_str in self.cache_dict.keys())
-
     def update(
         self,
         key_states: torch.Tensor,
@@ -76,9 +73,6 @@ class SeqDynamicCache:
 
 
 class SeqMLXDynamicCache(SeqDynamicCache):
-    def get_max_offset(self) -> int:
-        return max(self.get_cache(uuid_str).offset for uuid_str in self.cache_dict.keys())
-
     def add(self, uuid_str: str, seq_len: int, cache: Optional["KVCache"] = None):
         cache = CACHE_CLASS() if cache is None else cache
         offset = cache.offset
@@ -104,23 +98,18 @@ class SeqMLXDynamicCache(SeqDynamicCache):
         cache_kwargs: Optional[Dict[str, Any]] = None,
     ) -> Tuple["mx.array", "mx.array"]:
         uuid_str_list = cache_kwargs.get("uuid_str_list", None)
-        # seq_key_states = split_func(key_states, self.index_list, axis=-2)
         seq_value_states = split_func(value_states, self.index_list, axis=-2)
         key_states_list, value_states_list = [], []
         for uuid_str, key_state, value_state in zip(uuid_str_list, seq_key_states, seq_value_states):
-            # print(f"uuid: {uuid_str}: before key", key_state[0][0][0][0])
-            # if self.get_cache(uuid_str).keys is not None:
-            #     print(f"uuid: {uuid_str}: before key", self.get_cache(uuid_str).keys.shape)
-            # else:
-            #     print(f"uuid: {uuid_str}: before key None")
             key, value = self.get_cache(uuid_str).update_and_fetch(key_state, value_state)
-            # print(f"uuid: {uuid_str}: after key", self.get_cache(uuid_str).keys.shape)
-            # print(f"uuid: {uuid_str}: after key", key[0][0][0][0])
             key_states_list.append(key)
             value_states_list.append(value)
 
         cat_key_states, cat_value_states = cat_func(key_states_list, axis=-2), cat_func(value_states_list, axis=-2)
         return cat_key_states, cat_value_states
+
+
+MIX_TENSOR = Union[torch.Tensor, "mx.array"]
 
 
 @dataclass
@@ -129,6 +118,83 @@ class AttentionCache:
     past_key_value: Union[SeqDynamicCache, SeqMLXDynamicCache]
     attn_mask: Union[torch.Tensor, "mx.array"]
     position_ids: Optional[torch.Tensor] = field(default=None, repr=False)
+
+
+class NextLayerCache:
+    def __init__(self) -> None:
+        self.cache_dict: Dict[Any] = {}
+        self.key_cache: Union[torch.Tensor, "mx.array"] = None
+        self.value_cache: Union[torch.Tensor, "mx.array"] = None
+
+    def get_cache_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
+        return 0 if self.key_cache is None else self.key_cache.shape[-2]
+
+    @property
+    def seq_len_list(self) -> List[int]:
+        return [self.get_seq_len(uuid_str) for uuid_str in self.cache_dict.keys()]
+
+    @property
+    def index_list(self) -> List[int]:
+        index_list, idx = [], 0
+        for seq_len in self.seq_len_list[:-1]:
+            idx += seq_len
+            index_list.append(idx)
+        return index_list
+
+    def add(self, uuid_str: str, seq_len: int, cache: Optional[Tuple[MIX_TENSOR, MIX_TENSOR]] = None):
+        cache = (self.key_cache, self.value_cache) if cache is None else cache
+        self.cache_dict.update({uuid_str: {"cache": cache, "seq_len": seq_len}})
+
+    def get_cache(self, uuid_str: str) -> Union[DynamicCache, "KVCache"]:
+        return self.cache_dict[uuid_str]["cache"]
+
+    def get_seq_len(self, uuid_str: str) -> int:
+        return self.cache_dict[uuid_str]["seq_len"]
+
+    def _update_uuid_cache(self, key_states: MIX_TENSOR, value_states: MIX_TENSOR) -> Tuple[MIX_TENSOR, MIX_TENSOR]:
+        if self.key_cache is None:
+            self.key_cache = key_states
+            self.value_cache = value_states
+        else:
+            if HAS_MLX:
+                self.key_cache = cat_func([self.key_cache, key_states], axis=2)
+                self.value_cache = cat_func([self.value_cache, value_states], axis=2)
+            else:
+                self.key_cache = cat_func([self.key_cache, key_states], dim=-2)
+                self.value_cache = cat_func([self.value_cache, value_states], dim=-2)
+        return self.key_cache, self.value_cache
+
+    def update(
+        self, key_states: Union[torch.Tensor, List["mx.array"]], value_states: MIX_TENSOR, **cache_kwargs
+    ) -> Tuple[MIX_TENSOR, MIX_TENSOR]:
+        uuid_str_list = cache_kwargs.get("uuid_str_list", None)
+        if HAS_MLX:
+            seq_key_states = key_states  # 已经在外部 split 过了
+            seq_value_states = split_func(value_states, self.index_list, axis=-2)
+        else:
+            seq_len_list = [self.get_seq_len(uuid_str) for uuid_str in uuid_str_list]
+            seq_key_states = split_func(key_states, seq_len_list, dim=-2)
+            seq_value_states = split_func(value_states, seq_len_list, dim=-2)
+
+        key_states_list, value_states_list = [], []
+        for key_state, value_state in zip(uuid_str_list, seq_key_states, seq_value_states):
+            key, value = self._update_uuid_cache(key_state, value_state)
+            key_states_list.append(key)
+            value_states_list.append(value)
+
+        if HAS_MLX:
+            return cat_func(key_states_list, axis=2), cat_func(value_states_list, axis=2)
+        else:
+            return cat_func(key_states_list, dim=-2), cat_func(value_states_list, dim=-2)
+
+
+@dataclass
+class NextAttentionCache:
+    uuid_str_list: List[str]
+    cache: List[NextLayerCache]  # 每层模型都有一个 NextDynamicCache
+    attn_mask: Union[torch.Tensor, "mx.array"]
+    position_ids: Optional[torch.Tensor] = field(default=None, repr=False)  # 只在 torch 下游泳
 
 
 class CacheManager:
