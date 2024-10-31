@@ -37,15 +37,19 @@ RoadMap
 - [ ] split model before load
 - [x] MLX Framework
     - [x] With Torch Inference
-        - [ ] Some bugs with multi requests
+        - [x] Some bugs with multi requests
     - [ ] LoRA Training
+- [ ] Auto Layer Split
+    - [ ] get free layer idx
+    - [ ] calculate layer memory
+    - [ ] get machine free memory and set layer
 - [x] Web UI
     - [x] Node Status
+        - [ ] Display Multi Model
     - [x] ChatWeb Demo by Gradio
-        - [ ] Parameters
-        - [ ] System
-        - [ ] Button
-    - [ ] Display Multi Model
+        - [x] Parameters
+        - [x] System
+        - [x] Button
 - [ ] Multi-Model
     - [ ] LLaVA
 - [ ] KV Cache
