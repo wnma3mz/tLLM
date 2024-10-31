@@ -4,6 +4,7 @@ from typing import *
 
 import torch
 
+from tllm.generate.sampler_utils import SamplerUtils
 from tllm.generate.sampling_params import SamplingParams
 
 finish_reason_type = Literal["length", "stop", None]
@@ -67,7 +68,7 @@ class SequenceRequestData:
     input_ids: Optional[List[int]] = None  # 输入的 token id
     finish_reason_list: Optional[List[str]] = None
 
-    sampler: Optional[Callable] = None
+    sampler: Optional[SamplerUtils] = None
 
     output_ids: Optional[List[int]] = None  # 最终生成的 token id
     output_text: Optional[str] = None  # 最终生成的 text
@@ -87,7 +88,7 @@ class SequenceRequestData:
         self.output_text = ""
         self.generate_ids = []
         self.generate_texts = []
-        self.finish_reason_list = [None] * self.n
+        self.finish_reason_list = [None] * self.sampling_params.n
 
     def __repr__(self) -> str:
         return f"request_id={self.request_id}; output_ids={self.output_ids}"
@@ -105,7 +106,7 @@ class SequenceRequestData:
                         token_ids=self.generate_ids[index],
                         finish_reason=self.finish_reason_list[index],
                     )
-                    for index in range(self.n)
+                    for index in range(self.sampling_params.n)
                 ],
                 self.is_stop,
                 None,
@@ -121,7 +122,7 @@ class SequenceRequestData:
                     token_ids=tuple(self.output_ids),
                     finish_reason=self.finish_reason_list[index],
                 )
-                for index in range(self.n)
+                for index in range(self.sampling_params.n)
             ],
             finished=True,
             prompt_logprobs=None,

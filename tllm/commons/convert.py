@@ -104,10 +104,9 @@ def serialize_tensor(tensor: Union[torch.Tensor, np.ndarray]) -> BFloat16Tensor:
     return tensor_proto
 
 
-def deserialize_tensor(tensor_proto: BFloat16Tensor) -> Union[torch.Tensor, "mx.array"]:
-    if HAS_MLX:
+def deserialize_tensor(tensor_proto: BFloat16Tensor, to_tensor: bool = False) -> Union[torch.Tensor, "mx.array"]:
+    if HAS_MLX and to_tensor == False:
         data = np.frombuffer(tensor_proto.data, dtype=np.float16)
-        # return data.view(*tensor_proto.shape)
         return mx.array(data, dtype=mx.bfloat16).reshape(*tensor_proto.shape)
     else:
         data = torch.frombuffer(tensor_proto.data, dtype=torch.float16).to(torch.bfloat16)

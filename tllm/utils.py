@@ -10,6 +10,7 @@ import torch
 from transformers import AutoConfig
 
 from tllm.engine import AsyncEngine
+from tllm.generate.token_utils import TokenizerUtils
 from tllm.models.register import MODEL_REGISTER
 from tllm.rpc.manager import RPCManager
 from tllm.schemas import NodeConfig
@@ -109,7 +110,7 @@ def parse_url_list(config_path: str) -> List[str]:
     return [pp_config["url"] for pp_config in config_list]
 
 
-def init_engine(args):
+def init_engine(args) -> Tuple[AsyncEngine, TokenizerUtils]:
     config = AutoConfig.from_pretrained(args.model_path, trust_remote_code=True)
     arch = config.architectures[0]
     if arch not in MODEL_REGISTER:
@@ -118,9 +119,10 @@ def init_engine(args):
 
     url_list = parse_url_list(args.config_path)
     server = RPCManager(url_list)
-    model = MY_CausalLM_CLASS.from_pretrained(logger, config, args.model_path, args.weight_path, server)
+    tok = TokenizerUtils(args.model_path)
+    model = MY_CausalLM_CLASS.from_pretrained(logger, config, tok, args.weight_path, server)
     engine = AsyncEngine(logger, model)
-    return engine
+    return engine, tok
 
 
 logger = setup_logger(__name__, logging.DEBUG)

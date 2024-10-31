@@ -21,7 +21,7 @@ class SamplingParams:
         stop_token_ids: Optional[List[int]] = None,
         include_stop_str_in_output: bool = False,
         ignore_eos: bool = False,
-        max_tokens: Optional[int] = 16,
+        max_tokens: int = 16,
         min_tokens: int = 0,
         logprobs: Optional[int] = None,
         prompt_logprobs: Optional[int] = None,

@@ -1,44 +1,49 @@
-from dataclasses import dataclass
 from typing import *
 
 import torch
 import torch.nn.functional as F
 
 from tllm.generate.sampling_params import SamplingParams
+from tllm.generate.token_utils import TokenizerUtils
 
 
-def top_k_sampling(logits: torch.Tensor, k: int = 10):
-    logits = logits.squeeze(0)  # Assuming logits is [1, vocab_size]
-    filtered_logits, top_inds = logits.topk(k)
-    top_probs = F.softmax(filtered_logits, dim=-1)
-    chosen_ind = torch.multinomial(top_probs, 1)
-    return top_inds[chosen_ind].unsqueeze(0)
+def top_k_sampling(logits: torch.Tensor, k: int = 10) -> torch.Tensor:
+    # logits: [bsz, vocab_size]
+    filtered_logits, top_indices = torch.topk(logits, k, dim=-1)
+    probs = torch.zeros_like(logits).scatter_(-1, top_indices, F.softmax(filtered_logits, dim=-1))
+    return probs
 
 
-def top_p_sampling(logits: torch.Tensor, p: float = 0.9):
-    logits = logits.squeeze(0)  # Assuming logits is [1, vocab_size]
-    sorted_logits, sorted_indices = torch.sort(logits, descending=True)
-    cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
-    sorted_indices_to_remove = cumulative_probs > p
-    sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
-    sorted_indices_to_remove[..., 0] = 0
-    indices_to_remove = sorted_indices[sorted_indices_to_remove]
-    logits[indices_to_remove] = float("-inf")
-    sampled_ind = torch.multinomial(F.softmax(logits, dim=-1), 1)
-    return sampled_ind.unsqueeze(0)
+def top_p_sampling(logits: torch.Tensor, p: float = 0.9) -> torch.Tensor:
+    # logits: [bsz, vocab_size]
+    # TODO: fix
+    sorted_logits, sorted_indices = torch.sort(logits, descending=True, dim=-1)
+    cumulative_probs = torch.cumsum(sorted_logits, dim=-1)
+
+    top_p_mask = cumulative_probs < p
+    filtered_logits = torch.where(top_p_mask, sorted_logits, torch.ones_like(sorted_logits) * (-float("inf")))
+    filtered_logits = torch.nan_to_num(filtered_logits)
+    filtered_probs = F.softmax(filtered_logits, dim=-1)
+
+    next_token = torch.multinomial(filtered_probs, 1).squeeze(-1)
+    return sorted_indices.gather(-1, next_token.unsqueeze(-1)).squeeze(-1)
 
 
-def temperature_scaling(logits: torch.Tensor, temperature: float = 1.0):
-    scaled_logits = logits / temperature
-    return scaled_logits
+def temperature_scaling(logits: torch.Tensor, temperature: float = 1.0) -> torch.Tensor:
+    return logits / temperature
 
 
-class DecodeUtils:
-    def __init__(self, method: str) -> None:
+class SamplerUtils:
+    def __init__(self, method: str, tok: TokenizerUtils) -> None:
         self.method = method
+        self.tok = tok
         assert self.method in ["greedy", "beam_search", "sampling"]
 
-    def decode(self, logits: torch.Tensor, sampling_params: Optional[SamplingParams] = None) -> List[int]:
+    def decode(self, generate_ids: List[int]) -> List[str]:
+        print("generate_ids", generate_ids)
+        return [self.tok.decode([x]) for x in generate_ids]
+
+    def sampling(self, logits: torch.Tensor, sampling_params: Optional[SamplingParams] = None) -> List[int]:
         if self.method == "greedy":
             return self.greedy_decode(logits)
         elif self.method == "beam_search":
@@ -51,25 +56,24 @@ class DecodeUtils:
         return torch.argmax(logits[:, -1], dim=-1).tolist()
 
     def sampling_decode(self, logits: torch.Tensor, sampling_params: SamplingParams) -> List[int]:
+        generate_logits = logits[:, -1]
         top_k = sampling_params.top_k
         top_p = sampling_params.top_p
         temperature = sampling_params.temperature
-        temperature_scaled_logits = temperature_scaling(logits, temperature)
-        # Apply top-k sampling
+        temperature_scaled_logits = temperature_scaling(generate_logits, temperature)
         if top_k > 0:
             temperature_scaled_logits = top_k_sampling(temperature_scaled_logits, k=top_k)
+        else:
+            temperature_scaled_logits = F.softmax(temperature_scaled_logits, dim=-1)
 
-        # Apply top-p sampling (nucleus sampling)
         if top_p < 1.0:
-            temperature_scaled_logits = top_p_sampling(temperature_scaled_logits, p=top_p)
+            next_token = top_p_sampling(temperature_scaled_logits, p=top_p)
 
-        return torch.argmax(temperature_scaled_logits, dim=-1).tolist()
+        else:
+            next_token = torch.multinomial(temperature_scaled_logits, 1).squeeze(-1)
+        return next_token.tolist()
 
-    def beam_search_decode(
-        self,
-        logits: torch.Tensor,
-        sampling_params: SamplingParams,
-    ) -> List[List[int]]:
+    def beam_search_decode(self, logits: torch.Tensor, sampling_params: SamplingParams) -> List[List[int]]:
         max_len = sampling_params.max_tokens
         top_k = sampling_params.top_k
         top_p = sampling_params.top_p

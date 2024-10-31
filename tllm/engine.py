@@ -41,8 +41,8 @@ async def generate_utils(model, sequence_request_list: List[SequenceRequestData]
     # 根据 seq 拆开，之后直接在 sampler 中处理
     seq_logits_list = torch.split(logits, seq_input.seq_len_list, dim=1)
     for seq_logits, sequence_request in zip(seq_logits_list, sequence_request_list):
-        generate_ids = sequence_request.sampler.decode(seq_logits)
-        generate_texts = [model.tok.decode([x]) for x in generate_ids]
+        generate_ids = sequence_request.sampler.sampling(seq_logits, sequence_request.sampling_params)
+        generate_texts = sequence_request.sampler.decode(generate_ids)
 
         sequence_request.output_ids.append(generate_ids[0])
         sequence_request.generate_ids = generate_ids
@@ -51,7 +51,7 @@ async def generate_utils(model, sequence_request_list: List[SequenceRequestData]
         end = is_generate_end(
             sequence_request.output_ids,
             eos_token_ids=model.eos_token_ids,
-            max_new_tokens=sequence_request.sampling_params.max_tokens,
+            max_tokens=sequence_request.sampling_params.max_tokens,
         )
         if end.is_end:
             sequence_request.finish_reason_list = [end.finish_reason]
@@ -69,23 +69,35 @@ async def generate_utils(model, sequence_request_list: List[SequenceRequestData]
     model.logger.debug(f"communication cost time: {comm_cost_time_str}")
 
 
+class MessageProcessor:
+    # TODO async
+    def __init__(self, tok: TokenizerUtils):
+        self.tok = tok
+        self.role_set = {"user", "system", "assistant"}
+
+    def parse_message(self, messages: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+        new_messages = []
+        for msg in messages:
+            assert "role" in msg and "content" in msg, ValueError("role and content must be in message")
+            if msg["role"] not in self.role_set:
+                raise ValueError(f"role must be in {self.role_set}")
+            new_messages.append({"role": msg["role"], "content": msg["content"]})
+        return new_messages
+
+    def preprocess(self, messages: List[Dict[str, str]]) -> torch.Tensor:
+        input_id_list = self.tok.preprocess(messages=messages).input_ids
+        input_ids = torch.tensor(input_id_list).unsqueeze(0)
+        return input_ids
+
+
 class AsyncEngine:
     def __init__(self, logger, model):
-        self.tok: TokenizerUtils = model.tok
         self.model = model
         self.prefill_queue: asyncio.Queue = asyncio.Queue()
         self.decoding_queue: asyncio.Queue = asyncio.Queue()
         self.processing_task = None
         self.limit_size: int = 5  # 每次最多处理 5 个请求，prefill + decode
         self.logger = logger
-
-    def parse_message(self, messages: List[Dict[str, Any]]) -> List[Dict[str, str]]:
-        return [{"role": msg["role"], "content": msg["content"]} for msg in messages]
-
-    def preprocess(self, messages: List[Dict[str, str]]) -> torch.Tensor:
-        input_id_list = self.tok.preprocess(messages=messages).input_ids
-        input_ids = torch.tensor(input_id_list).unsqueeze(0)
-        return input_ids
 
     async def fetch_data(self):
         # prefill 队列和 decoding 队列的调度逻辑
@@ -166,3 +178,7 @@ class AsyncEngine:
             except asyncio.CancelledError:
                 pass
             self.processing_task = None
+
+    async def abort(self, request_id: str):
+        # 从 prefill_queue 和 decoding_queue 中移除 request_id
+        pass

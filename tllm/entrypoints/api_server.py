@@ -129,13 +129,13 @@ if __name__ == "__main__":
     setup_seed(42)
     args = parse_args()
 
-    engine = init_engine(args)
+    engine, tok = init_engine(args)
 
     s1 = time.time()
     if args.need_start_client:
         start_client(logger, args.config_path, args.model_path)
     logger.info(f"init cost time {time.time() - s1}")
-    openai_serving_chat = OpenAIServing(engine, args)
+    openai_serving_chat = OpenAIServing(engine, tok, args)
 
     model_name = openai_serving_chat.model_name
     total_layers = engine.model.num_layers

@@ -5,8 +5,8 @@ import torch
 from tllm.models.protocol import GenerateEnd
 
 
-def is_generate_end(output_ids: List[int], eos_token_ids: Set[int], max_new_tokens: int) -> GenerateEnd:
-    if len(output_ids) >= max_new_tokens:
+def is_generate_end(output_ids: List[int], eos_token_ids: Set[int], max_tokens: int) -> GenerateEnd:
+    if len(output_ids) >= max_tokens:
         return GenerateEnd(finish_reason="length", is_end=True)
 
     if output_ids[-1] in eos_token_ids:

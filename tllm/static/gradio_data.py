@@ -4,7 +4,7 @@ from dataclasses import dataclass
 @dataclass
 class GenerationConfig:
     system_prompt: str = "You are a helpful AI assistant."
-    temperature: float = 1.0
+    temperature: float = 0.0
     top_p: float = 1.0
     top_k: int = -1
     max_tokens: int = 1024

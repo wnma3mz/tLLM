@@ -6,7 +6,7 @@ import uuid
 import torch
 
 from tllm.engine import AsyncEngine, MyLlamaForCausalLM, SequenceRequestData
-from tllm.generate.decode_utils import DecodeUtils
+from tllm.generate.sampler_utils import DecodeUtils
 from tllm.generate.token_utils import TokenizerUtils
 from tllm.rpc.manager import RPCManager
 

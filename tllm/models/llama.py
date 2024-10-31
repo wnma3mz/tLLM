@@ -126,7 +126,7 @@ class MyLlamaForCausalLM(nn.Module):
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps).to(dtype)
 
     @classmethod
-    def from_pretrained(cls, logger, config, model_path: str, weight_path: str, server: RPCManager):
+    def from_pretrained(cls, logger, config, tok: TokenizerUtils, weight_path: str, server: RPCManager):
         model = cls(config)
 
         cls.config = config
@@ -141,10 +141,10 @@ class MyLlamaForCausalLM(nn.Module):
 
         cls.server = server
         cls.pp_size = len(cls.server.url_list)
-        cls.tok = TokenizerUtils(model_path)
-        if cls.tok.tokenizer.eos_token_id:
-            cls.eos_token_ids.add(cls.tok.tokenizer.eos_token_id)
-        # cls.logger.debug("eos_token_ids", cls.eos_token_ids, cls.tok.tokenizer.convert_ids_to_tokens(list(cls.eos_token_ids)))
+        if tok.tokenizer.eos_token_id:
+            cls.eos_token_ids.add(tok.tokenizer.eos_token_id)
+        # eos_token = tok.tokenizer.convert_ids_to_tokens(list(cls.eos_token_ids))
+        # cls.logger.debug(f"eos_token_ids: {cls.eos_token_ids}; Tokens: {eos_token}")
 
         state_dict = torch.load(weight_path)
         model.embed_tokens.load_state_dict({"weight": state_dict.pop("model.embed_tokens.weight")})
@@ -169,7 +169,9 @@ class MyLlamaForCausalLM(nn.Module):
             response = self.server.post_sync(
                 pp_idx, "/forward", data=self._prepare_forward_data(seq_input, hidden_states, pp_idx == 0)
             )
-            hidden_states = deserialize_tensor(response.output) if pp_idx == self.pp_size - 1 else response.output
+            hidden_states = (
+                deserialize_tensor(response.output, to_tensor=True) if pp_idx == self.pp_size - 1 else response.output
+            )
             s2 = time.time()
             comm_cost_time_list.append(s2 - s1 - response.cost_time)
 

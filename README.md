@@ -15,19 +15,6 @@ RoadMap
     - [x] Sequence KV Cache
     - [x] Performance Testing
     - [ ] Support Flash Attention
-- [x] OpenAI API format
-    - [x] Streaming Output
-    - [x] chat completion(stream)
-    - [x] chat completion(non-stream)
-    - [x] using anythingLLM
-- [x] Async Generation
-    - [x] Multi-Sequence Batch=1
-    - [x] Queuing mechanism
-    - [x] Continuous Batch
-    - [x] Test Cases
-    - [ ] Client Disconnect
-        - [ ] In Queue
-        - [ ] In Generation
 - [x] Decoding Strategy
     - [x] Top-K Sampling
     - [x] Top-P Sampling
@@ -39,10 +26,6 @@ RoadMap
     - [x] With Torch Inference
         - [x] Some bugs with multi requests
     - [ ] LoRA Training
-- [ ] Auto Layer Split
-    - [ ] get free layer idx
-    - [ ] calculate layer memory
-    - [ ] get machine free memory and set layer
 - [x] Web UI
     - [x] Node Status
         - [ ] Display Multi Model
@@ -52,8 +35,26 @@ RoadMap
         - [x] Button
 - [ ] Multi-Model
     - [ ] LLaVA
+- [x] Backend
+    - [ ] Client Send Url and Port
+    - [ ] Auto Layer Split
+        - [ ] get free layer idx
+        - [ ] calculate layer memory
+        - [ ] get machine free memory and set layer
+    - [x] Async Generation
+        - [x] Multi-Sequence Batch=1
+        - [x] Queuing mechanism
+        - [x] Continuous Batch
+        - [x] Test Cases
+        - [ ] Client Disconnect
+    - [x] OpenAI API format
+        - [x] Streaming Output
+        - [x] chat completion(stream)
+        - [x] chat completion(non-stream)
+        - [x] using anythingLLM            
 - [ ] KV Cache
     - [x] Request/Sequence Cache
+    - [ ] Custom KV Cache Class
     - [ ] Token-Level Cache
         - [ ] Prefix-tree Cache
 - [ ] Shard Storage
