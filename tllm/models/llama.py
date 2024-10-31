@@ -143,8 +143,8 @@ class MyLlamaForCausalLM(nn.Module):
         cls.pp_size = len(cls.server.url_list)
         if tok.tokenizer.eos_token_id:
             cls.eos_token_ids.add(tok.tokenizer.eos_token_id)
-        # eos_token = tok.tokenizer.convert_ids_to_tokens(list(cls.eos_token_ids))
-        # cls.logger.debug(f"eos_token_ids: {cls.eos_token_ids}; Tokens: {eos_token}")
+        eos_token = tok.tokenizer.convert_ids_to_tokens(list(cls.eos_token_ids))
+        cls.logger.debug(f"eos_token_ids: {cls.eos_token_ids}; Tokens: {eos_token}")
 
         state_dict = torch.load(weight_path)
         model.embed_tokens.load_state_dict({"weight": state_dict.pop("model.embed_tokens.weight")})
@@ -176,9 +176,8 @@ class MyLlamaForCausalLM(nn.Module):
             comm_cost_time_list.append(s2 - s1 - response.cost_time)
 
         hidden_states = hidden_states.to(self.norm.weight.device)
-        # hidden_states: bsz x seq_len x hidden_size
+        # hidden_states/logits: bsz x seq_len x hidden_size
         hidden_states = self.norm(hidden_states)
         logits = self.lm_head(hidden_states)
-        # logits: bsz x seq_len x vocab_size
         # bsz: 1; seq_len: seq_len1 + seq_len2
         return ForwardResult(logits=logits, comm_cost_time_list=comm_cost_time_list)

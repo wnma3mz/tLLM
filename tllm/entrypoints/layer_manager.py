@@ -1,4 +1,4 @@
-from typing import Dict, Set, Tuple
+from typing import Dict, List, Set, Tuple
 
 from fastapi import WebSocket
 
@@ -27,6 +27,10 @@ class LayerManager:
 
     def has_full_model(self) -> bool:
         return all(self.layer_counts[i] > 0 for i in range(self.total_layers))
+
+    def unregister_layer_idx(self) -> List[int]:
+        # 计算哪些层还没有被占用
+        return [idx for idx, count in enumerate(self.layer_counts) if count == 0]
 
     def get_state(self) -> dict:
         """与前端同步的数据"""

@@ -82,6 +82,11 @@ async def show_version():
     return JSONResponse(content=ver)
 
 
+@app.get("/unregister_layer_idx")
+async def get_unregister_layer_idx() -> Dict[str, List[int]]:
+    return JSONResponse(content={"data": layer_manager.unregister_layer_idx()})
+
+
 @app.websocket("/ws/monitor")
 async def monitor_websocket(websocket: WebSocket):
     await websocket.accept()
@@ -105,6 +110,11 @@ async def client_websocket(websocket: WebSocket, client_id: str):
             if data["type"] == "register_layers":
                 layer_manager.clients[client_id] = (data["start_idx"], data["end_idx"])
                 layer_manager.add_layer_count(layer_manager.clients[client_id])
+
+                # 根据 layer idx 自动算 pp idx
+                client_url = f"{data['ip_addr']}:{data['port']}"  # delay 几秒后再注册
+                # openai_serving_chat.engine.model.server.update_url(0, client_url)
+
                 await layer_manager.broadcast_state()
     except WebSocketDisconnect:
         if client_id in layer_manager.clients:
@@ -112,6 +122,8 @@ async def client_websocket(websocket: WebSocket, client_id: str):
             del layer_manager.clients[client_id]
         if client_id in layer_manager.websockets:
             del layer_manager.websockets[client_id]
+        # 删除
+        # openai_serving_chat.engine.model.server.remove_url(0)
         await layer_manager.broadcast_state()
 
 

@@ -3,18 +3,29 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 import threading
 import time
+from typing import Tuple
 
+import requests
 import websockets
 
 from tllm.models.register import HAS_MLX, MODEL_REGISTER, load_weight
 
 
+def get_unregistered_layer_idx(server_url: str) -> Tuple[int, int]:
+    # 获取 server 端未注册的连续的 layer_idx
+    response = requests.get(f"{server_url}/unregister_layer_idx")
+    # layer_idx = response.json()["data"]
+    return -1, -1
+
+
 class ModelClient:
-    def __init__(self, logger, server_url: str, start_idx: int, end_idx: int, client_id: str):
+    def __init__(self, logger, server_url: str, start_idx: int, end_idx: int, client_id: str, ip_addr: str, port: int):
         self.server_url = server_url.replace("http://", "ws://").replace("https://", "wss://")
         self.client_id = client_id
         self.start_idx = start_idx
         self.end_idx = end_idx
+        self.ip_addr = ip_addr
+        self.port = port
 
         self.logger = logger
         self.websocket = None
@@ -76,6 +87,8 @@ class ModelClient:
                         "type": "register_layers",
                         "start_idx": self.start_idx,
                         "end_idx": self.end_idx,
+                        "ip_addr": self.ip_addr,
+                        "port": self.port,
                     }
                 )
             )

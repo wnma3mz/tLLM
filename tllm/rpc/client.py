@@ -18,13 +18,13 @@ from tllm.utils import setup_logger
 
 
 class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
-    def __init__(self, comm: Communicator, model, rank: int, pp_rank: int):
+    def __init__(self, comm: Communicator, model, rank: int, pp_rank: int, ip_addr: str = "localhost"):
         self.comm = comm
         self.model = model
         self.rank = rank
         self.pp_rank = pp_rank
         self.init_model_flag = False
-        self.ip_addr = "localhost"
+        self.ip_addr = ip_addr
         self.prefix_log_str = f"IP: [{self.ip_addr}]"
         uuid_shape_list = [None, None]
         if self.rank == 0:
@@ -87,12 +87,13 @@ def parse_args():
     parser.add_argument("--end_layer_idx", type=int, default=11, help="end layer idx")
     parser.add_argument("--pp_rank", type=int, default=0, help="pp rank")
     parser.add_argument("--model_path", type=str, required=True, help="model path")
+    parser.add_argument("--ip_addr", type=str, default="localhost", help="提供给 server 连接的 ip")
     return parser.parse_args()
 
 
-def start_grpc_server(comm: Communicator, model, port: int, rank: int, pp_rank: int):
+def start_grpc_server(comm: Communicator, model, port: int, rank: int, pp_rank: int, ip_addr: str = "localhost"):
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
-    rpc_servicer = RPCServicer(comm, model, rank, pp_rank)
+    rpc_servicer = RPCServicer(comm, model, rank, pp_rank, ip_addr)
     if comm.is_rank0():
         schemas_pb2_grpc.add_RPCServiceServicer_to_server(rpc_servicer, server)
         server.add_insecure_port(f"[::]:{port}")
@@ -115,8 +116,10 @@ if __name__ == "__main__":
         start_idx=args.start_layer_idx,
         end_idx=args.end_layer_idx,
         client_id=f"client-{str(uuid.uuid4())[:8]}-pp{args.start_layer_idx}-{args.end_layer_idx}",
+        ip_addr=args.ip_addr,
+        port=args.port,
     )
     model_client.start()
     model = model_client.load_model(config, args.model_path, torch.bfloat16)
 
-    start_grpc_server(comm, model, args.port, comm.rank, args.pp_rank)
+    start_grpc_server(comm, model, args.port, comm.rank, args.pp_rank, args.ip_addr)

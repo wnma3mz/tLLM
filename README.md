@@ -36,11 +36,10 @@ RoadMap
 - [ ] Multi-Model
     - [ ] LLaVA
 - [x] Backend
-    - [ ] Client Send Url and Port
+    - [x] Client Send Url and Port
     - [ ] Auto Layer Split
-        - [ ] get free layer idx
-        - [ ] calculate layer memory
-        - [ ] get machine free memory and set layer
+        - [x] get free layer idx
+        - [ ] calculate layer memory and recommend split
     - [x] Async Generation
         - [x] Multi-Sequence Batch=1
         - [x] Queuing mechanism

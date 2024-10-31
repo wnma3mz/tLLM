@@ -5,24 +5,41 @@ from typing import *
 from google.protobuf import json_format, struct_pb2
 import grpc
 
-from tllm.commons.convert import list_to_protobuf, protobuf_to_list
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 
 
 class RPCManager:
-    def __init__(self, url_list: List[str]):
+    def __init__(self, url_list: List[Optional[str]], pp_size: int = 1):
         self.stub_list = []
-        self.url_list = url_list
         for url in url_list:
-            channel = grpc.insecure_channel(url)
-            self.stub_list.append(schemas_pb2_grpc.RPCServiceStub(channel))
+            if url is not None:
+                channel = grpc.insecure_channel(url)
+                self.stub_list.append(schemas_pb2_grpc.RPCServiceStub(channel))
+            else:
+                self.stub_list.append(None)
         self.executor = ThreadPoolExecutor()
+        self.pp_size = pp_size
         self.func_dict = {
-            "init_model": self.init_model,
             "forward": self.forward,
+            "init_model": self.init_model,
             "health": self.health,
             "init_model_flag": self.init_model_flag,
         }
+
+    def update_url(self, pp_idx: int, url: str) -> bool:
+        if pp_idx >= len(self.stub_list):
+            return False
+        self.stub_list[pp_idx] = schemas_pb2_grpc.RPCServiceStub(grpc.insecure_channel(url))
+        return True
+
+    def remove_url(self, pp_idx: int) -> bool:
+        if pp_idx >= len(self.stub_list):
+            return False
+        self.stub_list[pp_idx] = None
+        return True
+
+    def is_full_connected(self) -> bool:
+        return all([stub is not None for stub in self.stub_list])
 
     def init_model(self, stub, data):
         config_struct_obj = struct_pb2.Struct()
@@ -61,56 +78,6 @@ class RPCManager:
             response = self.func_dict[path](stub, data)
             response_list.append(response)
         return response_list
-
-    # 指定 api path，对所有 url 发送 post 请求
-    def post_thread(self, path, data_list: List[Dict[str, Any]]) -> List:
-        if path[0] == "/":
-            path = path[1:]
-        response_list = []
-        futures = []
-
-        for stub, data in zip(self.stub_list, data_list):
-            future = self.executor.submit(self.func_dict[path], stub, data)
-            futures.append(future)
-
-        for future in futures:
-            response_list.append(future.result())
-        return response_list
-
-    # 指定 url_idx，多线程请求
-    def post_thread_url(self, url_idx, path, data_list: List[Dict[str, Any]]) -> List:
-        if path[0] == "/":
-            path = path[1:]
-        response_list = []
-        futures = []
-        stub = self.stub_list[url_idx]
-        for data in data_list:
-            future = self.executor.submit(self.func_dict[path], stub, data)
-            futures.append(future)
-
-        for future in futures:
-            response_list.append(future.result())
-        return response_list
-
-    # 指定 api path, url_idx 以及每个 url 的请求 data_list 多线程请求
-    def post_thread_url_dict(self, path: str, stub_idx_data_dict: Dict[str, List[Dict[str, Any]]]) -> Dict[str, List]:
-        if path[0] == "/":
-            path = path[1:]
-
-        # 返回结果按照 dict 顺序
-        response_dict = {}
-        futures = []
-
-        for stub_idx, data_list in stub_idx_data_dict.items():
-            for data in data_list:
-                future = self.executor.submit(self.func_dict[path], self.stub_list[stub_idx], json=data)
-                futures.append(future)
-
-        for stub_idx, data_list in stub_idx_data_dict.items():
-            response_dict[stub_idx] = []
-            for _ in data_list:
-                response_dict[stub_idx].append(futures.pop(0).result())
-        return response_dict
 
     # 单个 post
     def post_sync(self, url_idx: int, path, data):
