@@ -64,7 +64,7 @@ class LayerManager:
         data = self.clients.pop(client_id)
         for idx in range(data["start_idx"], data["end_idx"]):
             self.layer_counts[idx] -= 1
-        return self.clients[client_id].get("pp_idx", -1)
+        return data.get("pp_idx", -1)
 
     def get_layer_statistics(self) -> Dict[int, int]:
         return {idx: value for idx, value in enumerate(self.layer_counts)}
