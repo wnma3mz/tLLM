@@ -8,8 +8,8 @@ from tllm.static.gradio_data import GenerationConfig, custom_css
 
 
 class ChatInterface:
-    def __init__(self, port: int):
-        self.url = f"http://localhost:{port}/v1/chat/completions"
+    def __init__(self, chat_url: str):
+        self.url = f"http://{chat_url}/v1/chat/completions"
         self.should_stop = False
         self.config = GenerationConfig()
 
@@ -164,7 +164,7 @@ def parse_args():
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--chat_port", type=int, default=8000)
+    parser.add_argument("--chat_url", type=str, default="localhost:8000")
     parser.add_argument("--port", type=int, default=7860)
 
     return parser.parse_args()
@@ -172,7 +172,7 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-    chat_interface = ChatInterface(args.chat_port)
+    chat_interface = ChatInterface(args)
     demo = chat_interface.create_interface()
     demo.queue()
-    demo.launch(server_port=args.port, show_api=False, prevent_thread_lock=False)
+    demo.launch(server_name="0.0.0.0", server_port=args.port, show_api=False, prevent_thread_lock=False)

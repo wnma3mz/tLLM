@@ -10,3 +10,4 @@ tqdm
 uvicorn
 accelerate
 sentencepiece
+gradio==4.44.1
