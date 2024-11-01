@@ -8,7 +8,7 @@ import numpy as np
 from transformers import AutoConfig
 
 from tllm.commons.mlx_layers import MyTransformerBlock
-from tllm.models.cache import AttentionCache, CacheManager, SeqMLXDynamicCache
+from tllm.models.cache import AttentionData, CacheManager, RequestsCache
 from tllm.models.protocol import SeqInput
 
 
@@ -32,28 +32,22 @@ def build_mlx_mask(seq_len_list: List[Tuple[int, int]]) -> mx.array:
     return final_mask
 
 
-def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_layers: int) -> List[AttentionCache]:
-    attention_cache_list = []
-    for layer_idx in range(num_layers):
-        past_key_values = SeqMLXDynamicCache()
-        actual_seq_len_list = []
-        for uuid, seq_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
-            if uuid in cache_manager.cache_dict:
-                kv_cache = cache_manager.get(uuid)[layer_idx]
-                actual_seq_len_list.append([seq_len, kv_cache.offset + 1])
-            else:
-                kv_cache = None
-                actual_seq_len_list.append([seq_len, seq_len])
-            past_key_values.add(uuid, seq_len, kv_cache)
-
-        attention_cache_list.append(
-            AttentionCache(
-                past_key_value=past_key_values,
-                uuid_list=seq_input.uuid_list,
-                attn_mask=build_mlx_mask(actual_seq_len_list),
-            )
-        )
-    return attention_cache_list
+def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_layers: int) -> AttentionData:
+    request_cache = RequestsCache(num_layers)
+    actual_seq_len_list = []
+    for uuid, seq_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
+        if uuid in cache_manager.cache_dict:
+            layer_cache_list, cache_seq_len = cache_manager.get(uuid)
+            actual_seq_len_list.append([seq_len, cache_seq_len + 1])
+        else:
+            layer_cache_list = None
+            actual_seq_len_list.append([seq_len, seq_len])
+        request_cache.add(uuid, seq_len, layer_cache_list)
+    return AttentionData(
+        request_cache=request_cache,
+        attn_mask=build_mlx_mask(actual_seq_len_list),
+        uuid_list=seq_input.uuid_list,
+    )
 
 
 class Decoder(nn.Module):
@@ -62,11 +56,14 @@ class Decoder(nn.Module):
         self.args = args
         self.vocab_size = args.vocab_size
         self.num_hidden_layers = args.num_hidden_layers
-        self.layers = [MyTransformerBlock(args=args) for _ in range(start_layer_idx, end_layer_idx)]
+        self.layers = [
+            MyTransformerBlock(args=args, layer_idx=layer_idx, offset=start_layer_idx)
+            for layer_idx in range(start_layer_idx, end_layer_idx)
+        ]
 
-    def __call__(self, h: mx.array, mask, cache: List[Any]):
-        for layer, c in zip(self.layers, cache):
-            h = layer(h, mask, cache=c)
+    def __call__(self, h: mx.array, mask, cache: AttentionData):
+        for layer in self.layers:
+            h = layer(h, mask, cache=cache)
         return h
 
 
@@ -81,17 +78,14 @@ class MyMLXLlamaModel(nn.Module):
         self.num_layers = config.decoder_end_layer_idx - config.decoder_start_layer_idx
 
     def __call__(self, hidden_states: mx.array, seq_input: SeqInput) -> np.ndarray:
-        attention_cache_list = build_forward_cache(seq_input, self.cache_manager, self.num_layers)
+        attention_data = build_forward_cache(seq_input, self.cache_manager, self.num_layers)
 
-        mask = attention_cache_list[0].attn_mask
+        mask = attention_data.attn_mask
         mask = mask if mask is None else mask.astype(hidden_states.dtype)
-        output = self.model(hidden_states, mask=mask, cache=attention_cache_list)
+        output = self.model(hidden_states, mask=mask, cache=attention_data)
 
         for uuid, seq_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
-            self.cache_manager.set(
-                uuid,
-                [attention_cache.past_key_value.get_cache(uuid) for attention_cache in attention_cache_list],
-            )
+            self.cache_manager.set(uuid, attention_data.get_kv_cache_list(uuid), attention_data.get_cache_seq_len(uuid))
             self.cache_manager.check_alive()
         return np.array(output.astype(mx.float16))
 

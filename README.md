@@ -53,7 +53,7 @@ RoadMap
         - [x] using anythingLLM            
 - [ ] KV Cache
     - [x] Request/Sequence Cache
-    - [ ] Custom KV Cache Class (ingress)
+    - [x] Custom KV Cache Class
     - [ ] Token-Level Cache
         - [ ] Prefix-tree Cache
 - [ ] Shard Storage

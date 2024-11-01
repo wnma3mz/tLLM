@@ -8,15 +8,15 @@ from transformers.models.llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEm
 from tllm.commons.convert import deserialize_tensor, serialize_tensor
 from tllm.commons.layers import MyLlamaDecoderLayer
 from tllm.generate.token_utils import TokenizerUtils
-from tllm.models.cache import CacheManager, NextAttentionData, NextRequestsCache
+from tllm.models.cache import AttentionData, CacheManager, RequestsCache
 from tllm.models.protocol import ForwardResult, SeqInput
 from tllm.models.utils import build_mask
 from tllm.rpc.manager import RPCManager
 from tllm.rpc.schemas_pb2 import BFloat16Tensor
 
 
-def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_layers: int) -> NextAttentionData:
-    request_cache = NextRequestsCache(num_layers)
+def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_layers: int) -> AttentionData:
+    request_cache = RequestsCache(num_layers)
     position_ids_list, actual_seq_len_list = [], []
     for uuid, seq_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
         if uuid in cache_manager.cache_dict:
@@ -29,7 +29,7 @@ def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_la
             actual_seq_len_list.append([seq_len, seq_len])
         request_cache.add(uuid, seq_len, layer_cache_list)
         position_ids_list.append(position_ids)
-    return NextAttentionData(
+    return AttentionData(
         request_cache=request_cache,
         attn_mask=build_mask(actual_seq_len_list),
         uuid_list=seq_input.uuid_list,
@@ -53,7 +53,7 @@ class Decoder(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: Tuple[torch.Tensor, torch.Tensor],
-        attention_data: NextAttentionData,
+        attention_data: AttentionData,
     ) -> torch.Tensor:
         for layer in self.decoder:
             hidden_states = layer(hidden_states, position_embeddings=position_embeddings, attention_data=attention_data)

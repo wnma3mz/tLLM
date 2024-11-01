@@ -5,7 +5,7 @@ import torch.nn as nn
 from transformers.activations import ACT2FN
 from transformers.models.llama.modeling_llama import LlamaConfig, LlamaRMSNorm, apply_rotary_pos_emb, repeat_kv
 
-from tllm.models.cache import NextAttentionData, NextRequestsCache
+from tllm.models.cache import AttentionData, RequestsCache
 
 
 class BaseParallelLayer(nn.Module):
@@ -164,7 +164,7 @@ class MyLlamaSdpaAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: Tuple[torch.Tensor, torch.Tensor],
-        attention_data: NextAttentionData,
+        attention_data: AttentionData,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         bsz, q_len, _ = hidden_states.size()
 
@@ -178,7 +178,7 @@ class MyLlamaSdpaAttention(nn.Module):
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, attention_data.position_ids)
 
-        request_cache: NextRequestsCache = attention_data.request_cache
+        request_cache: RequestsCache = attention_data.request_cache
         cache_kwargs = {"uuid_list": attention_data.uuid_list, "layer_idx": self.layer_idx - self.config.offset}
         key_states, value_states = request_cache.update(key_states, value_states, **cache_kwargs)
 
@@ -225,7 +225,7 @@ class MyLlamaDecoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: Tuple[torch.Tensor, torch.Tensor],
-        attention_data: NextAttentionData,
+        attention_data: AttentionData,
     ) -> torch.Tensor:
         residual = hidden_states
 

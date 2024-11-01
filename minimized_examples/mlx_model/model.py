@@ -5,8 +5,8 @@ from typing import Dict, Union
 
 import mlx.core as mx
 from mlx_lm import generate, load
-from mlx_lm.models.llama import ModelArgs
-from transformers import AutoTokenizer
+import numpy as np
+from transformers import AutoConfig, AutoTokenizer
 
 from tllm.models.mlx_llama import MyMLXLlamaModel
 from tllm.models.protocol import SeqInput
@@ -23,14 +23,6 @@ def load_weight(model_path: str) -> Dict[str, mx.array]:
     for wf in weight_files:
         weights.update(mx.load(wf))
     return weights
-
-
-def load_config(model_path: str) -> ModelArgs:
-    with open(os.path.join(model_path, "config.json"), "r") as f:
-        config = json.load(f)
-
-    model_args = ModelArgs.from_dict(config)
-    return model_args
 
 
 def generate_text(model_path: str):
@@ -54,10 +46,10 @@ def base_generate(base_model, input_ids):
     print("base_out", base_out.shape, base_out)
 
 
-def load_my_model(model_args, weights):
-    model_args.decoder_start_layer_idx = 0
-    model_args.decoder_end_layer_idx = model_args.num_hidden_layers
-    model = MyMLXLlamaModel(model_args)
+def load_my_model(config: AutoConfig, weights):
+    config.decoder_start_layer_idx = 0
+    config.decoder_end_layer_idx = config.num_hidden_layers
+    model = MyMLXLlamaModel(config)
     filter_w = {k: v for k, v in weights.items() if "model.layers." in k}
     model.load_weights(list(filter_w.items()))
     mx.eval(model.parameters())
@@ -65,7 +57,9 @@ def load_my_model(model_args, weights):
     return model
 
 
-def forward_head(base_model, out):
+def forward_head(base_model, out: Union[mx.array, np.ndarray]):
+    if isinstance(out, np.ndarray):
+        out = mx.array(out)
     out = base_model.model.norm(out)
     logits = base_model.model.embed_tokens.as_linear(out)
     logits = logits[:, -1, :]
@@ -79,7 +73,7 @@ if __name__ == "__main__":
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
 
     weights = load_weight(model_path)
-    model_args = load_config(model_path)
+    config = AutoConfig.from_pretrained(model_path)
 
     base_model, tokenizer = load(model_path)
     input_ids = build_model_input(model_path)
@@ -87,7 +81,7 @@ if __name__ == "__main__":
 
     embedding = base_model.model.embed_tokens(input_ids)
 
-    model = load_my_model(model_args, weights)
+    model = load_my_model(config, weights)
 
     seq_input = SeqInput(["123"], [embedding.shape[1]])
     out = model(embedding, seq_input)

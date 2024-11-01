@@ -10,7 +10,7 @@ from mlx_lm.models.cache import KVCache, RotatingKVCache
 from mlx_lm.models.llama import ModelArgs
 from transformers import AutoTokenizer
 
-from tllm.models.cache import AttentionCache, SeqMLXDynamicCache
+from tllm.models.cache import AttentionData, RequestsCache
 from tllm.models.mlx_llama import Decoder
 
 
@@ -79,12 +79,12 @@ if __name__ == "__main__":
     bsz, seq_len, hidden_size = 1, 4, model_args.hidden_size
 
     num_layers = 1
-    past_key_values = SeqMLXDynamicCache()
-    past_key_values.add("123", 4, None)
+    request_cache = RequestsCache()
+    request_cache.add("123", 4, None)
     uuid_list = ["123"]
     cache = [
-        AttentionCache(
-            past_key_value=past_key_values,
+        AttentionData(
+            request_cache=request_cache,
             uuid_list=uuid_list,
             attn_mask=None,  # TODO mlx create_attention_mask
         )
