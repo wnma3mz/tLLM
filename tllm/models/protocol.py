@@ -12,7 +12,7 @@ finish_reason_type = Literal["length", "stop", None]
 
 @dataclass
 class SeqInput:
-    uuid_str_list: List[str]
+    uuid_list: List[str]
     seq_len_list: List[int]
 
 

@@ -17,7 +17,7 @@ else
 fi
 WEIGHT_PATH=$MODEL_PATH/master_weight.pt
 CONFIG_PATH=./examples/config.json
-CONFIG_PATH=./examples/remote_config.json
+# CONFIG_PATH=./examples/remote_config.json
 
 export PYTHONPATH="./":$PYTHONPATH;
 export OMP_NUM_THREADS=8;

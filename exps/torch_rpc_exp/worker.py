@@ -51,12 +51,12 @@ class ModelManager:
         self.model = model
 
     @torch.no_grad()
-    def forward(self, hidden_states: torch.Tensor, shape_hidden_states: Tuple[int], uuid_str: str) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, shape_hidden_states: Tuple[int], uuid: str) -> torch.Tensor:
         # 不是 rank0，需要同步 hidden_states
         if hidden_states is None:
             hidden_states = torch.zeros(shape_hidden_states, dtype=self.model.dtype, device=self.model.device)
         self.model.config.comm.broadcast(hidden_states)
-        hidden_states = self.model(hidden_states, uuid_str=uuid_str)
+        hidden_states = self.model(hidden_states, uuid=uuid)
         return hidden_states
 
 

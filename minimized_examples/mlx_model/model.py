@@ -5,14 +5,10 @@ from typing import Dict, Union
 
 import mlx.core as mx
 from mlx_lm import generate, load
-from mlx_lm.models.base import create_attention_mask, create_causal_mask
-from mlx_lm.models.cache import KVCache, RotatingKVCache
 from mlx_lm.models.llama import ModelArgs
 from transformers import AutoTokenizer
 
-from tllm.commons.mlx_layers import MyTransformerBlock
-from tllm.models.cache import AttentionCache, SeqMLXDynamicCache
-from tllm.models.mlx_llama import Decoder, MyMLXLlamaModel
+from tllm.models.mlx_llama import MyMLXLlamaModel
 from tllm.models.protocol import SeqInput
 
 

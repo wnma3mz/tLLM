@@ -53,7 +53,7 @@ def build_cache_forward(seq_input, hidden_states, attn, cache_manager):
     cache = attention_cache_list[0]
     mask = cache.attn_mask
     # print("mask", mask)
-    if len(seq_input.uuid_str_list) > 1:
+    if len(seq_input.uuid_list) > 1:
         # print("mask", mask)
         # print("mask[0]", mask[0][:5])
         # print("mask[1]", mask[1][:5])
@@ -82,18 +82,18 @@ if __name__ == "__main__":
     # prefilling request 1
     seq_len = 2
     h1 = mx.random.uniform(shape=(bsz, seq_len, args.hidden_size))
-    seq_input = SeqInput(uuid_str_list=["0"], seq_len_list=[seq_len])
+    seq_input = SeqInput(uuid_list=["0"], seq_len_list=[seq_len])
     o1, cache1 = build_forward(seq_input, h1, attn)
 
     # prefilling request 2
     seq_len = 3
     h2 = mx.random.uniform(shape=(bsz, seq_len, args.hidden_size))
-    seq_input = SeqInput(uuid_str_list=["1"], seq_len_list=[seq_len])
+    seq_input = SeqInput(uuid_list=["1"], seq_len_list=[seq_len])
     o2, cache2 = build_forward(seq_input, h2, attn)
     base_o12 = mx.concat([o1, o2], axis=1)
 
     # prefilling multi request
-    seq_input = SeqInput(uuid_str_list=["2", "3"], seq_len_list=[2, 3])
+    seq_input = SeqInput(uuid_list=["2", "3"], seq_len_list=[2, 3])
     cat_o, cache12 = build_forward(seq_input, mx.concat([h1, h2], axis=1), attn)
 
     print("output", mx.allclose(base_o12, cat_o, 1e-4), abs(base_o12 - cat_o).sum())
@@ -103,14 +103,14 @@ if __name__ == "__main__":
     # cache_manager = CacheManager()
 
     # h11 = mx.random.uniform(shape=(bsz, 1, args.hidden_size))
-    # seq_input = SeqInput(uuid_str_list=["0"], seq_len_list=[1])
+    # seq_input = SeqInput(uuid_list=["0"], seq_len_list=[1])
     # cache_manager.set("0", [cache1.past_key_value.get_cache("0")])
     # o11 = build_cache_forward(seq_input, h11, attn, cache_manager)
     # print("o11", o11)
 
     # # decoding multi request
     # h1122 = mx.concat([h11, h2], axis=1)
-    # seq_input = SeqInput(uuid_str_list=["0", "4"], seq_len_list=[1, 3])
+    # seq_input = SeqInput(uuid_list=["0", "4"], seq_len_list=[1, 3])
     # o1122 = build_cache_forward(seq_input, h1122, attn, cache_manager)
     # print("o1122", o1122)
     # assert False
@@ -119,7 +119,7 @@ if __name__ == "__main__":
     cache_manager = CacheManager()
 
     h11 = mx.random.uniform(shape=(bsz, 1, args.hidden_size))
-    seq_input = SeqInput(uuid_str_list=["0"], seq_len_list=[1])
+    seq_input = SeqInput(uuid_list=["0"], seq_len_list=[1])
     cache_manager.set("0", [cache1.past_key_value.get_cache("0")])
     # copy 数据，防止 cache 被修改
     cache_manager.set("2", [copy.deepcopy(cache1.past_key_value.get_cache("0"))])
@@ -129,7 +129,7 @@ if __name__ == "__main__":
 
     # decoding request 2
     h21 = mx.random.uniform(shape=(bsz, 1, args.hidden_size))
-    seq_input = SeqInput(uuid_str_list=["1"], seq_len_list=[1])
+    seq_input = SeqInput(uuid_list=["1"], seq_len_list=[1])
     cache_manager.set("1", [cache2.past_key_value.get_cache("1")])
     cache_manager.set("3", [copy.deepcopy(cache2.past_key_value.get_cache("1"))])
     o21 = build_cache_forward(seq_input, h21, attn, cache_manager)
@@ -138,7 +138,7 @@ if __name__ == "__main__":
     # decoding multi request
     h1122 = mx.concat([h11, h21], axis=1)
 
-    seq_input = SeqInput(uuid_str_list=["2", "3"], seq_len_list=[1, 1])
+    seq_input = SeqInput(uuid_list=["2", "3"], seq_len_list=[1, 1])
     o1122 = build_cache_forward(seq_input, h1122, attn, cache_manager)
     print("o1122", o1122)
 

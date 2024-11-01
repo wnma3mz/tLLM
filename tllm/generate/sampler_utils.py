@@ -40,7 +40,6 @@ class SamplerUtils:
         assert self.method in ["greedy", "beam_search", "sampling"]
 
     def decode(self, generate_ids: List[int]) -> List[str]:
-        print("generate_ids", generate_ids)
         return [self.tok.decode([x]) for x in generate_ids]
 
     def sampling(self, logits: torch.Tensor, sampling_params: Optional[SamplingParams] = None) -> List[int]:

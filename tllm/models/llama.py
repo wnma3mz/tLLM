@@ -3,40 +3,37 @@ from typing import *
 
 import torch
 import torch.nn as nn
-from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.models.llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
 
 from tllm.commons.convert import deserialize_tensor, serialize_tensor
 from tllm.commons.layers import MyLlamaDecoderLayer
 from tllm.generate.token_utils import TokenizerUtils
-from tllm.models.cache import AttentionCache, CacheManager, SeqDynamicCache
+from tllm.models.cache import CacheManager, NextAttentionData, NextRequestsCache
 from tllm.models.protocol import ForwardResult, SeqInput
 from tllm.models.utils import build_mask
 from tllm.rpc.manager import RPCManager
 from tllm.rpc.schemas_pb2 import BFloat16Tensor
 
 
-def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, device: str) -> AttentionCache:
-    position_ids_list = []
-    past_key_values = SeqDynamicCache()
-    actual_seq_len_list = []
-    for uuid_str, seq_len in zip(seq_input.uuid_str_list, seq_input.seq_len_list):
-        if uuid_str in cache_manager.cache_dict:
-            kv_cache = cache_manager.get(uuid_str)
-            position_ids = torch.tensor([kv_cache.get_seq_length()], dtype=torch.long).unsqueeze(0)
-            actual_seq_len_list.append([seq_len, kv_cache.get_seq_length() + 1])
+def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_layers: int) -> NextAttentionData:
+    request_cache = NextRequestsCache(num_layers)
+    position_ids_list, actual_seq_len_list = [], []
+    for uuid, seq_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
+        if uuid in cache_manager.cache_dict:
+            layer_cache_list, cache_seq_len = cache_manager.get(uuid)
+            position_ids = torch.tensor([cache_seq_len], dtype=torch.long).unsqueeze(0)
+            actual_seq_len_list.append([seq_len, cache_seq_len + 1])
         else:
-            kv_cache = None
+            layer_cache_list = None
             position_ids = torch.arange(seq_len, dtype=torch.long).unsqueeze(0)
             actual_seq_len_list.append([seq_len, seq_len])
-        past_key_values.add(uuid_str, seq_len, kv_cache)
+        request_cache.add(uuid, seq_len, layer_cache_list)
         position_ids_list.append(position_ids)
-
-    return AttentionCache(
-        position_ids=torch.cat(position_ids_list, dim=-1).to(device),
-        past_key_value=past_key_values,
-        uuid_str_list=seq_input.uuid_str_list,
+    return NextAttentionData(
+        request_cache=request_cache,
         attn_mask=build_mask(actual_seq_len_list),
+        uuid_list=seq_input.uuid_list,
+        position_ids=torch.cat(position_ids_list, dim=-1),
     )
 
 
@@ -56,21 +53,11 @@ class Decoder(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: Tuple[torch.Tensor, torch.Tensor],
-        attention_cache: AttentionCache,
-    ):
-        next_decoder_cache = None
-        for i, layer in enumerate(self.decoder):
-            layer_outputs = layer(
-                hidden_states,
-                position_embeddings=position_embeddings,
-                attention_cache=attention_cache,
-            )
-            hidden_states = layer_outputs[0]
-
-            # 所有层的 kv cache 放到一起了，所以这里只需要取最后一层的 kv cache
-            next_decoder_cache = layer_outputs[1]
-        next_cache = next_decoder_cache
-        return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=next_cache)
+        attention_data: NextAttentionData,
+    ) -> torch.Tensor:
+        for layer in self.decoder:
+            hidden_states = layer(hidden_states, position_embeddings=position_embeddings, attention_data=attention_data)
+        return hidden_states
 
 
 class MyLlamaModel(nn.Module):
@@ -81,6 +68,7 @@ class MyLlamaModel(nn.Module):
         self.cache_manager = CacheManager()
         self.config = config
         self.decoder = Decoder(config, config.decoder_start_layer_idx, config.decoder_end_layer_idx)
+        self.num_decoder_layers = config.decoder_end_layer_idx - config.decoder_start_layer_idx
         self.rotary_emb = LlamaRotaryEmbedding(config=config)
 
     def load_state_dict(self, state_dict: Dict) -> None:
@@ -91,21 +79,23 @@ class MyLlamaModel(nn.Module):
         """
         @param hidden_states: bs x seq_len x hidden_size
         @param seq_input:
-            uuid_str_list: List[str]: 每个请求的 uuid
+            uuid_list: List[str]: 每个请求的 uuid
             seq_len_list: List[int]: 每个请求的 seq_len
-            如果 uuid_str 存在，则使用缓存的 kv cache，否则使用新的 kv cache
+            如果 uuid 存在，则使用缓存的 kv cache，否则使用新的 kv cache
 
         @return: bs x seq_len x hidden_size
         """
-        attention_cache = build_forward_cache(seq_input, self.cache_manager, self.device)
+        attention_data = build_forward_cache(seq_input, self.cache_manager, self.num_decoder_layers)
         hidden_states = hidden_states.to(self.device)
-        position_embeddings = self.rotary_emb(hidden_states, attention_cache.position_ids)
-        output = self.decoder(hidden_states, position_embeddings=position_embeddings, attention_cache=attention_cache)
+        position_embeddings = self.rotary_emb(hidden_states, attention_data.position_ids.to(self.device))
+        hidden_states = self.decoder(
+            hidden_states, position_embeddings=position_embeddings, attention_data=attention_data
+        )
 
-        for uuid_str, seq_len in zip(seq_input.uuid_str_list, seq_input.seq_len_list):
-            self.cache_manager.set(uuid_str, output.past_key_values.get_cache(uuid_str))
+        for uuid, seq_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
+            self.cache_manager.set(uuid, attention_data.get_kv_cache_list(uuid), attention_data.get_cache_seq_len(uuid))
             self.cache_manager.check_alive()
-        return output.last_hidden_state
+        return hidden_states
 
     @property
     def dtype(self):
@@ -135,12 +125,13 @@ class MyLlamaForCausalLM(nn.Module):
         cls.eos_token_ids = set()
 
         if hasattr(config, "eos_token_ids"):
-            cls.eos_token_ids |= (
-                set(config.eos_token_id) if isinstance(config.eos_token_id, list) else {config.eos_token_id}
-            )
+            if isinstance(config.eos_token_id, list):
+                cls.eos_token_ids |= set(config.eos_token_ids)
+            else:
+                cls.eos_token_ids.add(config.eos_token_id)
 
         cls.server = server
-        cls.pp_size = len(cls.server.url_list)
+        cls.pp_size = server.size
         if tok.tokenizer.eos_token_id:
             cls.eos_token_ids.add(tok.tokenizer.eos_token_id)
         eos_token = tok.tokenizer.convert_ids_to_tokens(list(cls.eos_token_ids))
@@ -159,7 +150,7 @@ class MyLlamaForCausalLM(nn.Module):
     ) -> Dict[str, Union[List[str], List[int], BFloat16Tensor]]:
         if need_serialize:
             hidden_states = serialize_tensor(hidden_states)
-        return {"uuid": seq_input.uuid_str_list, "seq_len": seq_input.seq_len_list, "hidden_states": hidden_states}
+        return {"uuid": seq_input.uuid_list, "seq_len": seq_input.seq_len_list, "hidden_states": hidden_states}
 
     def forward(self, inputs_embeds: torch.Tensor, seq_input: SeqInput) -> ForwardResult:
         hidden_states = inputs_embeds

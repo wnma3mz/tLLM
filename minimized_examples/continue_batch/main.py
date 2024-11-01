@@ -29,11 +29,11 @@ def continue_batch(input_ids: List[int], mask: torch.Tensor):
     print("generate token: ", output[0])
 
 
-def build_input(uuid_str: str, seq_len: int) -> Tuple[SeqInput, torch.Tensor]:
-    uuid_str_list = [uuid_str]
+def build_input(uuid: str, seq_len: int) -> Tuple[SeqInput, torch.Tensor]:
+    uuid_list = [uuid]
     seq_len_list = [seq_len]
     hidden_states = torch.randn(1, seq_len, 2048).to(dtype)
-    return SeqInput(uuid_str_list=uuid_str_list, seq_len_list=seq_len_list), hidden_states
+    return SeqInput(uuid_list=uuid_list, seq_len_list=seq_len_list), hidden_states
 
 
 if __name__ == "__main__":
@@ -72,7 +72,7 @@ if __name__ == "__main__":
 
     # assert False
     cat_hidden_states = torch.cat([hidden_states_1, hidden_states_2], dim=1)
-    cat_output = model(cat_hidden_states, SeqInput(uuid_str_list=["11", "22"], seq_len_list=[3, 2]))
+    cat_output = model(cat_hidden_states, SeqInput(uuid_list=["11", "22"], seq_len_list=[3, 2]))
 
     output_12 = torch.cat([output_1, output_2], dim=1)
     # 请求全处于 prefill 阶段
@@ -80,51 +80,21 @@ if __name__ == "__main__":
 
     # 请求部分处于 prefill 阶段，部分处于 decode 阶段
     cat_hidden_states = torch.cat([hidden_states_1, hidden_states_22], dim=1)
-    cat_output = model(cat_hidden_states, SeqInput(uuid_str_list=["33", "22"], seq_len_list=[3, 1]))
+    cat_output = model(cat_hidden_states, SeqInput(uuid_list=["33", "22"], seq_len_list=[3, 1]))
     output_122 = torch.cat([output_1, output_22], dim=1)
     print(f"is_same: {torch.allclose(output_122, cat_output)}")
 
     # 请求部分处于 prefill 阶段，部分处于 decode 阶段
     cat_hidden_states = torch.cat([hidden_states_11, hidden_states_2], dim=1)
-    cat_output = model(cat_hidden_states, SeqInput(uuid_str_list=["11", "44"], seq_len_list=[1, 2]))
+    cat_output = model(cat_hidden_states, SeqInput(uuid_list=["11", "44"], seq_len_list=[1, 2]))
     output_122 = torch.cat([output_11, output_2], dim=1)
     print(f"is_same: {torch.allclose(output_122, cat_output)}")
 
     # 请求全处于 decode 阶段
     cat_hidden_states = torch.cat([hidden_states_11, hidden_states_22], dim=1)
-    cat_output = model(cat_hidden_states, SeqInput(uuid_str_list=["11", "22"], seq_len_list=[1, 1]))
+    cat_output = model(cat_hidden_states, SeqInput(uuid_list=["11", "22"], seq_len_list=[1, 1]))
     output_1122 = torch.cat([output_11, output_22], dim=1)
     print(output_1122)
     print(cat_output)
     print("diff ", torch.sum(output_1122 - cat_output))
     print(f"is_same: {torch.allclose(output_1122, cat_output)}")  # 存在误差，会返回 False。TODO
-
-    assert False
-    tok = TokenizerUtils(model_path)
-    model = LlamaForCausalLM.from_pretrained(
-        model_path, trust_remote_code=True, device_map="cpu", torch_dtype=torch.bfloat16
-    )
-
-    model.eval()
-
-    messages = [{"role": "user", "content": "Hello, how are you?"}]
-    # input_ids:  tensor([[128000, 128000, 128006,   9125, 128007,    271,  38766,   1303,  33025,
-    #        2696,     25,   6790,    220,   2366,     18,    198,  15724,   2696,
-    #          25,    220,   1691,   5020,    220,   2366,     19,    271, 128009,
-    #      128006,    882, 128007,    271,   9906,     11,   1268,    527,    499,
-    #          30, 128009, 128006,  78191, 128007,    271]])
-    # 40,   2846,   1120,
-    #        264,   4221,   1646,     11,    358,   1541,    956,    617,  16024,
-    #        477,  21958,     11,    719,    358,   2846,  31301,  10489])
-    func(messages)
-
-    messages = [{"role": "user", "content": "What's your name?"}]
-    # input_ids:  tensor([[128000, 128000, 128006,   9125, 128007,    271,  38766,   1303,  33025,
-    #        2696,     25,   6790,    220,   2366,     18,    198,  15724,   2696,
-    #          25,    220,   1691,   5020,    220,   2366,     19,    271, 128009,
-    #      128006,    882, 128007,    271,   3923,    596,    701,    836,     30,
-    #      128009, 128006,  78191, 128007,    271]])
-    # 40,   2846,    459,  21075,
-    #      11478,   1646,   3967,    439,    445,  81101,     13,    445,  81101,
-    #      13656,    369,    330,  35353,  11688,   5008,  16197])
-    func(messages)

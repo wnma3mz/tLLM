@@ -1,5 +1,6 @@
 import argparse
 from concurrent import futures
+import logging
 import os
 import time
 from typing import *
@@ -54,7 +55,7 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
         s1 = time.time()
         hidden_states = deserialize_tensor(request.hidden_states)
 
-        seq_input = SeqInput(uuid_str_list=list(request.uuid), seq_len_list=list(request.seq_len))
+        seq_input = SeqInput(uuid_list=list(request.uuid), seq_len_list=list(request.seq_len))
         self.comm.broadcast_object([seq_input, tuple(hidden_states.shape)])
         self.comm.broadcast(hidden_states)
 
@@ -104,7 +105,7 @@ def start_grpc_server(comm: Communicator, model, port: int, rank: int, pp_rank: 
 
 if __name__ == "__main__":
     args = parse_args()
-    logger = setup_logger("client_" + __name__)
+    logger = setup_logger("client_" + __name__, logging.DEBUG)
     comm = Communicator(is_torchrun=True) if "WORLD_SIZE" in os.environ else SingleNodeCommunicator()
     config = AutoConfig.from_pretrained(args.model_path, trust_remote_code=True)
 

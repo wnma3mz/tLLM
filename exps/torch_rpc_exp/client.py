@@ -43,10 +43,10 @@ class MyLlamaForCausalLM(nn.Module):
         model.eval()
         return model
 
-    def forward(self, inputs_embeds: torch.Tensor, uuid_str: str) -> torch.Tensor:
+    def forward(self, inputs_embeds: torch.Tensor, uuid: str) -> torch.Tensor:
         """
         @param inputs_embeds: bs x seq_len x hidden_size
-        @param uuid_str: 用于区分不同请求的 uuid
+        @param uuid: 用于区分不同请求的 uuid
 
         @return: bs x seq_len x vocab_size
         """
@@ -58,9 +58,9 @@ class MyLlamaForCausalLM(nn.Module):
             for j, model_rref in enumerate(model_rref_list):
                 # 每个 node 只发送一次，但需要同步 kv cache 和 hidden states
                 if j == 0:
-                    fut = call_remote_forward(model_rref, hidden_states, shape_hidden_states, uuid_str)
+                    fut = call_remote_forward(model_rref, hidden_states, shape_hidden_states, uuid)
                 else:
-                    fut = call_remote_forward(model_rref, None, shape_hidden_states, uuid_str)
+                    fut = call_remote_forward(model_rref, None, shape_hidden_states, uuid)
                 fut_list.append(fut)
             hidden_states = fut_list[0].wait()
 
@@ -82,9 +82,9 @@ class MyLlamaForCausalLM(nn.Module):
         input_embeds = self.embed_tokens(input_ids)
         token_list: List[int] = []
         cnt = 0
-        uuid_str = str(uuid.uuid4())
+        uuid = str(uuid.uuid4())
         while True:
-            logits = self(input_embeds, uuid_str=uuid_str)
+            logits = self(input_embeds, uuid=uuid)
             cnt += 1
             if cnt >= max_new_tokens:
                 break

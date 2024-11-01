@@ -5,7 +5,7 @@ import torch.nn as nn
 from transformers.activations import ACT2FN
 from transformers.models.llama.modeling_llama import LlamaConfig, LlamaRMSNorm, apply_rotary_pos_emb, repeat_kv
 
-from tllm.models.cache import AttentionCache
+from tllm.models.cache import NextAttentionData, NextRequestsCache
 
 
 class BaseParallelLayer(nn.Module):
@@ -164,8 +164,8 @@ class MyLlamaSdpaAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: Tuple[torch.Tensor, torch.Tensor],
-        attention_cache: AttentionCache,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        attention_data: NextAttentionData,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         bsz, q_len, _ = hidden_states.size()
 
         query_states, key_states, value_states = self.qkv_proj(hidden_states)
@@ -176,29 +176,25 @@ class MyLlamaSdpaAttention(nn.Module):
 
         cos, sin = position_embeddings
 
-        query_states, key_states = apply_rotary_pos_emb(
-            query_states, key_states, cos, sin, attention_cache.position_ids
-        )
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, attention_data.position_ids)
 
-        if attention_cache.past_key_value is not None:
-            cache_kwargs = {"uuid_str_list": attention_cache.uuid_str_list}
-            key_states, value_states = attention_cache.past_key_value.update(
-                key_states, value_states, self.layer_idx - self.config.offset, cache_kwargs
-            )
+        request_cache: NextRequestsCache = attention_data.request_cache
+        cache_kwargs = {"uuid_list": attention_data.uuid_list, "layer_idx": self.layer_idx - self.config.offset}
+        key_states, value_states = request_cache.update(key_states, value_states, **cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         # TODO: speed up the following line
         attn_output = torch.nn.functional.scaled_dot_product_attention(
-            query_states, key_states, value_states, attn_mask=attention_cache.attn_mask
+            query_states, key_states, value_states, attn_mask=attention_data.attn_mask
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(bsz, q_len, -1)
 
         attn_output = self.comm.all_reduce(self.o_proj(attn_output))
-        return attn_output, None, attention_cache.past_key_value
+        return attn_output, None
 
 
 class MyLlamaDecoderLayer(nn.Module):
@@ -229,16 +225,16 @@ class MyLlamaDecoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: Tuple[torch.Tensor, torch.Tensor],
-        attention_cache: AttentionCache,
-    ) -> Tuple[torch.Tensor, AttentionCache]:
+        attention_data: NextAttentionData,
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        hidden_states, _, past_key_value = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            attention_cache=attention_cache,
+            attention_data=attention_data,
             position_embeddings=position_embeddings,
         )
         hidden_states = residual + hidden_states
@@ -250,4 +246,4 @@ class MyLlamaDecoderLayer(nn.Module):
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
-        return hidden_states, past_key_value
+        return hidden_states

@@ -26,6 +26,10 @@ class RPCManager:
             "init_model_flag": self.init_model_flag,
         }
 
+    @property
+    def size(self):
+        return len(self.stub_list)
+
     def update_url(self, pp_idx: int, url: str) -> bool:
         if pp_idx >= len(self.stub_list):
             return False

@@ -28,12 +28,12 @@ class MyAttention(Attention):
         keys = keys.reshape(B, L, self.n_kv_heads, -1).transpose(0, 2, 1, 3)
         values = values.reshape(B, L, self.n_kv_heads, -1).transpose(0, 2, 1, 3)
 
-        # must has cache, and split by uuid_str
+        # must has cache, and split by uuid
         seq_cache = cache.past_key_value
         queries = mx.concat(self._rope(queries, seq_cache), axis=-2)
         keys = self._rope(keys, seq_cache)
 
-        cache_kwargs = {"uuid_str_list": cache.uuid_str_list}
+        cache_kwargs = {"uuid_list": cache.uuid_list}
         keys, values = seq_cache.update_and_fetch(keys, values, cache_kwargs)
 
         output = mx.fast.scaled_dot_product_attention(queries, keys, values, scale=self.scale, mask=mask)

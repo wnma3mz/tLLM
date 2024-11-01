@@ -37,19 +37,19 @@ def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_la
     for layer_idx in range(num_layers):
         past_key_values = SeqMLXDynamicCache()
         actual_seq_len_list = []
-        for uuid_str, seq_len in zip(seq_input.uuid_str_list, seq_input.seq_len_list):
-            if uuid_str in cache_manager.cache_dict:
-                kv_cache = cache_manager.get(uuid_str)[layer_idx]
+        for uuid, seq_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
+            if uuid in cache_manager.cache_dict:
+                kv_cache = cache_manager.get(uuid)[layer_idx]
                 actual_seq_len_list.append([seq_len, kv_cache.offset + 1])
             else:
                 kv_cache = None
                 actual_seq_len_list.append([seq_len, seq_len])
-            past_key_values.add(uuid_str, seq_len, kv_cache)
+            past_key_values.add(uuid, seq_len, kv_cache)
 
         attention_cache_list.append(
             AttentionCache(
                 past_key_value=past_key_values,
-                uuid_str_list=seq_input.uuid_str_list,
+                uuid_list=seq_input.uuid_list,
                 attn_mask=build_mlx_mask(actual_seq_len_list),
             )
         )
@@ -87,10 +87,10 @@ class MyMLXLlamaModel(nn.Module):
         mask = mask if mask is None else mask.astype(hidden_states.dtype)
         output = self.model(hidden_states, mask=mask, cache=attention_cache_list)
 
-        for uuid_str, seq_len in zip(seq_input.uuid_str_list, seq_input.seq_len_list):
+        for uuid, seq_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
             self.cache_manager.set(
-                uuid_str,
-                [attention_cache.past_key_value.get_cache(uuid_str) for attention_cache in attention_cache_list],
+                uuid,
+                [attention_cache.past_key_value.get_cache(uuid) for attention_cache in attention_cache_list],
             )
             self.cache_manager.check_alive()
         return np.array(output.astype(mx.float16))

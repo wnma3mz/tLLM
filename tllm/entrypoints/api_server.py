@@ -102,13 +102,12 @@ async def monitor_websocket(websocket: WebSocket):
 @app.websocket("/ws/client/{client_id}")
 async def client_websocket(websocket: WebSocket, client_id: str):
     await websocket.accept()
-    layer_manager.websockets[client_id] = websocket
 
     try:
         while True:
             data = await websocket.receive_json()
             if data["type"] == "register_layers":
-                layer_manager.register_client(client_id, data["start_idx"], data["end_idx"])
+                layer_manager.register_client(client_id, data)
 
                 await layer_manager.broadcast_state()
                 # 根据 layer idx 自动算 pp idx

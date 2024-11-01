@@ -53,7 +53,7 @@ class LayerManager:
 
     def register_client(self, client_id: str, data: Dict):
         self.clients[client_id] = {"client_id": client_id}
-        self.clients["client_id"].update(data)
+        self.clients[client_id].update(data)
 
         for idx in range(data["start_idx"], data["end_idx"]):
             self.layer_counts[idx] += 1

@@ -18,9 +18,9 @@ async def generate_utils(model, sequence_request_list: List[SequenceRequestData]
                 input_ids: torch.Tensor
 
     """
-    uuid_str_list, input_ids_list, seq_len_list = [], [], []
+    uuid_list, input_ids_list, seq_len_list = [], [], []
     for sequence_request in sequence_request_list:
-        uuid_str_list.append(sequence_request.request_id)
+        uuid_list.append(sequence_request.request_id)
         # 如果是 prefilling，则为 input_ids
         # 否则，为 output_ids[-1]
         # input_ids: bsz x seq_len
@@ -34,7 +34,7 @@ async def generate_utils(model, sequence_request_list: List[SequenceRequestData]
     input_ids = torch.cat(input_ids_list, dim=-1)
     input_embeds = model.embed_tokens(input_ids)
 
-    seq_input = SeqInput(uuid_str_list=uuid_str_list, seq_len_list=seq_len_list)
+    seq_input = SeqInput(uuid_list=uuid_list, seq_len_list=seq_len_list)
     forward_result = model(input_embeds, seq_input)
     logits = forward_result.logits
 

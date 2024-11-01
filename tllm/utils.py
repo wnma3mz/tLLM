@@ -38,9 +38,9 @@ def call_remote_init(model_rref, node_config: NodeConfig) -> torch.futures.Futur
 
 
 def call_remote_forward(
-    model_rref, hidden_states: Optional[torch.Tensor], shape_hidden_states: Tuple[int], uuid_str: str
+    model_rref, hidden_states: Optional[torch.Tensor], shape_hidden_states: Tuple[int], uuid: str
 ) -> torch.futures.Future:
-    return model_rref.rpc_async().forward(hidden_states, shape_hidden_states, uuid_str)
+    return model_rref.rpc_async().forward(hidden_states, shape_hidden_states, uuid)
 
 
 def get_ip_address() -> str:
