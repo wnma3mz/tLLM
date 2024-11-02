@@ -50,7 +50,9 @@ RoadMap
         - [x] Streaming Output
         - [x] chat completion(stream)
         - [x] chat completion(non-stream)
-        - [x] using anythingLLM            
+        - [x] using anythingLLM
+    - [ ] Communication
+        - [ ] Communication Time Benchmark (in progress)
 - [ ] KV Cache
     - [x] Request/Sequence Cache
     - [x] Custom KV Cache Class
@@ -59,6 +61,27 @@ RoadMap
 - [ ] Shard Storage
 
 ### Performance
+
+### 网络要求估算
+
+- PP=8 ，那么通信要求需要$*8$
+- 70B 的 hidden_size 是 8192
+- 数据是 `bfloat16`，每个 token 的通信参数量为 $1*8192*2=16,384$
+
+在 TPOT 阶段预期速度: 20 token/s -> 0.05s / token
+- 假设通信：计算比为 1:4，那么通信时间为 0.01s
+    - 当前实现为双向通信，70B 的 hidden_size 是 8192，就有 $16,384*2=32,768$ bytes.
+    - 故要在 0.01/8s 完成，那么网络带宽至少要求 $32,768/0.01*8=26,214,400 bytes/s = 26 Mbps$。
+在 TTFT 阶段，即首 token 时间预期 3s，
+- 假设通信：计算比为 1:2，那么通信时间为 1s
+- 假设输入 token 数为 1000，那么通信参数量为 $1000*16,384 = 16,384,000$ bytes
+- 1/8s 内完成，通信时间为 $16,384,000/1*8=131,072,000 比特/秒 = 131 Mbps$
+
+优化点：
+- ring 通信，加速一倍
+- 数据压缩一倍，加速一倍
+- 在 TTFT 阶段做 PP overlap，把输入 token 分块传输。
+
 
 - 2 GHz 四核Intel Core i5, 16 GB 3733 MHz LPDDR4X
     - Llama-3.2-1B-Instruct 单机时间：10.96 token/s

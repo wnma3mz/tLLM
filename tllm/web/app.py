@@ -7,9 +7,24 @@ import requests
 from tllm.static.gradio_data import GenerationConfig, custom_css
 
 
+def process_response_chunk(chunk: bytes) -> Optional[Dict]:
+    """处理响应的数据块"""
+    try:
+        response_text = chunk.decode("utf-8").split("data: ")[-1].strip()
+        if response_text == "[DONE]":
+            return None
+        data_chunk = json.loads(response_text)
+        if data_chunk["choices"][0]["finish_reason"] is not None:
+            return None
+        return data_chunk
+    except:
+        print("Error decoding chunk", chunk)
+        return None
+
+
 class ChatInterface:
     def __init__(self, chat_url: str):
-        self.url = f"http://{chat_url}/v1/chat/completions"
+        self.chat_url = chat_url
         self.should_stop = False
         self.config = GenerationConfig()
 
@@ -35,8 +50,8 @@ class ChatInterface:
     def _create_config_column(self) -> List[gr.components.Component]:
         """创建配置界面的侧列"""
         gr.Markdown("### 模型参数设置")
-
         components = [
+            gr.Textbox(label="url", value=self.chat_url, lines=2),
             gr.Textbox(label="System Prompt", value=self.config.system_prompt, lines=3),
             gr.Slider(minimum=0.0, maximum=2.0, value=self.config.temperature, step=0.1, label="Temperature"),
             gr.Slider(minimum=0.0, maximum=1.0, value=self.config.top_p, step=0.1, label="Top P"),
@@ -49,7 +64,8 @@ class ChatInterface:
     def _setup_config_updates(self, components: List[gr.components.Component]) -> None:
         """设置配置更新的回调"""
 
-        def update_config(sys_prompt, temp, tp, tk, max_tok):
+        def update_config(url, sys_prompt, temp, tp, tk, max_tok):
+            self.chat_url = url
             self.config.system_prompt = sys_prompt
             self.config.temperature = temp
             self.config.top_p = tp
@@ -85,25 +101,11 @@ class ChatInterface:
             "max_tokens": self.config.max_tokens,
         }
 
-    def _process_response_chunk(self, chunk: bytes) -> Optional[Dict]:
-        """处理响应的数据块"""
-        try:
-            response_text = chunk.decode("utf-8").split("data: ")[-1].strip()
-            if response_text == "[DONE]":
-                return None
-            data_chunk = json.loads(response_text)
-            if data_chunk["choices"][0]["finish_reason"] is not None:
-                return None
-            return data_chunk
-        except:
-            print("Error decoding chunk", chunk)
-            return None
-
     def _handle_bot_response(self, history: List[List[str]]) -> Generator:
         """处理机器人的响应"""
         self.should_stop = False
         data = self._prepare_request_data(history)
-        response = requests.post(self.url, json=data, stream=True)
+        response = requests.post(self.chat_url, json=data, stream=True)
 
         partial_message = ""
         for chunk in response.iter_content(chunk_size=1024):
@@ -111,7 +113,7 @@ class ChatInterface:
                 break
 
             if chunk:
-                data_chunk = self._process_response_chunk(chunk)
+                data_chunk = process_response_chunk(chunk)
                 if data_chunk is None:
                     break
 
@@ -172,7 +174,7 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-    chat_interface = ChatInterface(args)
+    chat_interface = ChatInterface(args.chat_url)
     demo = chat_interface.create_interface()
     demo.queue()
     demo.launch(server_name="0.0.0.0", server_port=args.port, show_api=False, prevent_thread_lock=False)
