@@ -1,4 +1,5 @@
 import asyncio
+import time
 import traceback
 from typing import *
 
@@ -13,7 +14,7 @@ from tllm.models.utils import is_generate_end
 async def generate_utils(model, sequence_request_list: List[SequenceRequestData]) -> AsyncGenerator:
     """
     @params:
-        sequence_request_list: List[Params]
+        sequence_request_list: List[SequenceRequestData]
             Params:
                 input_ids: torch.Tensor
 
@@ -24,7 +25,7 @@ async def generate_utils(model, sequence_request_list: List[SequenceRequestData]
         # 如果是 prefilling，则为 input_ids
         # 否则，为 output_ids[-1]
         # input_ids: bsz x seq_len
-        if len(sequence_request.output_ids) == 0:
+        if sequence_request.is_prefill:
             input_ids_list.append(sequence_request.input_ids)
             seq_len_list.append(sequence_request.input_ids.shape[-1])
         else:
@@ -35,7 +36,9 @@ async def generate_utils(model, sequence_request_list: List[SequenceRequestData]
     input_embeds = model.embed_tokens(input_ids)
 
     seq_input = SeqInput(uuid_list=uuid_list, seq_len_list=seq_len_list)
+    s1 = time.time()
     forward_result = model(input_embeds, seq_input)
+    generate_time = time.time() - s1
     logits = forward_result.logits
 
     # 根据 seq 拆开，之后直接在 sampler 中处理
@@ -45,8 +48,6 @@ async def generate_utils(model, sequence_request_list: List[SequenceRequestData]
         generate_texts = sequence_request.sampler.decode(generate_ids)
 
         sequence_request.output_ids.append(generate_ids[0])
-        sequence_request.generate_ids = generate_ids
-        sequence_request.generate_texts = generate_texts
 
         end = is_generate_end(
             sequence_request.output_ids,
@@ -57,12 +58,13 @@ async def generate_utils(model, sequence_request_list: List[SequenceRequestData]
             sequence_request.finish_reason_list = [end.finish_reason]
             sequence_request.is_stop = True
         else:
+            sequence_request.generate_text = generate_texts[0]
             sequence_request.output_text += generate_texts[0]  # 不添加 end text
 
-        if len(sequence_request.output_ids) == 1:
-            sequence_request.ttft_cost_time = forward_result.comm_cost_time_list
-        else:
-            sequence_request.tpot_cost_time = forward_result.comm_cost_time_list
+        if sequence_request.is_prefill:
+            sequence_request.ttft_cost_time = generate_time
+            sequence_request.decode_start_ts = time.time()
+            sequence_request.is_prefill = False
 
     comm_cost_time_list = forward_result.comm_cost_time_list
     comm_cost_time_str = ",".join([f"{x:.4f}" for x in comm_cost_time_list])
@@ -148,7 +150,10 @@ class AsyncEngine:
                 while not data.is_stop:
                     await asyncio.wait_for(data.condition.wait(), data.timeout)
                     yield data.to_request_output()  # 流式返回数据的内容，可以控制
-
+                self.logger.debug(f"[request_id] {data.request_id}] ttft: {data.ttft_cost_time:.4f} s")
+                self.logger.debug(
+                    f"[request_id] {data.request_id}] tpot: {(len(data.output_ids) - 1) / (time.time() - data.decode_start_ts):.4f} token/s"
+                )
         except asyncio.TimeoutError:
             raise TimeoutError("Processing timed out")
 
@@ -159,7 +164,7 @@ class AsyncEngine:
             async with data.condition:
                 while not data.is_stop:
                     await asyncio.wait_for(data.condition.wait(), data.timeout)
-                    # 这里可以进行你需要的处理，例如更新输出
+                    # 这里可以进行处理，例如更新输出
                     # 确保在这里将 output_text 更新
             return data.to_request_output()  # 返回最终的数据对象
         except asyncio.TimeoutError:

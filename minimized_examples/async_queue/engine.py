@@ -1,13 +1,9 @@
 import asyncio
 import logging
 import random
-import time
 from typing import *
-from typing import Any, Dict
-from uuid import uuid4
 
-from protocol import SequenceRequestData
-import torch
+from tllm.models.protocol import SequenceRequestData
 
 random.seed(42)
 

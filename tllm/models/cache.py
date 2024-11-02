@@ -110,7 +110,7 @@ class AttentionData:
         position_ids: Optional[torch.Tensor] = None,
     ) -> None:
         self.uuid_list = uuid_list
-        self.request_cache = request_cache  # 每层模型都有一个 NextDynamicCache
+        self.request_cache = request_cache
         self.attn_mask = attn_mask
         self.position_ids = position_ids  # 只在 torch 下有意义
 

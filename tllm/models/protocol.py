@@ -1,5 +1,6 @@
 import asyncio
 from dataclasses import dataclass, field
+import time
 from typing import *
 
 import torch
@@ -64,31 +65,31 @@ class ForwardResult:
 class SequenceRequestData:
     # 每个请求在输入输出模型的数据
     request_id: str
+    input_ids: List[int]
     sampling_params: SamplingParams
-    input_ids: Optional[List[int]] = None  # 输入的 token id
-    finish_reason_list: Optional[List[str]] = None
+    sampler: SamplerUtils
 
-    sampler: Optional[SamplerUtils] = None
+    finish_reason_list: Optional[List[str]] = None
 
     output_ids: Optional[List[int]] = None  # 最终生成的 token id
     output_text: Optional[str] = None  # 最终生成的 text
 
-    generate_ids: Optional[List[int]] = None  # 每次生成的 token id
-    generate_texts: Optional[List[str]] = None  # 每次生成的 text
+    generate_text: Optional[str] = None  # 每次生成的 text
 
-    ttft_cost_time: Optional[List[float]] = None
-    tpot_cost_time: Optional[List[float]] = None
+    ttft_cost_time: Optional[float] = None
+    decode_start_ts: Optional[float] = None
     timeout: int = 100000  # 请求的总超时时间
     is_stop: bool = False
+    is_prefill: bool = True
 
     condition: asyncio.Condition = field(default_factory=asyncio.Condition)
 
     def __post_init__(self):
         self.output_ids = []
         self.output_text = ""
-        self.generate_ids = []
-        self.generate_texts = []
+        self.generate_text = None
         self.finish_reason_list = [None] * self.sampling_params.n
+        self.decode_start_ts = None
 
     def __repr__(self) -> str:
         return f"request_id={self.request_id}; output_ids={self.output_ids}"
@@ -102,8 +103,8 @@ class SequenceRequestData:
                 [
                     CompletionOutput(
                         index=index,
-                        text=self.generate_texts[index],
-                        token_ids=self.generate_ids[index],
+                        text=self.generate_text,
+                        token_ids=self.output_ids[-1],
                         finish_reason=self.finish_reason_list[index],
                     )
                     for index in range(self.sampling_params.n)

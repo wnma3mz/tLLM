@@ -29,6 +29,7 @@ class SamplingParams:
         skip_special_tokens: bool = True,
         spaces_between_special_tokens: bool = True,
     ):
+        assert n == 1, "Only n=1 is supported"
         self.max_tokens = max_tokens
         self.top_k = top_k
         self.top_p = top_p

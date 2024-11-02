@@ -1,5 +1,5 @@
 for i in {1..10}; do
-  curl http://localhost:8000/v1/chat/completions -X POST \
+  curl http://localhost:8022/v1/chat/completions -X POST \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer common" \
     -d '{
