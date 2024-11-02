@@ -104,7 +104,11 @@ def start_grpc_server(comm: Communicator, model, logger, args, is_debug=False):
 
 
 def run(args, is_debug=False):
-    comm = Communicator(is_torchrun=True) if "WORLD_SIZE" in os.environ and int(os.environ["WORLD_SIZE"]) > 1 else SingleNodeCommunicator()
+    comm = (
+        Communicator(is_torchrun=True)
+        if "WORLD_SIZE" in os.environ and int(os.environ["WORLD_SIZE"]) > 1
+        else SingleNodeCommunicator()
+    )
     config = AutoConfig.from_pretrained(args.model_path, trust_remote_code=True)
     logger = setup_logger("client_" + __name__, logging.DEBUG)
     config.comm = comm

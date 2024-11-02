@@ -118,7 +118,7 @@ def init_engine(args) -> Tuple[AsyncEngine, TokenizerUtils]:
     _, MY_CausalLM_CLASS, _ = MODEL_REGISTER[arch]
 
     url_list = parse_url_list(args.config_path)
-    server = RPCManager(url_list, pp_size=len(url_list))
+    server = RPCManager(url_list)
     tok = TokenizerUtils(args.model_path)
     model = MY_CausalLM_CLASS.from_pretrained(logger, config, tok, args.weight_path, server)
     engine = AsyncEngine(logger, model)

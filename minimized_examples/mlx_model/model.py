@@ -28,7 +28,10 @@ def load_weight(model_path: str) -> Dict[str, mx.array]:
 def generate_text(model_path: str):
     messages1 = [{"role": "user", "content": "Hello, how are you?"}]
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
-    text = tokenizer.apply_chat_template(messages1, tokenize=False, add_generation_prompt=True) + "I'm just a language model, I don't have"
+    text = (
+        tokenizer.apply_chat_template(messages1, tokenize=False, add_generation_prompt=True)
+        + "I'm just a language model, I don't have"
+    )
     model, tokenizer = load(model_path)
     response = generate(model, tokenizer, prompt=text, verbose=False, max_tokens=2)
     print("response", response)
@@ -37,7 +40,10 @@ def generate_text(model_path: str):
 def build_model_input(model_path: str):
     messages1 = [{"role": "user", "content": "Hello, how are you?"}]
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
-    text = tokenizer.apply_chat_template(messages1, tokenize=False, add_generation_prompt=True)+ "I'm just a language model, I don't have"
+    text = (
+        tokenizer.apply_chat_template(messages1, tokenize=False, add_generation_prompt=True)
+        + "I'm just a language model, I don't have"
+    )
     return mx.array([tokenizer.encode(text)])
 
 

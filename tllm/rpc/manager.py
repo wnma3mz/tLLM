@@ -1,34 +1,23 @@
-from concurrent.futures import ThreadPoolExecutor
-import json
+# coding: utf-8
 from typing import *
 
-from google.protobuf import json_format, struct_pb2
 import grpc
+import torch
 
+from tllm.commons.convert import deserialize_tensor, serialize_tensor
+from tllm.models.protocol import SeqInput
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 
 
 class RPCManager:
-    def __init__(self, url_list: List[Optional[str]], pp_size: int = 1):
-        self.stub_list = []
+    def __init__(self, url_list: List[Optional[str]]):
+        self.stub_list: List[schemas_pb2_grpc.RPCServiceStub] = []
         for url in url_list:
             if url is not None:
                 channel = grpc.insecure_channel(url)
                 self.stub_list.append(schemas_pb2_grpc.RPCServiceStub(channel))
             else:
                 self.stub_list.append(None)
-        self.executor = ThreadPoolExecutor()
-        self.pp_size = pp_size
-        self.func_dict = {
-            "forward": self.forward,
-            "init_model": self.init_model,
-            "health": self.health,
-            "init_model_flag": self.init_model_flag,
-        }
-
-    @property
-    def size(self):
-        return len(self.stub_list)
 
     def update_url(self, pp_idx: int, url: str) -> bool:
         if pp_idx >= len(self.stub_list):
@@ -45,55 +34,31 @@ class RPCManager:
     def is_full_connected(self) -> bool:
         return all([stub is not None for stub in self.stub_list])
 
-    def init_model(self, stub, data):
-        config_struct_obj = struct_pb2.Struct()
-        json_format.Parse(json.dumps(data["config"]), config_struct_obj)
-        request = schemas_pb2.ModelConfig(
-            model_name=data["model_name"],
-            pp_rank=data["pp_rank"],
-            layer_idx_start=data["layer_idx_start"],
-            layer_idx_end=data["layer_idx_end"],
-            master_url=data["master_url"],
-            next_pp_rank=data["next_pp_rank"],
-        )
-        return stub.InitModel(request)
+    def forward(
+        self,
+        url_idx: int,
+        hidden_states: torch.Tensor,
+        seq_input: SeqInput,
+        is_first: bool = False,
+        is_last: bool = False,
+    ) -> Tuple[Union[torch.Tensor, bytes], float]:
+        if is_first:
+            hidden_states = serialize_tensor(hidden_states)
+        forward_request = {
+            "uuid": seq_input.uuid_list,
+            "seq_len": seq_input.seq_len_list,
+            "hidden_states": hidden_states,
+        }
 
-    def forward(self, stub, data):
-        request = schemas_pb2.ForwardRequest(**data)
-        return stub.Forward(request)
-
-    def health(self, stub):
-        request = schemas_pb2.Empty()
-        return stub.Health(request)
-
-    def init_model_flag(self, stub):
-        request = schemas_pb2.Empty()
-        return stub.InitModelFlag(request)
+        request = schemas_pb2.ForwardRequest(**forward_request)
+        response = self.stub_list[url_idx].Forward(request)
+        if is_last:
+            return deserialize_tensor(response.output, to_tensor=True), response.cost_time
+        else:
+            return response.output, response.cost_time
 
     def __len__(self):
         return len(self.stub_list)
-
-    # 异步 post
-    def post(self, path, data_list: List[Dict[str, Any]]):
-        if path[0] == "/":
-            path = path[1:]
-        response_list = []
-        for stub, data in zip(self.stub_list, data_list):
-            response = self.func_dict[path](stub, data)
-            response_list.append(response)
-        return response_list
-
-    # 单个 post
-    def post_sync(self, url_idx: int, path, data):
-        if path[0] == "/":
-            path = path[1:]
-        stub = self.stub_list[url_idx]
-        return self.func_dict[path](stub, data)
-
-    def is_success(self, response_list) -> bool:
-        if isinstance(response_list, list):
-            return all([response.status == 200 for response in response_list])
-        return response_list.status == 200
 
 
 if __name__ == "__main__":
