@@ -87,9 +87,10 @@ class RequestsCache:
         layer_idx = cache_kwargs.get("layer_idx", 0)
         if HAS_MLX:
             seq_key_states = key_states  # 已经在外部 split 过了
+            seq_value_states = split_func(value_states, self.get_index_list(uuid_list))
         else:
             seq_key_states = split_func(key_states, self.get_seq_len_list(uuid_list))
-        seq_value_states = split_func(value_states, self.get_seq_len_list(uuid_list))
+            seq_value_states = split_func(value_states, self.get_seq_len_list(uuid_list))
 
         key_states_list, value_states_list = [], []
         for uuid, key_state, value_state in zip(uuid_list, seq_key_states, seq_value_states):
