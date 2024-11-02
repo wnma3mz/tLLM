@@ -149,25 +149,24 @@ class MyLlamaForCausalLM(nn.Module):
         return model
 
     def _prepare_forward_data(
-        self, seq_input: SeqInput, hidden_states: torch.Tensor, need_serialize: bool, need_compress: bool
+        self, seq_input: SeqInput, hidden_states: torch.Tensor, need_serialize: bool
     ) -> Dict[str, Union[List[str], List[int], BFloat16Tensor]]:
         if need_serialize:
-            hidden_states = serialize_tensor(hidden_states, need_compress=need_compress)
+            hidden_states = serialize_tensor(hidden_states)
         return {"uuid": seq_input.uuid_list, "seq_len": seq_input.seq_len_list, "hidden_states": hidden_states}
 
     def forward(self, inputs_embeds: torch.Tensor, seq_input: SeqInput) -> ForwardResult:
         hidden_states = inputs_embeds
         comm_cost_time_list = []
-        need_compress = True if sum(seq_input.seq_len_list) >= 64 else False  # 超过这个数，需要进行压缩传输
         for pp_idx in range(self.pp_size):
             s1 = time.time()
             response = self.server.post_sync(
                 pp_idx,
                 "/forward",
-                data=self._prepare_forward_data(seq_input, hidden_states, pp_idx == 0, need_compress),
+                data=self._prepare_forward_data(seq_input, hidden_states, pp_idx == 0),
             )
             hidden_states = (
-                deserialize_tensor(response.output, to_tensor=True, has_compress=need_compress)
+                deserialize_tensor(response.output, to_tensor=True)
                 if pp_idx == self.pp_size - 1
                 else response.output
             )

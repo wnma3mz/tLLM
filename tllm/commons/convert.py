@@ -94,22 +94,23 @@ def list_to_protobuf(data: List):
     return multi_array_proto
 
 
-def serialize_tensor(tensor: Union[torch.Tensor, np.ndarray], need_compress: bool = False) -> BFloat16Tensor:
+def serialize_tensor(tensor: Union[torch.Tensor, np.ndarray]) -> BFloat16Tensor:
     # TODO: support bfloat16
     tensor_proto = BFloat16Tensor()
+    # bsz x seq_len x hidden_size
     tensor_proto.shape.extend(tensor.shape)  # 添加形状
     if isinstance(tensor, np.ndarray):
         tensor_bytes = tensor.tobytes()
     else:
         tensor_bytes = tensor.to(torch.float16).detach().numpy().tobytes()
-    tensor_proto.data = lz4.frame.compress(tensor_bytes) if need_compress else tensor_bytes
+    tensor_proto.data = lz4.frame.compress(tensor_bytes) if tensor.shape[1] >= 64 else tensor_bytes
     return tensor_proto
 
 
 def deserialize_tensor(
-    tensor_proto: BFloat16Tensor, to_tensor: bool = False, has_compress: bool = False
+    tensor_proto: BFloat16Tensor, to_tensor: bool = False
 ) -> Union[torch.Tensor, "mx.array"]:
-    tensor_bytes = lz4.frame.decompress(tensor_proto.data) if has_compress else tensor_proto.data
+    tensor_bytes = lz4.frame.decompress(tensor_proto.data) if tensor_proto.shape[1] >= 64 else tensor_proto.data
     if HAS_MLX and to_tensor == False:
         data = np.frombuffer(tensor_bytes, dtype=np.float16)
         return mx.array(data, dtype=mx.bfloat16).reshape(*tensor_proto.shape)

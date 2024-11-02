@@ -53,8 +53,7 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
             seq_len: int
         """
         s1 = time.time()
-        need_compress = True if sum(request.seq_len) >= 64 else False  # 超过这个数，需要进行压缩传输
-        hidden_states = deserialize_tensor(request.hidden_states, has_compress=need_compress)
+        hidden_states = deserialize_tensor(request.hidden_states)
 
         seq_input = SeqInput(uuid_list=list(request.uuid), seq_len_list=list(request.seq_len))
         self.comm.broadcast_object([seq_input, tuple(hidden_states.shape)])
@@ -62,7 +61,7 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
 
         output_hidden_states = self.model(hidden_states, seq_input)
 
-        output = serialize_tensor(output_hidden_states, need_compress=need_compress)
+        output = serialize_tensor(output_hidden_states)
 
         cost_time = time.time() - s1
 
