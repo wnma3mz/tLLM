@@ -24,9 +24,9 @@ def process_response_chunk(chunk: bytes) -> Optional[Dict]:
 
 class ChatInterface:
     def __init__(self, chat_url: str):
-        self.chat_url = chat_url
         self.should_stop = False
         self.config = GenerationConfig()
+        self.config.chat_url = chat_url
 
     def _create_chat_column(self) -> Tuple[gr.Chatbot, gr.Textbox, gr.Button, gr.Button, gr.Button]:
         """创建聊天界面的主列"""
@@ -51,7 +51,7 @@ class ChatInterface:
         """创建配置界面的侧列"""
         gr.Markdown("### 模型参数设置")
         components = [
-            gr.Textbox(label="url", value=self.chat_url, lines=2),
+            gr.Textbox(label="url", value=self.config.chat_url, lines=2),
             gr.Textbox(label="System Prompt", value=self.config.system_prompt, lines=3),
             gr.Slider(minimum=0.0, maximum=2.0, value=self.config.temperature, step=0.1, label="Temperature"),
             gr.Slider(minimum=0.0, maximum=1.0, value=self.config.top_p, step=0.1, label="Top P"),
@@ -65,7 +65,7 @@ class ChatInterface:
         """设置配置更新的回调"""
 
         def update_config(url, sys_prompt, temp, tp, tk, max_tok):
-            self.chat_url = url
+            self.config.chat_url = url
             self.config.system_prompt = sys_prompt
             self.config.temperature = temp
             self.config.top_p = tp
@@ -105,7 +105,7 @@ class ChatInterface:
         """处理机器人的响应"""
         self.should_stop = False
         data = self._prepare_request_data(history)
-        response = requests.post(self.chat_url, json=data, stream=True)
+        response = requests.post(self.config.chat_url, json=data, stream=True)
 
         partial_message = ""
         for chunk in response.iter_content(chunk_size=1024):

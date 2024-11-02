@@ -6,7 +6,6 @@ import zlib
 
 import grpc
 import lz4.frame
-import numpy as np
 import tabulate
 import torch
 
@@ -99,10 +98,11 @@ class PerformanceTester:
     def run_performance_test(self, test_shapes=None):
         if test_shapes is None:
             test_shapes = [
-                (1, 8192),
-                (4, 8192),
-                (16, 8192),
-                (64, 8192),
+                # (1, 8192),
+                # (4, 8192),
+                # (16, 8192),
+                (32, 8192),
+                # (64, 8192),
             ]
 
         print(f"\n=== Starting gRPC Matrix Performance Test (use_zlib: {use_zlib}; use_lz4: {use_lz4}) ===")
@@ -140,7 +140,7 @@ class PerformanceTester:
 
 
 def main():
-    tester = PerformanceTester()
+    tester = PerformanceTester("192.168.1.4")
     tester.run_performance_test()
 
 

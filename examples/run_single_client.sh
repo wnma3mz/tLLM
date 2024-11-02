@@ -3,6 +3,7 @@ MASTER_PORT=29501
 GRPC_PORT=25001
 BASE_PATH=/Users/lujianghu/Documents/
 MASTER_URL=ws://localhost:8022
+# MASTER_URL=ws://192.168.1.4:8022
 MODE_SIZE=$1
 TP=$2
 

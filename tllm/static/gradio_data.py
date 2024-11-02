@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 @dataclass
 class GenerationConfig:
+    chat_url: str = "http://localhost:8000/v1/chat/completions"
     system_prompt: str = "You are a helpful AI assistant."
     temperature: float = 0.0
     top_p: float = 1.0
