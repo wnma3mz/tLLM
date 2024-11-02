@@ -107,9 +107,7 @@ def serialize_tensor(tensor: Union[torch.Tensor, np.ndarray]) -> BFloat16Tensor:
     return tensor_proto
 
 
-def deserialize_tensor(
-    tensor_proto: BFloat16Tensor, to_tensor: bool = False
-) -> Union[torch.Tensor, "mx.array"]:
+def deserialize_tensor(tensor_proto: BFloat16Tensor, to_tensor: bool = False) -> Union[torch.Tensor, "mx.array"]:
     tensor_bytes = lz4.frame.decompress(tensor_proto.data) if tensor_proto.shape[1] >= 64 else tensor_proto.data
     if HAS_MLX and to_tensor == False:
         data = np.frombuffer(tensor_bytes, dtype=np.float16)

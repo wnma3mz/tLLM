@@ -4,7 +4,6 @@ import logging
 import os
 import time
 from typing import *
-import uuid
 
 import grpc
 import torch
@@ -53,6 +52,7 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
             seq_len: int
         """
         s1 = time.time()
+        print("Forward")
         hidden_states = deserialize_tensor(request.hidden_states)
 
         seq_input = SeqInput(uuid_list=list(request.uuid), seq_len_list=list(request.seq_len))
@@ -92,35 +92,31 @@ def parse_args():
     return parser.parse_args()
 
 
-def start_grpc_server(comm: Communicator, model, port: int, rank: int, pp_rank: int, ip_addr: str = "localhost"):
+def start_grpc_server(comm: Communicator, model, logger, args, is_debug=False):
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
-    rpc_servicer = RPCServicer(comm, model, rank, pp_rank, ip_addr)
+    rpc_servicer = RPCServicer(comm, model, comm.rank, args.pp_rank, args.ip_addr)
     if comm.is_rank0():
         schemas_pb2_grpc.add_RPCServiceServicer_to_server(rpc_servicer, server)
-        server.add_insecure_port(f"[::]:{port}")
-        logger.info(f"Starting gRPC server on port {port}")
+        server.add_insecure_port(f"[::]:{args.port}")
+        logger.info(f"Starting gRPC server on port {args.port}")
         server.start()
-        server.wait_for_termination()
+        if not is_debug:
+            server.wait_for_termination()
+
+
+def run(args, is_debug=False):
+    comm = Communicator(is_torchrun=True) if "WORLD_SIZE" in os.environ and int(os.environ["WORLD_SIZE"]) > 1 else SingleNodeCommunicator()
+    config = AutoConfig.from_pretrained(args.model_path, trust_remote_code=True)
+    logger = setup_logger("client_" + __name__, logging.DEBUG)
+    config.comm = comm
+
+    model_client = ModelClient(logger=logger, args=args)
+    model_client.start()
+    model = model_client.load_model(config, args.model_path, torch.bfloat16)
+
+    start_grpc_server(comm, model, logger, args, is_debug)
 
 
 if __name__ == "__main__":
     args = parse_args()
-    logger = setup_logger("client_" + __name__, logging.DEBUG)
-    comm = Communicator(is_torchrun=True) if "WORLD_SIZE" in os.environ else SingleNodeCommunicator()
-    config = AutoConfig.from_pretrained(args.model_path, trust_remote_code=True)
-
-    config.comm = comm
-
-    model_client = ModelClient(
-        logger=logger,
-        server_url=args.master_url,
-        start_idx=args.start_layer_idx,
-        end_idx=args.end_layer_idx,
-        client_id=f"client-{str(uuid.uuid4())[:8]}-pp{args.start_layer_idx}-{args.end_layer_idx}",
-        ip_addr=args.ip_addr,
-        port=args.port,
-    )
-    model_client.start()
-    model = model_client.load_model(config, args.model_path, torch.bfloat16)
-
-    start_grpc_server(comm, model, args.port, comm.rank, args.pp_rank, args.ip_addr)
+    run(args)

@@ -166,9 +166,7 @@ class MyLlamaForCausalLM(nn.Module):
                 data=self._prepare_forward_data(seq_input, hidden_states, pp_idx == 0),
             )
             hidden_states = (
-                deserialize_tensor(response.output, to_tensor=True)
-                if pp_idx == self.pp_size - 1
-                else response.output
+                deserialize_tensor(response.output, to_tensor=True) if pp_idx == self.pp_size - 1 else response.output
             )
             s2 = time.time()
             comm_cost_time_list.append(s2 - s1 - response.cost_time)

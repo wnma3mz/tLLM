@@ -4,6 +4,7 @@ import json
 import threading
 import time
 from typing import Tuple
+import uuid
 
 import requests
 from transformers import AutoConfig
@@ -20,13 +21,15 @@ def get_unregistered_layer_idx(server_url: str) -> Tuple[int, int]:
 
 
 class ModelClient:
-    def __init__(self, logger, server_url: str, start_idx: int, end_idx: int, client_id: str, ip_addr: str, port: int):
-        self.server_url = server_url.replace("http://", "ws://").replace("https://", "wss://")
-        self.client_id = client_id
-        self.start_idx = start_idx
-        self.end_idx = end_idx
-        self.ip_addr = ip_addr
-        self.port = port
+    def __init__(self, logger, args):
+        self.start_idx = args.start_layer_idx
+        self.end_idx = args.end_layer_idx
+        self.ip_addr = args.ip_addr
+        self.port = args.port
+
+        self.client_id = f"client-{str(uuid.uuid4())[:8]}-pp{args.start_layer_idx}-{args.end_layer_idx}"
+
+        self.server_url = args.master_url.replace("http://", "ws://").replace("https://", "wss://")
 
         self.logger = logger
         self.websocket = None
@@ -54,7 +57,10 @@ class ModelClient:
             weights = load_weight(model_path)
 
             model = MY_MODEL_CLASS(config)
-            model.load_weights(list(weights.items()), strict=False)
+            for pop_key in ["model.embed_tokens.weight", "model.norm.weight"]:
+                if pop_key in weights:
+                    weights.pop(pop_key)
+            model.load_weights(list(weights.items()))
             mx.eval(model.parameters())
         else:
             state_dict = HF_CausalLM_CLASS.from_pretrained(

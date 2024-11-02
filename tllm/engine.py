@@ -190,6 +190,10 @@ class AsyncEngine:
                 )
         except asyncio.TimeoutError:
             raise TimeoutError("Processing timed out")
+        except Exception as e:
+            traceback.print_exc()
+        except BaseException as e:
+            traceback.print_exc()
 
     async def generate(self, data: SequenceRequestData):
         await self.prefill_queue.put(data)
