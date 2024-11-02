@@ -26,8 +26,10 @@ async def generate_utils(model, sequence_request_list: List[SequenceRequestData]
         # 否则，为 output_ids[-1]
         # input_ids: bsz x seq_len
         if sequence_request.is_prefill:
-            input_ids_list.append(sequence_request.input_ids)
-            seq_len_list.append(sequence_request.input_ids.shape[-1])
+            if sequence_request.history_request_id:
+                uuid_list[-1] = sequence_request.history_request_id
+            input_ids_list.append(torch.tensor(sequence_request.input_ids).unsqueeze(0))
+            seq_len_list.append(sequence_request.q_len)
         else:
             input_ids_list.append(torch.tensor([sequence_request.output_ids[-1]]).unsqueeze(0))
             seq_len_list.append(1)
@@ -71,6 +73,21 @@ async def generate_utils(model, sequence_request_list: List[SequenceRequestData]
     model.logger.debug(f"communication cost time: {comm_cost_time_str}")
 
 
+conversations_dict = {}  # List[int] -> Tuple[str, int], TODO LRU 缓存
+
+
+def post_process(data: SequenceRequestData):
+    # TODO
+    # 保存输入 + 输出
+    # token_ids = data.input_ids + data.output_ids
+    # conversations_dict[token_ids] = (data.history_request_id, len(token_ids)) if data.history_request_id else (data.request_id, len(token_ids))
+
+    # 保存输入
+    # token_ids = data.input_ids
+    # conversations_dict[token_ids] = (data.history_request_id, len(token_ids)) if data.history_request_id else (data.request_id, len(token_ids))
+    return
+
+
 class MessageProcessor:
     # TODO async
     def __init__(self, tok: TokenizerUtils):
@@ -86,10 +103,26 @@ class MessageProcessor:
             new_messages.append({"role": msg["role"], "content": msg["content"]})
         return new_messages
 
-    def preprocess(self, messages: List[Dict[str, str]]) -> torch.Tensor:
-        input_id_list = self.tok.preprocess(messages=messages).input_ids
-        input_ids = torch.tensor(input_id_list).unsqueeze(0)
-        return input_ids
+    def preprocess(self, messages: List[Dict[str, str]]) -> List[int]:
+        return self.tok.preprocess(messages=messages).input_ids
+
+    def fetch_request_id(self, messages: List[Dict[str, str]]) -> Tuple[Optional[str], int]:
+        # TODO
+        # 根据 message 找到历史生成 request_id
+        # 每轮对话以此向上查找
+        # while messages:
+        #     # QAQ 是否生成过
+        #     input_ids = self.tok.preprocess(messages=messages).input_ids
+        #     if input_ids in self.conversations_dict:
+        #         return self.conversations_dict[input_ids]
+        #     if len(messages) < 0:
+        #         break
+        #     # QA 是否生成过
+        #     messages.pop()  # 去掉最新的Q
+        #     input_ids = self.tok.preprocess(messages=messages, add_generation_prompt=False).input_ids
+        #     if input_ids in self.conversations_dict:
+        #         return self.conversations_dict[input_ids]
+        return None, -1
 
 
 class AsyncEngine:
@@ -150,6 +183,7 @@ class AsyncEngine:
                 while not data.is_stop:
                     await asyncio.wait_for(data.condition.wait(), data.timeout)
                     yield data.to_request_output()  # 流式返回数据的内容，可以控制
+                post_process(data)
                 self.logger.debug(f"[request_id] {data.request_id}] ttft: {data.ttft_cost_time:.4f} s")
                 self.logger.debug(
                     f"[request_id] {data.request_id}] tpot: {(len(data.output_ids) - 1) / (time.time() - data.decode_start_ts):.4f} token/s"
@@ -164,8 +198,6 @@ class AsyncEngine:
             async with data.condition:
                 while not data.is_stop:
                     await asyncio.wait_for(data.condition.wait(), data.timeout)
-                    # 这里可以进行处理，例如更新输出
-                    # 确保在这里将 output_text 更新
             return data.to_request_output()  # 返回最终的数据对象
         except asyncio.TimeoutError:
             raise TimeoutError("Processing timed out")

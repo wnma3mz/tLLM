@@ -6,13 +6,14 @@ import time
 from typing import Tuple
 
 import requests
+from transformers import AutoConfig
 import websockets
 
 from tllm.models.register import HAS_MLX, MODEL_REGISTER, load_weight
 
 
 def get_unregistered_layer_idx(server_url: str) -> Tuple[int, int]:
-    # 获取 server 端未注册的连续的 layer_idx
+    # TODO: 获取 server 端未注册的连续的 layer_idx
     response = requests.get(f"{server_url}/unregister_layer_idx")
     # layer_idx = response.json()["data"]
     return -1, -1
@@ -34,7 +35,7 @@ class ModelClient:
         self._thread = None
         self._executor = ThreadPoolExecutor(max_workers=1)
 
-    def load_model(self, config, model_path: str, dtype):
+    def load_model(self, config: AutoConfig, model_path: str, dtype):
         config.decoder_start_layer_idx = self.start_idx
         config.decoder_end_layer_idx = self.end_idx
 
@@ -68,14 +69,12 @@ class ModelClient:
         return model
 
     def _create_event_loop(self):
-        """创建新的事件循环"""
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         self._loop = loop
         return loop
 
     async def connect(self, cnt: int):
-        """建立WebSocket连接"""
         try:
             self.websocket = await websockets.connect(f"{self.server_url}/ws/client/{self.client_id}")
             self.logger.info(f"Connected to server with client_id: {self.client_id}")
@@ -131,7 +130,6 @@ class ModelClient:
         loop.close()
 
     def start(self):
-        """同步方法：启动客户端"""
         if self._thread is not None and self._thread.is_alive():
             self.logger.info("Client is already running")
             return
@@ -141,8 +139,6 @@ class ModelClient:
         self._thread.start()
 
     def stop(self):
-        """同步方法：停止客户端"""
-
         def _stop():
             if self._loop is not None:
                 asyncio.run_coroutine_threadsafe(self._stop_async(), self._loop)
@@ -152,7 +148,6 @@ class ModelClient:
             self._thread.join(timeout=5)
 
     async def _stop_async(self):
-        """异步停止方法"""
         self.running = False
         if self.websocket:
             await self.websocket.close()

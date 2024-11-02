@@ -69,6 +69,7 @@ class SequenceRequestData:
     sampling_params: SamplingParams
     sampler: SamplerUtils
 
+    history_request_id: Optional[str] = None
     finish_reason_list: Optional[List[str]] = None
 
     output_ids: Optional[List[int]] = None  # 最终生成的 token id
@@ -81,6 +82,7 @@ class SequenceRequestData:
     timeout: int = 100000  # 请求的总超时时间
     is_stop: bool = False
     is_prefill: bool = True
+    q_len: int = -1
 
     condition: asyncio.Condition = field(default_factory=asyncio.Condition)
 
@@ -90,6 +92,7 @@ class SequenceRequestData:
         self.generate_text = None
         self.finish_reason_list = [None] * self.sampling_params.n
         self.decode_start_ts = None
+        self.q_len = len(self.input_ids) if self.q_len == -1 else self.q_len
 
     def __repr__(self) -> str:
         return f"request_id={self.request_id}; output_ids={self.output_ids}"
@@ -99,7 +102,7 @@ class SequenceRequestData:
             return RequestOutput(
                 self.request_id,
                 None,
-                self.input_ids.tolist(),
+                self.input_ids,
                 [
                     CompletionOutput(
                         index=index,
@@ -115,7 +118,7 @@ class SequenceRequestData:
         return RequestOutput(
             request_id=self.request_id,
             prompt=None,
-            prompt_token_ids=self.input_ids.tolist(),
+            prompt_token_ids=self.input_ids,
             outputs=[
                 CompletionOutput(
                     index=index,

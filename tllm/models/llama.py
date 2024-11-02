@@ -18,16 +18,19 @@ from tllm.rpc.schemas_pb2 import BFloat16Tensor
 def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_layers: int) -> AttentionData:
     request_cache = RequestsCache(num_layers)
     position_ids_list, actual_seq_len_list = [], []
-    for uuid, seq_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
+    for uuid, q_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
         if uuid in cache_manager.cache_dict:
+            # kv_cache 是整个历史的 kv_cache
+            # 当 q_len 为 1 时，直接使用 kv_cache，使用历史的全部 token kv cache
+            # TODO: 当 q_len > 1 时，表示只需要使用前 q_len 的 kv_cache，后面的 kv_cache 需要重新计算
             layer_cache_list, cache_seq_len = cache_manager.get(uuid)
             position_ids = torch.tensor([cache_seq_len], dtype=torch.long).unsqueeze(0)
-            actual_seq_len_list.append([seq_len, cache_seq_len + 1])
+            actual_seq_len_list.append([q_len, cache_seq_len + q_len])  # q_len 是需要新计算 kv_cache 的长度
         else:
             layer_cache_list = None
-            position_ids = torch.arange(seq_len, dtype=torch.long).unsqueeze(0)
-            actual_seq_len_list.append([seq_len, seq_len])
-        request_cache.add(uuid, seq_len, layer_cache_list)
+            position_ids = torch.arange(q_len, dtype=torch.long).unsqueeze(0)
+            actual_seq_len_list.append([q_len, q_len])
+        request_cache.add(uuid, q_len, layer_cache_list)
         position_ids_list.append(position_ids)
     return AttentionData(
         request_cache=request_cache,

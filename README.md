@@ -51,11 +51,12 @@ RoadMap
         - [x] chat completion(stream)
         - [x] chat completion(non-stream)
         - [x] using anythingLLM
-    - [ ] Communication
-        - [ ] Communication Time Benchmark (in progress)
+    - [x] Communication
+        - [x] Communication Time Benchmark
 - [ ] KV Cache
     - [x] Request/Sequence Cache
     - [x] Custom KV Cache Class
+    - [ ] Conversation KV Cache (in progress)
     - [ ] Token-Level Cache
         - [ ] Prefix-tree Cache
 - [ ] Shard Storage

@@ -35,14 +35,14 @@ def build_mlx_mask(seq_len_list: List[Tuple[int, int]]) -> mx.array:
 def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_layers: int) -> AttentionData:
     request_cache = RequestsCache(num_layers)
     actual_seq_len_list = []
-    for uuid, seq_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
+    for uuid, q_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
         if uuid in cache_manager.cache_dict:
             layer_cache_list, cache_seq_len = cache_manager.get(uuid)
-            actual_seq_len_list.append([seq_len, cache_seq_len + 1])
+            actual_seq_len_list.append([q_len, cache_seq_len + q_len])
         else:
             layer_cache_list = None
-            actual_seq_len_list.append([seq_len, seq_len])
-        request_cache.add(uuid, seq_len, layer_cache_list)
+            actual_seq_len_list.append([q_len, q_len])
+        request_cache.add(uuid, q_len, layer_cache_list)
     return AttentionData(
         request_cache=request_cache,
         attn_mask=build_mlx_mask(actual_seq_len_list),

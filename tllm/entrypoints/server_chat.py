@@ -53,6 +53,7 @@ class OpenAIServing:
         request_id = f"chat-{random_uuid()}"
         messages = self.message_processor.parse_message(request.messages)
         input_ids = self.message_processor.preprocess(messages)
+        history_request_id, q_len = self.message_processor.fetch_request_id(messages)
 
         if request.temperature == 0.0:
             method = "greedy"
@@ -61,6 +62,8 @@ class OpenAIServing:
 
         sequence_data = SequenceRequestData(
             request_id=request_id,
+            history_request_id=history_request_id,
+            q_len=q_len,
             sampling_params=to_sampling_params(request),
             input_ids=input_ids,
             sampler=SamplerUtils(method, self.message_processor.tok),
@@ -117,7 +120,7 @@ class OpenAIServing:
                 # Abort the request if the client disconnects.
                 self.engine.abort(request_id)
                 create_error_response("Client disconnected")
-            final_res = res
+            final_res: RequestOutput = res
 
         output = final_res.outputs[0]
         message = ChatMessage(role=role, content=output.text)
