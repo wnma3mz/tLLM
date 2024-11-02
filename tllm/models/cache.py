@@ -70,13 +70,13 @@ class RequestsCache:
         # 获取每个 uuid 请求的 key_states/value_states 的 seq_len
         return self.cache_dict[uuid]["seq_len"]
 
-    def get_cache_seq_len(self, uuid: str) -> int:
+    def get_cache_seq_len(self, uuid: str, layer_idx: Optional[int] = 0) -> int:
         # 获取每个 uuid 请求的 kv cache 的 seq_len
-        return len(self.get_kv_cache(uuid)[0])
+        return len(self.get_kv_cache(uuid)[layer_idx])
 
-    def get_offset_list(self, uuid_list: List[str]) -> List[int]:
+    def get_offset_list(self, uuid_list: List[str], layer_idx: int) -> List[int]:
         # 获取每个 uuid 请求的 offset，用于 mlx framework 旋转位置编码
-        return [self.get_cache_seq_len(uuid) for uuid in uuid_list]
+        return [self.get_cache_seq_len(uuid, layer_idx) for uuid in uuid_list]
 
     def update(
         self, key_states: Union[torch.Tensor, List["mx.array"]], value_states: MIX_TENSOR, **cache_kwargs

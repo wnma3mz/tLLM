@@ -4,7 +4,7 @@ import mlx.core as mx
 import mlx.nn as nn
 from mlx_lm.models.llama import MLP, Attention, ModelArgs, TransformerBlock
 
-from tllm.models.cache import AttentionData, RequestsCache
+from tllm.models.cache import AttentionData, RequestsCache, cat_func, split_func
 
 
 class MyAttention(Attention):
@@ -15,8 +15,8 @@ class MyAttention(Attention):
 
     def _rope(self, xs: mx.array, request_cache: RequestsCache, uuid_list: List[str]) -> List[mx.array]:
         index_list = request_cache.get_index_list(uuid_list)
-        offset_list = request_cache.get_offset_list(uuid_list)
-        return [self.rope(x, offset) for x, offset in zip(mx.split(xs, index_list, axis=-2), offset_list)]
+        offset_list = request_cache.get_offset_list(uuid_list, self.layer_idx - self.offset)
+        return [self.rope(x, offset) for x, offset in zip(split_func(xs, index_list), offset_list)]
 
     def __call__(
         self,
@@ -35,7 +35,7 @@ class MyAttention(Attention):
 
         # must has cache, and split by uuid
         request_cache: RequestsCache = cache.request_cache
-        queries = mx.concat(self._rope(queries, request_cache, cache.uuid_list), axis=-2)
+        queries = cat_func(self._rope(queries, request_cache, cache.uuid_list))
         keys = self._rope(keys, request_cache, cache.uuid_list)
 
         cache_kwargs = {"uuid_list": cache.uuid_list, "layer_idx": self.layer_idx - self.offset}

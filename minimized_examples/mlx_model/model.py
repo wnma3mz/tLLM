@@ -1,6 +1,6 @@
 import glob
-import json
 import os
+import time
 from typing import Dict, Union
 
 import mlx.core as mx
@@ -28,16 +28,16 @@ def load_weight(model_path: str) -> Dict[str, mx.array]:
 def generate_text(model_path: str):
     messages1 = [{"role": "user", "content": "Hello, how are you?"}]
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
-    text = tokenizer.apply_chat_template(messages1, tokenize=False, add_generation_prompt=True)
+    text = tokenizer.apply_chat_template(messages1, tokenize=False, add_generation_prompt=True) + "I'm just a language model, I don't have"
     model, tokenizer = load(model_path)
-    response = generate(model, tokenizer, prompt=text, verbose=True, max_tokens=10)
+    response = generate(model, tokenizer, prompt=text, verbose=False, max_tokens=2)
     print("response", response)
 
 
 def build_model_input(model_path: str):
     messages1 = [{"role": "user", "content": "Hello, how are you?"}]
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
-    text = tokenizer.apply_chat_template(messages1, tokenize=False, add_generation_prompt=True)
+    text = tokenizer.apply_chat_template(messages1, tokenize=False, add_generation_prompt=True)+ "I'm just a language model, I don't have"
     return mx.array([tokenizer.encode(text)])
 
 
@@ -69,7 +69,10 @@ def forward_head(base_model, out: Union[mx.array, np.ndarray]):
 if __name__ == "__main__":
     setup_seed(42)
     model_path = "/Users/jianghulu/Documents/Llama-3.2-1B-Instruct-bf16"
-    # generate_text(model_path)
+    s1 = time.time()
+    generate_text(model_path)
+    print(time.time() - s1)
+    # assert False
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
 
     weights = load_weight(model_path)
@@ -86,14 +89,20 @@ if __name__ == "__main__":
     seq_input = SeqInput(["123"], [embedding.shape[1]])
     out = model(embedding, seq_input)
     idx = forward_head(base_model, out)
-    print("idx", idx)
-    print("token", tokenizer.decode(idx))
+    text = tokenizer.decode(idx)
 
     # 生成第二个 token
-    for _ in range(10):
+    s1 = time.perf_counter()
+    for _ in range(2):
         h2 = base_model.model.embed_tokens([idx])
         seq_input = SeqInput(["123"], [1])
         out = model(h2, seq_input)
 
         idx = forward_head(base_model, out)
-        print("token", tokenizer.decode(idx))
+        text += tokenizer.decode(idx)
+    print(f"generate text: {text}")
+    print(time.perf_counter() - s1)
+
+    # I'm just a large language model, I don't have personal feelings or
+    # I'm happy to help with any questions or topics you'd like to discuss
+    # 我想问你关于天气的天气预测，通常天

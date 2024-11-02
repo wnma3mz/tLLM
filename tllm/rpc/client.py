@@ -52,7 +52,6 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
             seq_len: int
         """
         s1 = time.time()
-        print("Forward")
         hidden_states = deserialize_tensor(request.hidden_states)
 
         seq_input = SeqInput(uuid_list=list(request.uuid), seq_len_list=list(request.seq_len))
