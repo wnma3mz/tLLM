@@ -47,12 +47,16 @@ async def get_index():
 
 @app.post("/v1/chat/completions")
 async def create_chat_completion(request: ChatCompletionRequest, raw_request: Request) -> ChatCompletionResponse:
-    generator = await openai_serving_chat.create_chat_completion(request, raw_request)
-    if request.stream:
-        return StreamingResponse(content=generator, media_type="text/event-stream")
-    else:
-        assert isinstance(generator, ChatCompletionResponse)
-        return JSONResponse(content=generator.model_dump())
+    try:
+        generator = await openai_serving_chat.create_chat_completion(request, raw_request)
+        if request.stream:
+            return StreamingResponse(content=generator, media_type="text/event-stream")
+        else:
+            assert isinstance(generator, ChatCompletionResponse)
+            return JSONResponse(content=generator.model_dump())
+    except Exception as e:
+        logger.error(f"Error processing request: {str(e)}")
+        return JSONResponse(content={"error": str(e)}, status_code=499)
 
 
 @app.post("/v1/completions")

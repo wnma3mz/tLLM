@@ -91,7 +91,6 @@ class MyMLXLlamaModel(nn.Module):
             self.cache_manager.set(uuid, attention_data.get_kv_cache_list(uuid), attention_data.get_cache_seq_len(uuid))
             self.cache_manager.check_alive()
         return output
-    
 
     @property
     def dtype(self):

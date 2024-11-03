@@ -18,7 +18,7 @@ async def requests_func(messages: List[Dict[str, Any]]):
     }
     time.sleep(random.random() * 2)
     async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=data) as response:
+        async with session.post(url, json=data, timeout=100) as response:
             if response.status == 200:
                 response_data = await response.json()
                 print(response_data["choices"][0]["message"]["content"])

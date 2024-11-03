@@ -133,19 +133,40 @@ class AsyncEngine:
         self.processing_task = None
         self.limit_size: int = 5  # 每次最多处理 5 个请求，prefill + decode
         self.logger = logger
+        self.abort_queue: asyncio.Queue = asyncio.Queue()
 
     async def fetch_data(self):
+        aborting_request_ids = set()
+        while not self.abort_queue.empty():
+            request_id = await self.abort_queue.get()
+            aborting_request_ids.add(request_id)
+
+        async def aborting_filter(sequence_data) -> bool:
+            if sequence_data.request_id in aborting_request_ids:
+                self.logger.debug(f"aborting generate request_id: {sequence_data.request_id}")
+                sequence_data.is_stop = True
+                sequence_data.finish_reason_list = ["abort"]
+                aborting_request_ids.remove(sequence_data.request_id)
+                async with sequence_data.condition:
+                    sequence_data.condition.notify()
+                return True
+            return False
+
         # prefill 队列和 decoding 队列的调度逻辑
         sequence_data_list = []
 
         # 优先从 decoding_queue 取数据
         while not self.decoding_queue.empty() and len(sequence_data_list) < self.limit_size:
             sequence_data = await self.decoding_queue.get()
+            if await aborting_filter(sequence_data):
+                continue
             sequence_data_list.append(sequence_data)
 
         # 从 prefill_queue 中取数据，直到达到限制
         while not self.prefill_queue.empty() and len(sequence_data_list) < self.limit_size:
             sequence_data = await self.prefill_queue.get()
+            if await aborting_filter(sequence_data):
+                continue
             sequence_data_list.append(sequence_data)
 
         return sequence_data_list
@@ -183,11 +204,14 @@ class AsyncEngine:
                 while not data.is_stop:
                     await asyncio.wait_for(data.condition.wait(), data.timeout)
                     yield data.to_request_output()  # 流式返回数据的内容，可以控制
-                post_process(data)
-                self.logger.debug(f"[request_id] {data.request_id}] ttft: {data.ttft_cost_time:.4f} s")
-                self.logger.debug(
-                    f"[request_id] {data.request_id}] tpot: {(len(data.output_ids) - 1) / (time.time() - data.decode_start_ts):.4f} token/s"
-                )
+                # post_process(data)
+                try:
+                    self.logger.debug(f"[request_id] {data.request_id}] ttft: {data.ttft_cost_time:.4f} s")
+                    self.logger.debug(
+                        f"[request_id] {data.request_id}] tpot: {(len(data.output_ids) - 1) / (time.time() - data.decode_start_ts):.4f} token/s"
+                    )
+                except:
+                    pass
         except asyncio.TimeoutError:
             raise TimeoutError("Processing timed out")
         except Exception as e:
@@ -222,4 +246,5 @@ class AsyncEngine:
 
     async def abort(self, request_id: str):
         # 从 prefill_queue 和 decoding_queue 中移除 request_id
-        pass
+        self.logger.debug(f"abort: {request_id}")
+        await self.abort_queue.put(request_id)

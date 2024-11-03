@@ -84,7 +84,7 @@ class OpenAIServing:
         async for res in result_generator:
             if raw_request is not None and await raw_request.is_disconnected():
                 # Abort the request if the client disconnects.
-                self.engine.abort(request_id)
+                await self.engine.abort(request_id)
                 create_error_response("Client disconnected")
             res: RequestOutput
             output = res.outputs[0]
@@ -118,7 +118,7 @@ class OpenAIServing:
         async for res in result_generator:
             if raw_request is not None and await raw_request.is_disconnected():
                 # Abort the request if the client disconnects.
-                self.engine.abort(request_id)
+                await self.engine.abort(request_id)
                 create_error_response("Client disconnected")
             final_res: RequestOutput = res
 

@@ -45,7 +45,7 @@ RoadMap
         - [x] Queuing mechanism
         - [x] Continuous Batch
         - [x] Test Cases
-        - [ ] Client Disconnect
+        - [x] Client Disconnect and Abort
     - [x] OpenAI API format
         - [x] Streaming Output
         - [x] chat completion(stream)

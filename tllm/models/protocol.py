@@ -1,6 +1,5 @@
 import asyncio
 from dataclasses import dataclass, field
-import time
 from typing import *
 
 import torch
@@ -112,8 +111,8 @@ class SequenceRequestData:
                     )
                     for index in range(self.sampling_params.n)
                 ],
-                self.is_stop,
-                None,
+                finished=self.is_stop,
+                prompt_logprobs=None,
             )
         return RequestOutput(
             request_id=self.request_id,
