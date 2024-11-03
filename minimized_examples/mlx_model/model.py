@@ -33,7 +33,7 @@ def generate_text(model_path: str):
         + "I'm just a language model, I don't have"
     )
     model, tokenizer = load(model_path)
-    response = generate(model, tokenizer, prompt=text, verbose=False, max_tokens=2)
+    response = generate(model, tokenizer, prompt=text, verbose=False, max_tokens=100)
     print("response", response)
 
 
@@ -66,7 +66,7 @@ def load_my_model(config: AutoConfig, weights):
 def forward_head(base_model, out: Union[mx.array, np.ndarray]):
     if isinstance(out, np.ndarray):
         out = mx.array(out)
-    out = base_model.model.norm(out)
+    out = base_model.model.norm(out.astype(mx.bfloat16))
     logits = base_model.model.embed_tokens.as_linear(out)
     logits = logits[:, -1, :]
     return mx.argmax(logits, axis=-1).tolist()
@@ -99,14 +99,14 @@ if __name__ == "__main__":
 
     # 生成第二个 token
     s1 = time.perf_counter()
-    for _ in range(2):
+    for _ in range(100):
         h2 = base_model.model.embed_tokens([idx])
         seq_input = SeqInput(["123"], [1])
         out = model(h2, seq_input)
 
         idx = forward_head(base_model, out)
-        text += tokenizer.decode(idx)
-    print(f"generate text: {text}")
+        # text += tokenizer.decode(idx)
+    # print(f"generate text: {text}")
     print(time.perf_counter() - s1)
 
     # I'm just a large language model, I don't have personal feelings or

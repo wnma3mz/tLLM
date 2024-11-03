@@ -111,10 +111,10 @@ class MyLlamaForCausalLM(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.vocab_size = config.vocab_size
-        dtype = torch.bfloat16
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size).to(dtype)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False).to(dtype)
-        self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps).to(dtype)
+        self.dtype = torch.bfloat16
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size).to(self.dtype)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False).to(self.dtype)
+        self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps).to(self.dtype)
 
     @classmethod
     def from_pretrained(cls, logger, config, tok: TokenizerUtils, weight_path: str, server: RPCManager):
@@ -156,7 +156,7 @@ class MyLlamaForCausalLM(nn.Module):
             hidden_states, pp_cost_time = self.server.forward(pp_idx, hidden_states, seq_input, is_first, is_last)
             comm_cost_time_list.append(time.time() - s1 - pp_cost_time)
 
-        hidden_states = hidden_states.to(self.norm.weight.device)
+        hidden_states = hidden_states.to(self.dtype).to(self.norm.weight.device)
         # bsz x seq_len x hidden_size
         logits = self.lm_head(self.norm(hidden_states))
         # bsz: 1; seq_len: seq_len1 + seq_len2

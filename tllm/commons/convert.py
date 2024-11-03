@@ -94,15 +94,15 @@ def list_to_protobuf(data: List):
     return multi_array_proto
 
 
-def serialize_tensor(tensor: Union[torch.Tensor, np.ndarray]) -> BFloat16Tensor:
+def serialize_tensor(tensor: Union[torch.Tensor, "mx.array"]) -> BFloat16Tensor:
     # TODO: support bfloat16
     tensor_proto = BFloat16Tensor()
     # bsz x seq_len x hidden_size
     tensor_proto.shape.extend(tensor.shape)  # 添加形状
-    if isinstance(tensor, np.ndarray):
-        tensor_bytes = tensor.tobytes()
-    else:
+    if isinstance(tensor, torch.Tensor):
         tensor_bytes = tensor.to(torch.float16).detach().numpy().tobytes()
+    else:
+        tensor_bytes = bytes(tensor.astype(mx.float16))
     tensor_proto.data = lz4.frame.compress(tensor_bytes) if tensor.shape[1] >= 64 else tensor_bytes
     return tensor_proto
 

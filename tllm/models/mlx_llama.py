@@ -12,14 +12,12 @@ from tllm.models.cache import AttentionData, CacheManager, RequestsCache
 from tllm.models.protocol import SeqInput
 
 
-def build_mlx_mask(seq_len_list: List[Tuple[int, int]]) -> mx.array:
+def build_mlx_mask(seq_len_list: List[Tuple[int, int]], total_L: int, total_S: int) -> mx.array:
     mask_list = [
         mx.tril(mx.ones((L, S), dtype=mx.bool_), k=0) if L > 1 else mx.ones((L, S), dtype=mx.bool_)
         for (L, S) in seq_len_list
     ]
 
-    total_L = sum(L for L, S in seq_len_list)
-    total_S = sum(S for L, S in seq_len_list)
     combined_mask = mx.zeros((total_L, total_S), dtype=mx.bool_)
 
     l_index, r_index = 0, 0
@@ -35,17 +33,22 @@ def build_mlx_mask(seq_len_list: List[Tuple[int, int]]) -> mx.array:
 def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_layers: int) -> AttentionData:
     request_cache = RequestsCache(num_layers)
     actual_seq_len_list = []
+    L, S = 0, 0
     for uuid, q_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
         if uuid in cache_manager.cache_dict:
             layer_cache_list, cache_seq_len = cache_manager.get(uuid)
             actual_seq_len_list.append([q_len, cache_seq_len + q_len])
+            L += q_len
+            S += cache_seq_len + q_len
         else:
             layer_cache_list = None
             actual_seq_len_list.append([q_len, q_len])
+            L += q_len
+            S += q_len
         request_cache.add(uuid, q_len, layer_cache_list)
     return AttentionData(
         request_cache=request_cache,
-        attn_mask=build_mlx_mask(actual_seq_len_list),
+        attn_mask=build_mlx_mask(actual_seq_len_list, L, S),
         uuid_list=seq_input.uuid_list,
     )
 
@@ -87,7 +90,8 @@ class MyMLXLlamaModel(nn.Module):
         for uuid, seq_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
             self.cache_manager.set(uuid, attention_data.get_kv_cache_list(uuid), attention_data.get_cache_seq_len(uuid))
             self.cache_manager.check_alive()
-        return np.array(output.astype(mx.float16))
+        return output
+    
 
     @property
     def dtype(self):
