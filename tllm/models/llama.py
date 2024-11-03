@@ -146,18 +146,27 @@ class MyLlamaForCausalLM(nn.Module):
         model.eval()
         return model
 
+    @torch.no_grad()
     def forward(self, inputs_embeds: torch.Tensor, seq_input: SeqInput) -> ForwardResult:
         hidden_states = inputs_embeds
-        comm_cost_time_list = []
+        comm_cost_time_list, calc_cost_time_list = [], []
         for pp_idx in range(self.pp_size):
             is_first = pp_idx == 0
             is_last = pp_idx == self.pp_size - 1
             s1 = time.time()
             hidden_states, pp_cost_time = self.server.forward(pp_idx, hidden_states, seq_input, is_first, is_last)
             comm_cost_time_list.append(time.time() - s1 - pp_cost_time)
+            calc_cost_time_list.append(pp_cost_time)
 
+        s1 = time.time()
+        # 只取最后一个 token 的 hidden_states
+        seq_hidden_states = torch.split(hidden_states, [seq_len for seq_len in seq_input.seq_len_list], dim=1)
+        hidden_states = torch.cat([x[:, -1:, :] for x in seq_hidden_states], dim=1)
         hidden_states = hidden_states.to(self.dtype).to(self.norm.weight.device)
         # bsz x seq_len x hidden_size
         logits = self.lm_head(self.norm(hidden_states))
+        self.logger.debug(f"head calc_cost_time: {time.time() - s1:.4f}s")
         # bsz: 1; seq_len: seq_len1 + seq_len2
-        return ForwardResult(logits=logits, comm_cost_time_list=comm_cost_time_list)
+        return ForwardResult(
+            logits=logits, comm_cost_time_list=comm_cost_time_list, calc_cost_time_list=calc_cost_time_list
+        )

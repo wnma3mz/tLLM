@@ -37,6 +37,7 @@ class SamplerUtils:
     def __init__(self, method: str, tok: TokenizerUtils) -> None:
         self.method = method
         self.tok = tok
+        self.tok.decode([0])  # TODO: warm up
         assert self.method in ["greedy", "beam_search", "sampling"]
 
     def decode(self, generate_ids: List[int]) -> List[str]:

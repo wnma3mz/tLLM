@@ -56,8 +56,9 @@ class RequestOutput:
 @dataclass
 class ForwardResult:
     logits: torch.Tensor
-    comm_cost_time_list: Optional[List[float]] = None
     hidden_states: Optional[torch.Tensor] = None
+    comm_cost_time_list: Optional[List[float]] = None
+    calc_cost_time_list: Optional[List[float]] = None
 
 
 @dataclass

@@ -44,7 +44,7 @@ async def generate_utils(model, sequence_request_list: List[SequenceRequestData]
     logits = forward_result.logits
 
     # 根据 seq 拆开，之后直接在 sampler 中处理
-    seq_logits_list = torch.split(logits, seq_input.seq_len_list, dim=1)
+    seq_logits_list = torch.split(logits, [1 for _ in seq_input.seq_len_list], dim=1)
     for seq_logits, sequence_request in zip(seq_logits_list, sequence_request_list):
         generate_ids = sequence_request.sampler.sampling(seq_logits, sequence_request.sampling_params)
         generate_texts = sequence_request.sampler.decode(generate_ids)
@@ -70,7 +70,9 @@ async def generate_utils(model, sequence_request_list: List[SequenceRequestData]
 
     comm_cost_time_list = forward_result.comm_cost_time_list
     comm_cost_time_str = ",".join([f"{x:.4f}" for x in comm_cost_time_list])
-    model.logger.debug(f"communication cost time: {comm_cost_time_str}")
+    sum_comm = sum(comm_cost_time_list)
+    fraction = sum_comm / (sum_comm + sum(forward_result.calc_cost_time_list))
+    model.logger.debug(f"communication cost time: {comm_cost_time_str}s({fraction*100:.1f}%)")
 
 
 conversations_dict = {}  # List[int] -> Tuple[str, int], TODO LRU 缓存

@@ -26,24 +26,16 @@ def load_weight(model_path: str) -> Dict[str, mx.array]:
 
 
 def generate_text(model_path: str):
-    messages1 = [{"role": "user", "content": "Hello, how are you?"}]
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
-    text = (
-        tokenizer.apply_chat_template(messages1, tokenize=False, add_generation_prompt=True)
-        + "I'm just a language model, I don't have"
-    )
+    text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     model, tokenizer = load(model_path)
-    response = generate(model, tokenizer, prompt=text, verbose=False, max_tokens=100)
-    print("response", response)
+    response = generate(model, tokenizer, prompt=text, verbose=False, max_tokens=new_token + 1)
+    print(f"generate text: {response}")
 
 
 def build_model_input(model_path: str):
-    messages1 = [{"role": "user", "content": "Hello, how are you?"}]
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
-    text = (
-        tokenizer.apply_chat_template(messages1, tokenize=False, add_generation_prompt=True)
-        + "I'm just a language model, I don't have"
-    )
+    text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     return mx.array([tokenizer.encode(text)])
 
 
@@ -63,9 +55,7 @@ def load_my_model(config: AutoConfig, weights):
     return model
 
 
-def forward_head(base_model, out: Union[mx.array, np.ndarray]):
-    if isinstance(out, np.ndarray):
-        out = mx.array(out)
+def forward_head(base_model, out: mx.array):
     out = base_model.model.norm(out.astype(mx.bfloat16))
     logits = base_model.model.embed_tokens.as_linear(out)
     logits = logits[:, -1, :]
@@ -75,39 +65,49 @@ def forward_head(base_model, out: Union[mx.array, np.ndarray]):
 if __name__ == "__main__":
     setup_seed(42)
     model_path = "/Users/jianghulu/Documents/Llama-3.2-1B-Instruct-bf16"
+    new_token = 10
+    messages = [{"role": "user", "content": "Hello, how are you?"}]
     s1 = time.time()
     generate_text(model_path)
-    print(time.time() - s1)
+    print("mlx cost total time", time.time() - s1)
+    print("=" * 20)
     # assert False
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
 
     weights = load_weight(model_path)
     config = AutoConfig.from_pretrained(model_path)
 
-    base_model, tokenizer = load(model_path)
+    base_model, _ = load(model_path)
     input_ids = build_model_input(model_path)
-    print("input_ids", input_ids.shape)
 
     embedding = base_model.model.embed_tokens(input_ids)
 
     model = load_my_model(config, weights)
 
-    seq_input = SeqInput(["123"], [embedding.shape[1]])
-    out = model(embedding, seq_input)
-    idx = forward_head(base_model, out)
-    text = tokenizer.decode(idx)
+    _ = tokenizer.decode([0])  # for warmup
 
-    # 生成第二个 token
+    seq_input = SeqInput(["123"], [embedding.shape[1]])
     s1 = time.perf_counter()
-    for _ in range(100):
+    out = model(embedding, seq_input)
+    s3 = time.perf_counter()
+    idx = forward_head(base_model, out)
+    print("tllm head time", time.perf_counter() - s3)
+    s2 = time.perf_counter()
+
+    text = tokenizer.decode(idx)
+    print("tllm ttft time", s2 - s1)
+    # 生成第二个 token
+    for _ in range(new_token):
         h2 = base_model.model.embed_tokens([idx])
         seq_input = SeqInput(["123"], [1])
         out = model(h2, seq_input)
 
         idx = forward_head(base_model, out)
-        # text += tokenizer.decode(idx)
-    # print(f"generate text: {text}")
-    print(time.perf_counter() - s1)
+        text += tokenizer.decode(idx)
+    print(f"generate text: {text}")
+    print("tllm tpot time", time.perf_counter() - s2)
+    # print("tllm tpot time", new_token / (time.perf_counter() - s2))
+    print(f"tllm cost total time", time.perf_counter() - s1)
 
     # I'm just a large language model, I don't have personal feelings or
     # I'm happy to help with any questions or topics you'd like to discuss
