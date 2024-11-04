@@ -135,12 +135,14 @@ def parse_args():
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--config_path", type=str, required=True)
     parser.add_argument("--need_start_client", action="store_true")
+    parser.add_argument("--is_local", action="store_true")
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     setup_seed(42)
     args = parse_args()
+    port = args.port
 
     engine, tok = init_engine(args)
 
@@ -154,4 +156,4 @@ if __name__ == "__main__":
     total_layers = engine.generator.model.num_layers
     layer_manager = LayerManager(total_layers=total_layers, model_name=model_name)
 
-    uvicorn.run(app, host="0.0.0.0", port=args.port, reload=False)
+    uvicorn.run(app, host="0.0.0.0", port=port, reload=False)

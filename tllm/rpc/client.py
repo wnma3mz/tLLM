@@ -51,18 +51,17 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
             uuid: str
             seq_len: int
         """
-        s1 = time.time()
         hidden_states = deserialize_tensor(request.hidden_states)
 
         seq_input = SeqInput(uuid_list=list(request.uuid), seq_len_list=list(request.seq_len))
         self.comm.broadcast_object([seq_input, tuple(hidden_states.shape)])
         self.comm.broadcast(hidden_states)
 
+        s1 = time.time()
         output_hidden_states = self.model(hidden_states, seq_input)
+        cost_time = time.time() - s1
 
         output = serialize_tensor(output_hidden_states)
-
-        cost_time = time.time() - s1
 
         return schemas_pb2.ForwardResponse(
             msg="Forward pass completed",

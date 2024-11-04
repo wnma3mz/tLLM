@@ -47,8 +47,7 @@ class LLMGenerator:
         uuid_list, input_ids_list, seq_len_list = [], [], []
         for sequence_request in sequence_request_list:
             uuid_list.append(sequence_request.request_id)
-            # 如果是 prefilling，则为 input_ids
-            # 否则，为 output_ids[-1]
+            # 如果是 prefilling，则为 input_ids; 否则，为 output_ids[-1]
             # input_ids: bsz x seq_len
             if sequence_request.is_prefill:
                 if sequence_request.history_request_id:

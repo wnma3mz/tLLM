@@ -1,4 +1,5 @@
 # coding: utf-8
+import time
 from typing import *
 
 import grpc
@@ -7,6 +8,7 @@ import torch
 from tllm.commons.convert import deserialize_tensor, serialize_tensor
 from tllm.models.protocol import SeqInput
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
+from tllm.rpc.model_client import ModelClient
 
 
 class RPCManager:
@@ -60,6 +62,34 @@ class RPCManager:
 
     def __len__(self):
         return len(self.stub_list)
+
+
+class LocalRPCManager:
+    # 并不发生通信，仅加载模型
+    def __init__(self, logger, args, config):
+        args.ip_addr = "localhost"
+        args.port = 0
+        args.start_layer_idx = 0
+        args.end_layer_idx = config.num_hidden_layers
+        args.master_url = "localhost"
+        model_client = ModelClient(logger=logger, args=args)
+        self.model = model_client.load_model(config, args.model_path, torch.bfloat16)
+
+    def __len__(self):
+        return 1
+
+    def forward(
+        self,
+        pp_idx: int,
+        hidden_states: torch.Tensor,
+        seq_input: SeqInput,
+        is_first: bool,
+        is_last: bool,
+        to_tensor: bool,
+    ) -> Tuple[Union[torch.Tensor, "mx.array"], float]:
+        s1 = time.perf_counter()
+        output_hidden_states = self.model(hidden_states, seq_input)
+        return output_hidden_states, time.perf_counter() - s1
 
 
 if __name__ == "__main__":

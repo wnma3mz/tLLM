@@ -13,7 +13,7 @@ from tllm.engine import AsyncEngine
 from tllm.generate.llm_generator import LLMGenerator
 from tllm.generate.token_utils import TokenizerUtils
 from tllm.models.register import HAS_MLX, MODEL_REGISTER
-from tllm.rpc.manager import RPCManager
+from tllm.rpc.manager import LocalRPCManager, RPCManager
 from tllm.schemas import NodeConfig
 
 
@@ -123,7 +123,10 @@ def init_engine(args) -> Tuple[AsyncEngine, TokenizerUtils]:
     url_list = parse_url_list(args.config_path)
     tok = TokenizerUtils(args.model_path)
     model = MY_CausalLM_CLASS.from_pretrained(logger, config, tok, args.weight_path)
-    generator = LLMGenerator(RPCManager(url_list), logger, model)
+    if args.is_local:
+        generator = LLMGenerator(LocalRPCManager(logger, args, config), logger, model)
+    else:
+        generator = LLMGenerator(RPCManager(url_list), logger, model)
     engine = AsyncEngine(logger, generator)
     return engine, tok
 

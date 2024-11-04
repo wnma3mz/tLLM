@@ -70,7 +70,8 @@ class ModelClient:
             model.load_state_dict(state_dict)
             del state_dict
 
-        self.logger.debug(f"[Rank: {config.comm.rank}] Cost time {time.time() - s1}")
+        if hasattr(config, "comm"):
+            self.logger.debug(f"[Rank: {config.comm.rank}] Cost time {time.time() - s1}")
         model.eval()
         return model
 
