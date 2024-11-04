@@ -151,7 +151,7 @@ if __name__ == "__main__":
     openai_serving_chat = OpenAIServing(engine, tok, args)
 
     model_name = openai_serving_chat.model_name
-    total_layers = engine.model.num_layers
+    total_layers = engine.generator.model.num_layers
     layer_manager = LayerManager(total_layers=total_layers, model_name=model_name)
 
     uvicorn.run(app, host="0.0.0.0", port=args.port, reload=False)

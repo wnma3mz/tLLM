@@ -1,5 +1,4 @@
 import math
-import time
 from typing import *
 
 import mlx.core as mx
@@ -12,8 +11,7 @@ from transformers import AutoConfig
 from tllm.commons.mlx_layers import MyTransformerBlock
 from tllm.generate.token_utils import TokenizerUtils
 from tllm.models.cache import AttentionData, CacheManager, RequestsCache
-from tllm.models.protocol import ForwardResult, SeqInput
-from tllm.rpc.manager import RPCManager
+from tllm.models.protocol import SeqInput
 
 
 def build_mlx_mask(seq_len_list: List[Tuple[int, int]], total_L: int, total_S: int) -> mx.array:
@@ -110,7 +108,7 @@ class MyMLXLlamaForCausalLM(nn.Module):
         self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @classmethod
-    def from_pretrained(cls, logger, config, tok: TokenizerUtils, weight_path: str, server: RPCManager):
+    def from_pretrained(cls, logger, config, tok: TokenizerUtils, weight_path: str):
         model = cls(config)
 
         cls.config = config
@@ -124,8 +122,6 @@ class MyMLXLlamaForCausalLM(nn.Module):
             else:
                 cls.eos_token_ids.add(config.eos_token_id)
 
-        cls.server = server
-        cls.pp_size = len(server)
         if tok.tokenizer.eos_token_id:
             cls.eos_token_ids.add(tok.tokenizer.eos_token_id)
         eos_token = tok.tokenizer.convert_ids_to_tokens(list(cls.eos_token_ids))
@@ -145,32 +141,15 @@ class MyMLXLlamaForCausalLM(nn.Module):
     def get_input_embeddings(self, x: np.ndarray) -> mx.array:
         return self.embed_tokens(mx.array(x))
 
-    def __call__(self, inputs_embeds: mx.array, seq_input: SeqInput) -> ForwardResult:
-        hidden_states = inputs_embeds
-        comm_cost_time_list, calc_cost_time_list = [], []
-        for pp_idx in range(self.pp_size):
-            is_first = pp_idx == 0
-            is_last = pp_idx == self.pp_size - 1
-            s1 = time.time()
-            hidden_states, pp_cost_time = self.server.forward(
-                pp_idx, hidden_states, seq_input, is_first, is_last, False
-            )
-            comm_cost_time_list.append(time.time() - s1 - pp_cost_time)
-            calc_cost_time_list.append(pp_cost_time)
-
-        s1 = time.time()
+    def get_logits(self, hidden_states: mx.array, seq_len_list: List[int]) -> torch.Tensor:
         # 只取最后一个 token 的 hidden_states
         index_list = []
         index_list, idx = [], 0
-        for seq_len in seq_input.seq_len_list[:-1]:
+        for seq_len in seq_len_list[:-1]:
             idx += seq_len
             index_list.append(idx)
         seq_hidden_states = mx.split(hidden_states, index_list, axis=1)
         hidden_states = mx.concat([x[:, -1:, :] for x in seq_hidden_states], axis=1).astype(self.dtype)
         # bsz x seq_len x hidden_size
         logits = torch.tensor(self.lm_head(self.norm(hidden_states)).tolist())
-        self.logger.debug(f"head calc_cost_time: {time.time() - s1:.4f}s")
-        # bsz: 1; seq_len: seq_len1 + seq_len2
-        return ForwardResult(
-            logits=logits, comm_cost_time_list=comm_cost_time_list, calc_cost_time_list=calc_cost_time_list
-        )
+        return logits
