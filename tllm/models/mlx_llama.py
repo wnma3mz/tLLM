@@ -1,15 +1,19 @@
 import math
+import time
 from typing import *
 
 import mlx.core as mx
 import mlx.nn as nn
 from mlx_lm.models.llama import ModelArgs
 import numpy as np
+import torch
 from transformers import AutoConfig
 
 from tllm.commons.mlx_layers import MyTransformerBlock
+from tllm.generate.token_utils import TokenizerUtils
 from tllm.models.cache import AttentionData, CacheManager, RequestsCache
-from tllm.models.protocol import SeqInput
+from tllm.models.protocol import ForwardResult, SeqInput
+from tllm.rpc.manager import RPCManager
 
 
 def build_mlx_mask(seq_len_list: List[Tuple[int, int]], total_L: int, total_S: int) -> mx.array:
@@ -95,3 +99,78 @@ class MyMLXLlamaModel(nn.Module):
     @property
     def dtype(self):
         return next(self.parameters()).dtype
+
+
+class MyMLXLlamaForCausalLM(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.vocab_size = config.vocab_size
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+    @classmethod
+    def from_pretrained(cls, logger, config, tok: TokenizerUtils, weight_path: str, server: RPCManager):
+        model = cls(config)
+
+        cls.config = config
+        cls.num_layers = config.num_hidden_layers
+        cls.logger = logger
+        cls.eos_token_ids = set()
+
+        if hasattr(config, "eos_token_ids"):
+            if isinstance(config.eos_token_id, list):
+                cls.eos_token_ids |= set(config.eos_token_ids)
+            else:
+                cls.eos_token_ids.add(config.eos_token_id)
+
+        cls.server = server
+        cls.pp_size = len(server)
+        if tok.tokenizer.eos_token_id:
+            cls.eos_token_ids.add(tok.tokenizer.eos_token_id)
+        eos_token = tok.tokenizer.convert_ids_to_tokens(list(cls.eos_token_ids))
+        cls.logger.debug(f"eos_token_ids: {cls.eos_token_ids}; Tokens: {eos_token}")
+
+        cls.dtype = mx.bfloat16
+        state_dict = torch.load(weight_path)
+        model.embed_tokens.load_weights(
+            [("weight", mx.array(state_dict.pop("model.embed_tokens.weight"), dtype=cls.dtype))]
+        )
+        model.norm.load_weights([("weight", mx.array(state_dict.pop("model.norm.weight"), dtype=cls.dtype))])
+        model.lm_head.load_weights([("weight", mx.array(state_dict.pop("lm_head.weight"), dtype=cls.dtype))])
+
+        model.eval()
+        return model
+
+    def get_input_embeddings(self, x: np.ndarray) -> mx.array:
+        return self.embed_tokens(mx.array(x))
+
+    def __call__(self, inputs_embeds: mx.array, seq_input: SeqInput) -> ForwardResult:
+        hidden_states = inputs_embeds
+        comm_cost_time_list, calc_cost_time_list = [], []
+        for pp_idx in range(self.pp_size):
+            is_first = pp_idx == 0
+            is_last = pp_idx == self.pp_size - 1
+            s1 = time.time()
+            hidden_states, pp_cost_time = self.server.forward(
+                pp_idx, hidden_states, seq_input, is_first, is_last, False
+            )
+            comm_cost_time_list.append(time.time() - s1 - pp_cost_time)
+            calc_cost_time_list.append(pp_cost_time)
+
+        s1 = time.time()
+        # 只取最后一个 token 的 hidden_states
+        index_list = []
+        index_list, idx = [], 0
+        for seq_len in seq_input.seq_len_list[:-1]:
+            idx += seq_len
+            index_list.append(idx)
+        seq_hidden_states = mx.split(hidden_states, index_list, axis=1)
+        hidden_states = mx.concat([x[:, -1:, :] for x in seq_hidden_states], axis=1).astype(self.dtype)
+        # bsz x seq_len x hidden_size
+        logits = torch.tensor(self.lm_head(self.norm(hidden_states)).tolist())
+        self.logger.debug(f"head calc_cost_time: {time.time() - s1:.4f}s")
+        # bsz: 1; seq_len: seq_len1 + seq_len2
+        return ForwardResult(
+            logits=logits, comm_cost_time_list=comm_cost_time_list, calc_cost_time_list=calc_cost_time_list
+        )

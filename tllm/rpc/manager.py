@@ -41,6 +41,7 @@ class RPCManager:
         seq_input: SeqInput,
         is_first: bool = False,
         is_last: bool = False,
+        to_tensor: bool = True,
     ) -> Tuple[Union[torch.Tensor, bytes], float]:
         if is_first:
             hidden_states = serialize_tensor(hidden_states)
@@ -53,7 +54,7 @@ class RPCManager:
         request = schemas_pb2.ForwardRequest(**forward_request)
         response = self.stub_list[url_idx].Forward(request)
         if is_last:
-            return deserialize_tensor(response.output, to_tensor=True), response.cost_time
+            return deserialize_tensor(response.output, to_tensor=to_tensor), response.cost_time
         else:
             return response.output, response.cost_time
 

@@ -11,7 +11,7 @@ from transformers import AutoConfig
 
 from tllm.engine import AsyncEngine
 from tllm.generate.token_utils import TokenizerUtils
-from tllm.models.register import MODEL_REGISTER
+from tllm.models.register import HAS_MLX, MODEL_REGISTER
 from tllm.rpc.manager import RPCManager
 from tllm.schemas import NodeConfig
 
@@ -115,6 +115,8 @@ def init_engine(args) -> Tuple[AsyncEngine, TokenizerUtils]:
     arch = config.architectures[0]
     if arch not in MODEL_REGISTER:
         raise ValueError(f"Model {arch} not supported")
+    if HAS_MLX:
+        arch = "MLX" + arch
     _, MY_CausalLM_CLASS, _ = MODEL_REGISTER[arch]
 
     url_list = parse_url_list(args.config_path)

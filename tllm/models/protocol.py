@@ -55,8 +55,8 @@ class RequestOutput:
 
 @dataclass
 class ForwardResult:
-    logits: torch.Tensor
-    hidden_states: Optional[torch.Tensor] = None
+    logits: Union[torch.Tensor, "mx.array"]
+    hidden_states: Optional[Union[torch.Tensor, "mx.array"]] = None
     comm_cost_time_list: Optional[List[float]] = None
     calc_cost_time_list: Optional[List[float]] = None
 

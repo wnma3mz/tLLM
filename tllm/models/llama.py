@@ -1,6 +1,7 @@
 import time
 from typing import *
 
+import numpy as np
 import torch
 import torch.nn as nn
 from transformers.models.llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
@@ -145,6 +146,10 @@ class MyLlamaForCausalLM(nn.Module):
 
         model.eval()
         return model
+
+    @torch.no_grad()
+    def get_input_embeddings(self, x: np.ndarray) -> torch.Tensor:
+        return self.embed_tokens(torch.tensor(x))
 
     @torch.no_grad()
     def forward(self, inputs_embeds: torch.Tensor, seq_input: SeqInput) -> ForwardResult:

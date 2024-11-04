@@ -3,6 +3,7 @@ import time
 import traceback
 from typing import *
 
+import numpy as np
 import torch
 
 from tllm.generate.token_utils import TokenizerUtils
@@ -28,14 +29,14 @@ async def generate_utils(model, sequence_request_list: List[SequenceRequestData]
         if sequence_request.is_prefill:
             if sequence_request.history_request_id:
                 uuid_list[-1] = sequence_request.history_request_id
-            input_ids_list.append(torch.tensor(sequence_request.input_ids).unsqueeze(0))
+            input_ids_list.append(np.array(sequence_request.input_ids).reshape(1, -1))
             seq_len_list.append(sequence_request.q_len)
         else:
-            input_ids_list.append(torch.tensor([sequence_request.output_ids[-1]]).unsqueeze(0))
+            input_ids_list.append(np.array(sequence_request.output_ids[-1]).reshape(1, -1))
             seq_len_list.append(1)
 
-    input_ids = torch.cat(input_ids_list, dim=-1)
-    input_embeds = model.embed_tokens(input_ids)
+    input_ids = np.concatenate(input_ids_list, axis=-1)
+    input_embeds = model.get_input_embeddings(input_ids)
 
     seq_input = SeqInput(uuid_list=uuid_list, seq_len_list=seq_len_list)
     s1 = time.time()
@@ -43,6 +44,7 @@ async def generate_utils(model, sequence_request_list: List[SequenceRequestData]
     generate_time = time.time() - s1
     logits = forward_result.logits
 
+    s1 = time.time()
     # 根据 seq 拆开，之后直接在 sampler 中处理
     seq_logits_list = torch.split(logits, [1 for _ in seq_input.seq_len_list], dim=1)
     for seq_logits, sequence_request in zip(seq_logits_list, sequence_request_list):
@@ -73,6 +75,9 @@ async def generate_utils(model, sequence_request_list: List[SequenceRequestData]
     sum_comm = sum(comm_cost_time_list)
     fraction = sum_comm / (sum_comm + sum(forward_result.calc_cost_time_list))
     model.logger.debug(f"communication cost time: {comm_cost_time_str}s({fraction*100:.1f}%)")
+    model.logger.debug(f"decoder cost time: {time.time() - s1:.4f}s")
+    model.logger.debug(f"forward cost time: {sum(forward_result.calc_cost_time_list):.4f}s")
+    model.logger.debug("=" * 5)
 
 
 conversations_dict = {}  # List[int] -> Tuple[str, int], TODO LRU 缓存
