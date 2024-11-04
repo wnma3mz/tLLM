@@ -1,3 +1,4 @@
+import asyncio
 import os
 import time
 from typing import *
@@ -81,33 +82,40 @@ class OpenAIServing:
         created_time = int(time.time())
         n = 1
         previous_texts = [""] * n
-        async for res in result_generator:
-            if raw_request is not None and await raw_request.is_disconnected():
-                # Abort the request if the client disconnects.
-                await self.engine.abort(request_id)
-                create_error_response("Client disconnected")
-            res: RequestOutput
-            output = res.outputs[0]
-            i = output.index
+        try:
+            async for res in result_generator:
+                if raw_request is not None and await raw_request.is_disconnected():
+                    # Abort the request if the client disconnects.
+                    await self.engine.abort(request_id)
+                    create_error_response("Client disconnected")
+                res: RequestOutput
+                output = res.outputs[0]
+                i = output.index
 
-            delta_text = output.text
-            previous_texts[i] = output.text
+                delta_text = output.text
+                previous_texts[i] = output.text
 
-            # 根据 finish_reason 判断是否结束，分别处理
-            if output.finish_reason is not None:
-                choice_data = ChatCompletionResponseStreamChoice(
-                    index=i, delta=DeltaMessage(content=""), logprobs=None, finish_reason=output.finish_reason
+                # 根据 finish_reason 判断是否结束，分别处理
+                if output.finish_reason is not None:
+                    choice_data = ChatCompletionResponseStreamChoice(
+                        index=i, delta=DeltaMessage(content=""), logprobs=None, finish_reason=output.finish_reason
+                    )
+                else:
+                    choice_data = ChatCompletionResponseStreamChoice(
+                        index=i,
+                        delta=DeltaMessage(content=delta_text),
+                        logprobs=None,
+                        finish_reason=output.finish_reason,
+                    )
+                chunk = ChatCompletionStreamResponse(
+                    id=request_id, model=self.model_name, created=created_time, choices=[choice_data]
                 )
-            else:
-                choice_data = ChatCompletionResponseStreamChoice(
-                    index=i, delta=DeltaMessage(content=delta_text), logprobs=None, finish_reason=output.finish_reason
-                )
-            chunk = ChatCompletionStreamResponse(
-                id=request_id, model=self.model_name, created=created_time, choices=[choice_data]
-            )
-            data = chunk.model_dump_json(exclude_unset=True)
-            yield f"data: {data}\n\n"
-        yield "data: [DONE]\n\n"
+                data = chunk.model_dump_json(exclude_unset=True)
+                yield f"data: {data}\n\n"
+            yield "data: [DONE]\n\n"
+        except asyncio.CancelledError:
+            await self.engine.abort(request_id)
+            create_error_response("Client disconnected")
 
     async def chat_completion_full_generator(
         self, request: ChatCompletionRequest, raw_request: Request, request_id: str, result_generator: AsyncIterator
@@ -115,12 +123,16 @@ class OpenAIServing:
         final_res = None
         role = "assistant"
         created_time = int(time.time())
-        async for res in result_generator:
-            if raw_request is not None and await raw_request.is_disconnected():
-                # Abort the request if the client disconnects.
-                await self.engine.abort(request_id)
-                create_error_response("Client disconnected")
-            final_res: RequestOutput = res
+        try:
+            async for res in result_generator:
+                if raw_request is not None and await raw_request.is_disconnected():
+                    # Abort the request if the client disconnects.
+                    await self.engine.abort(request_id)
+                    create_error_response("Client disconnected")
+                final_res: RequestOutput = res
+        except asyncio.CancelledError:
+            await self.engine.abort(request_id)
+            create_error_response("Client disconnected")
 
         output = final_res.outputs[0]
         message = ChatMessage(role=role, content=output.text)

@@ -10,11 +10,11 @@ import torch
 from transformers import AutoConfig
 
 from tllm.engine import AsyncEngine
+from tllm.generate.llm_generator import LLMGenerator
 from tllm.generate.token_utils import TokenizerUtils
 from tllm.models.register import HAS_MLX, MODEL_REGISTER
 from tllm.rpc.manager import RPCManager
 from tllm.schemas import NodeConfig
-from tllm.generate.llm_generator import LLMGenerator
 
 
 def setup_seed(seed):

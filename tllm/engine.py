@@ -81,8 +81,8 @@ class AsyncEngine:
                 sequence_data.is_stop = True
                 sequence_data.finish_reason_list = ["abort"]
                 aborting_request_ids.remove(sequence_data.request_id)
-                async with sequence_data.condition:
-                    sequence_data.condition.notify()
+                # async with sequence_data.condition:
+                #     sequence_data.condition.notify()
                 return True
             return False
 
@@ -146,12 +146,18 @@ class AsyncEngine:
                     )
                 except:
                     pass
+        except asyncio.CancelledError:
+            self.logger.debug(f"CancelledError: {data.request_id}")
+            raise asyncio.CancelledError("CancelledError")
         except asyncio.TimeoutError:
-            raise TimeoutError("Processing timed out")
+            self.logger.debug(f"Processing timed out: {data.request_id}")
+            raise asyncio.CancelledError("TimeoutError")
         except Exception as e:
             traceback.print_exc()
+            raise asyncio.CancelledError("UnknownException")
         except BaseException as e:
             traceback.print_exc()
+            raise asyncio.CancelledError("UnknownBaseException")
 
     async def generate(self, data: SequenceRequestData):
         await self.prefill_queue.put(data)
@@ -161,8 +167,18 @@ class AsyncEngine:
                 while not data.is_stop:
                     await asyncio.wait_for(data.condition.wait(), data.timeout)
             return data.to_request_output()  # 返回最终的数据对象
+        except asyncio.CancelledError:
+            self.logger.debug(f"CancelledError: {data.request_id}")
+            raise asyncio.CancelledError("CancelledError")
         except asyncio.TimeoutError:
-            raise TimeoutError("Processing timed out")
+            self.logger.debug(f"Processing timed out: {data.request_id}")
+            raise asyncio.CancelledError("TimeoutError")
+        except Exception as e:
+            traceback.print_exc()
+            raise asyncio.CancelledError("UnknownException")
+        except BaseException as e:
+            traceback.print_exc()
+            raise asyncio.CancelledError("UnknownBaseException")
 
     async def start(self):
         if self.processing_task is None:
