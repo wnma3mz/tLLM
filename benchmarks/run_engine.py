@@ -13,10 +13,6 @@ from tllm.utils import init_engine
 class Args:
     model_path: str = "/Users/lujianghu/Documents/Llama-3.2-1B-Instruct"
     config_path: str = "./examples/config.json"
-    weight_path: str = None
-
-    def __post_init__(self):
-        self.weight_path = os.path.join(self.model_path, "master_weight.pt")
 
 
 @dataclass

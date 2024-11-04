@@ -2,6 +2,24 @@
 
 跨机推理 LLM 框架
 
+### QuickStart
+
+download from: https://huggingface.co/mlx-community/Llama-3.2-1B-Instruct-bf16
+
+for mlx:   `pip install -r requirements[mlx].txt`
+for intel: `pip install -r requirements.txt`
+
+edit examples/run_single_server.sh
+
+```bash
+bash examples/run_single_server.sh
+```
+
+for test
+```python
+python benchmarks/run_async_requests.py
+```
+
 ### RoadMap
 
 使用 torch.dist 实现 张量并行，使用 rpc 实现流水并行，仅通信 hidden_states

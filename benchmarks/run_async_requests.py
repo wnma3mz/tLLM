@@ -31,6 +31,8 @@ async def main():
     messages2 = [{"role": "user", "content": "Hello, What's your name?"}]
     messages3 = [{"role": "user", "content": "今天天气怎么样"}]
 
+    await requests_func(messages3)
+
     messages_list = [messages1, messages2, messages3]
     print("异步并发请求结果")
     await asyncio.gather(*[requests_func(messages) for messages in messages_list])
@@ -38,7 +40,6 @@ async def main():
     print("单独请求结果")
     await requests_func(messages1)
     await requests_func(messages2)
-    await requests_func(messages3)
 
 
 if __name__ == "__main__":

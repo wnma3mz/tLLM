@@ -81,7 +81,7 @@ class LocalRPCManager:
     def forward(
         self,
         pp_idx: int,
-        hidden_states: torch.Tensor,
+        hidden_states: Union[torch.Tensor, "mx.array"],
         seq_input: SeqInput,
         is_first: bool,
         is_last: bool,

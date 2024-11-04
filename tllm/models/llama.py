@@ -9,7 +9,7 @@ from tllm.commons.layers import MyLlamaDecoderLayer
 from tllm.generate.token_utils import TokenizerUtils
 from tllm.models.cache import AttentionData, CacheManager, RequestsCache
 from tllm.models.protocol import SeqInput
-from tllm.models.utils import build_mask
+from tllm.models.utils import build_mask, load_master_weight
 
 
 def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_layers: int) -> AttentionData:
@@ -116,7 +116,7 @@ class MyLlamaForCausalLM(nn.Module):
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps).to(self.dtype)
 
     @classmethod
-    def from_pretrained(cls, logger, config, tok: TokenizerUtils, weight_path: str):
+    def from_pretrained(cls, logger, config, tok: TokenizerUtils, model_path: str):
         model = cls(config)
 
         cls.config = config
@@ -135,10 +135,14 @@ class MyLlamaForCausalLM(nn.Module):
         eos_token = tok.tokenizer.convert_ids_to_tokens(list(cls.eos_token_ids))
         cls.logger.debug(f"eos_token_ids: {cls.eos_token_ids}; Tokens: {eos_token}")
 
-        state_dict = torch.load(weight_path)
-        model.embed_tokens.load_state_dict({"weight": state_dict.pop("model.embed_tokens.weight")})
+        state_dict = load_master_weight(model_path)
+        embedding_weight = state_dict.pop("model.embed_tokens.weight")
+        model.embed_tokens.load_state_dict({"weight": embedding_weight})
         model.norm.load_state_dict({"weight": state_dict.pop("model.norm.weight")})
-        model.lm_head.load_state_dict({"weight": state_dict.pop("lm_head.weight")})
+        if "lm_head.weight" in state_dict:
+            model.lm_head.load_state_dict({"weight": state_dict.pop("lm_head.weight")})
+        else:
+            model.lm_head.load_state_dict({"weight": model.embed_tokens.weight})
 
         model.eval()
         return model

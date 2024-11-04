@@ -10,6 +10,7 @@ import requests
 from transformers import AutoConfig
 import websockets
 
+from tllm.commons.communicator import SingleNodeCommunicator
 from tllm.models.register import HAS_MLX, MODEL_REGISTER, load_weight
 
 
@@ -41,6 +42,8 @@ class ModelClient:
     def load_model(self, config: AutoConfig, model_path: str, dtype):
         config.decoder_start_layer_idx = self.start_idx
         config.decoder_end_layer_idx = self.end_idx
+        if not hasattr(config, "comm"):
+            config.comm = SingleNodeCommunicator()
 
         arch = config.architectures[0]
         if HAS_MLX:
@@ -70,8 +73,8 @@ class ModelClient:
             model.load_state_dict(state_dict)
             del state_dict
 
-        if hasattr(config, "comm"):
-            self.logger.debug(f"[Rank: {config.comm.rank}] Cost time {time.time() - s1}")
+        self.logger.debug(f"[Rank: {config.comm.rank}] Cost time {time.time() - s1}")
+
         model.eval()
         return model
 

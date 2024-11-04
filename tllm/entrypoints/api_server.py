@@ -131,7 +131,6 @@ async def client_websocket(websocket: WebSocket, client_id: str):
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=str, required=True)
-    parser.add_argument("--weight_path", type=str, required=True)
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--config_path", type=str, required=True)
     parser.add_argument("--need_start_client", action="store_true")

@@ -1,5 +1,8 @@
-from typing import List, Set, Tuple
+import json
+import os
+from typing import Dict, List, Set, Tuple, Union
 
+from safetensors import safe_open
 import torch
 
 from tllm.models.protocol import GenerateEnd
@@ -40,3 +43,32 @@ def build_mask(seq_len_list: List[Tuple[int, int]]) -> torch.Tensor:
         r_index += mask.size(1)
 
     return combined_mask
+
+
+def read_from_safetensors(file_path: str, key_list: List[str]) -> Dict[str, torch.Tensor]:
+    tensors = {}
+    with safe_open(file_path, framework="pt", device="cpu") as f:
+        for key in key_list:
+            if key in f.keys():
+                tensors[key] = f.get_tensor(key)
+    return tensors
+
+
+def load_master_weight(model_path: str) -> Dict[str, Union[torch.Tensor, "mx.array"]]:
+    index_path = os.path.join(model_path, "model.safetensors.index.json")
+    file_set = set()
+    key_list = ["model.embed_tokens.weight", "model.norm.weight", "lm_head.weight"]
+    if os.path.isfile(index_path):
+        with open(index_path, "r") as f:
+            index = json.load(f)
+        for key in key_list:
+            if key in index["weight_map"]:
+                file_set.add(index["weight_map"][key])
+    else:
+        file_set.add("model.safetensors")
+
+    weight_dict = {}
+    for file in file_set:
+        weight_path = os.path.join(model_path, file)
+        weight_dict.update(read_from_safetensors(weight_path, key_list))
+    return weight_dict

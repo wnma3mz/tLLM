@@ -12,6 +12,7 @@ from tllm.commons.mlx_layers import MyTransformerBlock
 from tllm.generate.token_utils import TokenizerUtils
 from tllm.models.cache import AttentionData, CacheManager, RequestsCache
 from tllm.models.protocol import SeqInput
+from tllm.models.utils import load_master_weight
 
 
 def build_mlx_mask(seq_len_list: List[Tuple[int, int]], total_L: int, total_S: int) -> mx.array:
@@ -103,12 +104,13 @@ class MyMLXLlamaForCausalLM(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.vocab_size = config.vocab_size
+        self.dtype = mx.bfloat16
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @classmethod
-    def from_pretrained(cls, logger, config, tok: TokenizerUtils, weight_path: str):
+    def from_pretrained(cls, logger, config, tok: TokenizerUtils, model_path: str):
         model = cls(config)
 
         cls.config = config
@@ -127,13 +129,14 @@ class MyMLXLlamaForCausalLM(nn.Module):
         eos_token = tok.tokenizer.convert_ids_to_tokens(list(cls.eos_token_ids))
         cls.logger.debug(f"eos_token_ids: {cls.eos_token_ids}; Tokens: {eos_token}")
 
-        cls.dtype = mx.bfloat16
-        state_dict = torch.load(weight_path)
-        model.embed_tokens.load_weights(
-            [("weight", mx.array(state_dict.pop("model.embed_tokens.weight"), dtype=cls.dtype))]
-        )
-        model.norm.load_weights([("weight", mx.array(state_dict.pop("model.norm.weight"), dtype=cls.dtype))])
-        model.lm_head.load_weights([("weight", mx.array(state_dict.pop("lm_head.weight"), dtype=cls.dtype))])
+        state_dict = load_master_weight(model_path)
+        embedding_weight = mx.array(state_dict.pop("model.embed_tokens.weight"))
+        model.embed_tokens.load_weights([("weight", embedding_weight)])
+        model.norm.load_weights([("weight", mx.array(state_dict.pop("model.norm.weight")))])
+        if "lm_head.weight" in state_dict:
+            model.lm_head.load_weights([("weight", mx.array(state_dict.pop("lm_head.weight")))])
+        else:
+            model.lm_head.load_weights([("weight", model.embed_tokens.weight)])
 
         model.eval()
         return model

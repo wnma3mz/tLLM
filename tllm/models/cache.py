@@ -3,14 +3,14 @@ from typing import *
 
 import torch
 
-try:
+from tllm import HAS_MLX
+
+if HAS_MLX:
     import mlx.core as mx
 
-    HAS_MLX = True
     cat_func = lambda tensors: mx.concat(tensors, axis=-2)
     split_func = lambda tensor, indices: mx.split(tensor, indices, axis=-2)
-except:
-    HAS_MLX = False
+else:
     cat_func = lambda tensors: torch.cat(tensors, dim=-2)
     split_func = lambda tensor, indices: torch.split(tensor, indices, dim=-2)
 

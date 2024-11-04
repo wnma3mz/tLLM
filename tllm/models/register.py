@@ -8,14 +8,11 @@ from tllm.models.llama import MyLlamaForCausalLM, MyLlamaModel
 
 MODEL_REGISTER = {"LlamaForCausalLM": (LlamaForCausalLM, MyLlamaForCausalLM, MyLlamaModel)}
 
-try:
-    import mlx.core as mx  # type: ignore
-
-    HAS_MLX = True
-except:
-    HAS_MLX = False
+from tllm import HAS_MLX
 
 if HAS_MLX:
+    import mlx.core as mx  # type: ignore
+
     from tllm.models.mlx_llama import MyMLXLlamaForCausalLM, MyMLXLlamaModel
 
     MODEL_REGISTER.update({"MLXLlamaForCausalLM": (LlamaForCausalLM, MyMLXLlamaForCausalLM, MyMLXLlamaModel)})
