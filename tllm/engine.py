@@ -142,7 +142,7 @@ class AsyncEngine:
                 try:
                     self.logger.info(f"[request_id] {data.request_id}] ttft: {data.ttft_cost_time:.4f} s")
                     self.logger.info(
-                        f"[request_id] {data.request_id}] tpot: {(len(data.output_ids) - 1) / (time.time() - data.decode_start_ts):.4f} token/s"
+                        f"[request_id] {data.request_id}] tpot: {(len(data.output_ids) - 1) / (time.perf_counter() - data.decode_start_ts):.4f} token/s"
                     )
                 except:
                     pass

@@ -23,11 +23,11 @@ class LLMGenerator:
         for pp_idx in range(self.pp_size):
             is_first = pp_idx == 0
             is_last = pp_idx == self.pp_size - 1
-            s1 = time.time()
+            s1 = time.perf_counter()
             hidden_states, pp_cost_time = self.server.forward(
                 pp_idx, hidden_states, seq_input, is_first, is_last, to_tensor=not HAS_MLX
             )
-            comm_cost_time_list.append(time.time() - s1 - pp_cost_time)
+            comm_cost_time_list.append(time.perf_counter() - s1 - pp_cost_time)
             calc_cost_time_list.append(pp_cost_time)
         return ForwardResult(
             hidden_states=hidden_states,
@@ -65,14 +65,14 @@ class LLMGenerator:
         input_embeds = self.model.get_input_embeddings(input_ids)
 
         seq_input = SeqInput(uuid_list=uuid_list, seq_len_list=seq_len_list)
-        s0 = time.time()
+        s0 = time.perf_counter()
         forward_result = self.forward(input_embeds, seq_input)
-        self.logger.debug(f"decoder cost time: {time.time() - s0:.4f}s")
-        s1 = time.time()
+        self.logger.debug(f"decoder cost time: {time.perf_counter() - s0:.4f}s")
+        s1 = time.perf_counter()
         logits = self.model.get_logits(forward_result.hidden_states, seq_len_list)
-        self.logger.debug(f"get_logits cost time: {time.time() - s1:.4f}s")
+        self.logger.debug(f"get_logits cost time: {time.perf_counter() - s1:.4f}s")
 
-        s1 = time.time()
+        s1 = time.perf_counter()
         # 根据 seq 拆开，之后直接在 sampler 中处理
         # [seq_len1 + seq_len2 + ...,  hidden_size] -> [[seq_len1 x hidden_size], [seq_len2 x hidden_size], ...]
         seq_logits_list = torch.split(logits, [1] * len(sequence_request_list), dim=0)
@@ -95,14 +95,14 @@ class LLMGenerator:
                 sequence_request.output_text += generate_texts[0]  # 不添加 end text
 
             if sequence_request.is_prefill:
-                sequence_request.ttft_cost_time = time.time() - s0
-                sequence_request.decode_start_ts = time.time()
+                sequence_request.ttft_cost_time = time.perf_counter() - s0
+                sequence_request.decode_start_ts = time.perf_counter()
                 sequence_request.is_prefill = False
 
         comm_cost_time_list = forward_result.comm_cost_time_list
         comm_cost_time_str = ",".join([f"{x:.4f}" for x in comm_cost_time_list])
         sum_comm = sum(comm_cost_time_list)
         fraction = sum_comm / (sum_comm + sum(forward_result.calc_cost_time_list))
-        self.logger.debug(f"de tokenizer cost time: {time.time() - s1:.4f}s")
+        self.logger.debug(f"de tokenizer cost time: {time.perf_counter() - s1:.4f}s")
         self.logger.debug(f"communication cost time: {comm_cost_time_str}s({fraction*100:.1f}%)")
         self.logger.debug("=" * 5)

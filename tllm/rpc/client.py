@@ -57,9 +57,9 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
         self.comm.broadcast_object([seq_input, tuple(hidden_states.shape)])
         self.comm.broadcast(hidden_states)
 
-        s1 = time.time()
+        s1 = time.perf_counter()
         output_hidden_states = self.model(hidden_states, seq_input)
-        cost_time = time.time() - s1
+        cost_time = time.perf_counter() - s1
 
         output = serialize_tensor(output_hidden_states)
 
