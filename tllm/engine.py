@@ -81,8 +81,6 @@ class AsyncEngine:
                 sequence_data.is_stop = True
                 sequence_data.finish_reason_list = ["abort"]
                 aborting_request_ids.remove(sequence_data.request_id)
-                # async with sequence_data.condition:
-                #     sequence_data.condition.notify()
                 return True
             return False
 

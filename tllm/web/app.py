@@ -1,4 +1,5 @@
 import json
+import time
 from typing import *
 
 import gradio as gr
@@ -27,6 +28,7 @@ class ChatInterface:
         self.should_stop = False
         self.config = GenerationConfig()
         self.config.chat_url = chat_url
+        self.metric_text = "Tokens Generated: {token_nums}\nSpeed: {speed:.2f} tokens/second"
 
     def _create_chat_column(self) -> Tuple[gr.Chatbot, gr.Textbox, gr.Button, gr.Button, gr.Button]:
         """创建聊天界面的主列"""
@@ -67,9 +69,9 @@ class ChatInterface:
         def update_config(url, sys_prompt, temp, tp, tk, max_tok):
             self.config.chat_url = url
             self.config.system_prompt = sys_prompt
-            self.config.temperature = temp
-            self.config.top_p = tp
-            self.config.top_k = tk
+            self.config.temperature = 1.0
+            self.config.top_p = 1.0
+            self.config.top_k = -1
             self.config.max_tokens = max_tok
 
         for component in components:
@@ -107,7 +109,10 @@ class ChatInterface:
         data = self._prepare_request_data(history)
         response = requests.post(self.config.chat_url, json=data, stream=True)
 
+        tokens_generated = 0
+        start_time = time.time()
         partial_message = ""
+
         for chunk in response.iter_content(chunk_size=1024):
             if self.should_stop:
                 break
@@ -120,7 +125,13 @@ class ChatInterface:
                 if data_chunk["choices"][0]["delta"]["content"] is not None:
                     partial_message += data_chunk["choices"][0]["delta"]["content"]
                     history[-1][1] = partial_message
-                    yield history
+
+                    tokens_generated += 1
+                    current_time = time.time()
+                    time_elapsed = current_time - start_time
+                    tokens_per_second = tokens_generated / time_elapsed
+
+                    yield history, self.metric_text.format(token_nums=tokens_generated, speed=tokens_per_second)
 
     def _handle_user_input(self, user_message: str, history: List[List[str]]) -> Tuple[gr.update, List[List[str]]]:
         """处理用户输入"""
@@ -144,15 +155,16 @@ class ChatInterface:
 
                 with gr.Column(scale=1):
                     config_components = self._create_config_column()
+                    metrics = gr.Markdown(value=self.metric_text.format(token_nums=0, speed=0))
 
             self._setup_config_updates(config_components)
 
             submit_btn.click(self._handle_user_input, inputs=[msg, chatbot], outputs=[msg, chatbot], queue=False).then(
-                self._handle_bot_response, inputs=[chatbot], outputs=[chatbot]
+                self._handle_bot_response, inputs=[chatbot], outputs=[chatbot, metrics]
             )
 
             msg.submit(self._handle_user_input, inputs=[msg, chatbot], outputs=[msg, chatbot], queue=False).then(
-                self._handle_bot_response, inputs=[chatbot], outputs=[chatbot]
+                self._handle_bot_response, inputs=[chatbot], outputs=[chatbot, metrics]
             )
 
             stop_btn.click(self._handle_stop_generation, queue=False)
@@ -177,4 +189,4 @@ if __name__ == "__main__":
     chat_interface = ChatInterface(args.chat_url)
     demo = chat_interface.create_interface()
     demo.queue()
-    demo.launch(server_name="0.0.0.0", server_port=args.port, show_api=False, prevent_thread_lock=False)
+    demo.launch(server_name="0.0.0.0", server_port=args.port, show_api=False, prevent_thread_lock=False, share=False)
