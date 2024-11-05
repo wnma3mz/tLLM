@@ -130,14 +130,28 @@ class MyMLXLlamaForCausalLM(nn.Module):
         cls.logger.debug(f"eos_token_ids: {cls.eos_token_ids}; Tokens: {eos_token}")
 
         state_dict = load_master_weight(model_path)
-        embedding_weight = mx.array(state_dict.pop("model.embed_tokens.weight"))
-        model.embed_tokens.load_weights([("weight", embedding_weight)])
-        model.norm.load_weights([("weight", mx.array(state_dict.pop("model.norm.weight")))])
-        if "lm_head.weight" in state_dict:
-            model.lm_head.load_weights([("weight", mx.array(state_dict.pop("lm_head.weight")))])
-        else:
-            model.lm_head.load_weights([("weight", model.embed_tokens.weight)])
+        state_dict = {k.split("model.")[-1]: v for k, v in state_dict.items()}
+        has_key_list = list(state_dict.keys())
+        if "lm_head.weight" not in state_dict:
+            for key in has_key_list:
+                if key.startswith("embed_tokens."):
+                    state_dict[key.replace("embed_tokens.", "lm_head.")] = state_dict[key]
 
+        if getattr(config, "quantization", None) is not None:
+            # Handle legacy models which may not have everything quantized
+            def class_predicate(p, m):
+                if not hasattr(m, "to_quantized"):
+                    return False
+                return f"{p}.scales" in state_dict
+
+            nn.quantize(
+                model,
+                **config.quantization,
+                class_predicate=class_predicate,
+            )
+        model.load_weights(list(state_dict.items()))
+
+        mx.eval(model.parameters())
         model.eval()
         return model
 

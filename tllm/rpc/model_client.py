@@ -56,14 +56,24 @@ class ModelClient:
         s1 = time.time()
         if HAS_MLX:
             import mlx.core as mx
+            import mlx.nn as nn
 
             weights = load_weight(model_path)
 
             model = MY_MODEL_CLASS(config)
-            for pop_key in ["model.embed_tokens.weight", "model.norm.weight"]:
-                if pop_key in weights:
-                    weights.pop(pop_key)
-            model.load_weights(list(weights.items()))
+            if getattr(config, "quantization", None) is not None:
+                # Handle legacy models which may not have everything quantized
+                def class_predicate(p, m):
+                    if not hasattr(m, "to_quantized"):
+                        return False
+                    return f"{p}.scales" in weights
+
+                nn.quantize(
+                    model,
+                    **config.quantization,
+                    class_predicate=class_predicate,
+                )
+            model.load_weights(list(weights.items()), strict=False)
             mx.eval(model.parameters())
         else:
             state_dict = HF_CausalLM_CLASS.from_pretrained(
