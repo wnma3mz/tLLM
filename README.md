@@ -8,34 +8,34 @@
 
 2. install dependencies
 
-for mlx:   `pip install -r requirements[mlx].txt`
-for intel: `pip install -r requirements.txt`
+- for mlx:   `pip install -r requirements[mlx].txt`
+- for intel: `pip install -r requirements.txt`
 
 3. run server 
 
-3.1 (no communication)
+    `1` is the model size
 
-edit `examples/run_single_server.sh`
+    3.1 (no communication)
 
-```bash
-bash examples/run_single_server.sh
-```
+    - edit `examples/run_single_server.sh`
 
-3.2 (with communication)
+    ```bash
+    bash examples/run_single_server.sh 1
+    ```
 
-- edit `examples/mlx_run_single_client.sh`
+    3.2 (with communication)
 
-- edit `examples/run.sh`
+    - edit `examples/mlx_run_single_client.sh`
 
-```bash
-# in one terminal
-bash examples/run.sh 1
+    - edit `examples/run.sh`
 
-# in another terminal
-bash examples/mlx_run_single_client.sh 1
+    ```bash
+    # in one terminal
+    bash examples/run.sh 1
 
-# 1 is the model size
-```
+    # in another terminal
+    bash examples/mlx_run_single_client.sh 1
+    ```
 
 4. testing
 ```python
@@ -65,6 +65,8 @@ RoadMap
 - [x] MLX Framework
     - [x] With Torch Inference
         - [x] Some bugs with multi requests
+    - [x] Quantization
+    - [x] MLX Server
     - [ ] LoRA Training
 - [x] Web UI
     - [x] Node Status
@@ -161,7 +163,6 @@ Time: 2024-11-02 11:41:51
 | (4, 8192)      |              32.74 |           9.82 |       42.56 |               3.82 |
 | (16, 8192)     |              77.19 |          32.65 |      109.84 |               6.48 |
 | (64, 8192)     |             256.25 |          83.67 |      339.92 |               7.80 |
-+----------------+--------------------+----------------+-------------+--------------------+
 
 ### 分割线
 - 2 GHz 四核Intel Core i5, 16 GB 3733 MHz LPDDR4X
@@ -188,8 +189,7 @@ bfloat 16 CPU
 | 2,2(实际) | 5.66 token/s  | 2.46 token/s  |
 
 
-
 TODO: Meta-Llama-3-8B-Instruct in GPU
 
-多维数组实现（float32）: 单机通信在 0.002 s 左右 （seq-len=1）
-bytes 实现（float32）: 单机通信在 0.001 s 左右 （seq-len=1）
+- 多维数组实现（float32）: 单机通信在 0.002 s 左右 （seq-len=1）
+- bytes 实现（float32）: 单机通信在 0.001 s 左右 （seq-len=1）
