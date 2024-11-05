@@ -90,7 +90,6 @@ def start_client(config_path: str, model_path: str) -> None:
         if pp_config["tp_size"] > 1:
             cmd = f"torchrun --nproc_per_node={pp_config['tp_size']} --master_port={pp_config['master_port']} tllm/rpc/client.py --start_layer_idx={start_layer_idx} --end_layer_idx={end_layer_idx} --model_path {model_path} --port {port} > grpc_{port}.log 2>&1 &"
         else:
-            # 几乎等效于 torchrun --nproc_per_node=1
             cmd = f"python3 tllm/rpc/client.py --start_layer_idx={start_layer_idx} --end_layer_idx={end_layer_idx} --model_path {model_path} --port {port} > grpc_{port}.log 2>&1 &"  #
         # 异步启动
         logger.info(f"begin start client {pp_config['pp_rank']}")

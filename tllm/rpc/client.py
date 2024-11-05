@@ -91,7 +91,7 @@ def parse_args():
 
 
 def start_grpc_server(comm: Communicator, model, logger, args, is_debug=False):
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10), compression=grpc.Compression.Gzip)
     rpc_servicer = RPCServicer(comm, model, comm.rank, args.pp_rank, args.ip_addr)
     if comm.is_rank0():
         schemas_pb2_grpc.add_RPCServiceServicer_to_server(rpc_servicer, server)
