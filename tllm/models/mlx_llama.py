@@ -151,8 +151,8 @@ class MyMLXLlamaForCausalLM(nn.Module):
         for seq_len in seq_len_list[:-1]:
             idx += seq_len
             index_list.append(idx)
-        seq_hidden_states = mx.split(hidden_states, index_list, axis=1)
-        hidden_states = mx.concat([x[:, -1:, :] for x in seq_hidden_states], axis=1).astype(self.dtype)
-        # bsz x seq_len x hidden_size
+        # seq_len x hidden_size
+        seq_hidden_states = mx.split(hidden_states, index_list, axis=0)
+        hidden_states = mx.concat([x[-1:, :] for x in seq_hidden_states], axis=0).astype(self.dtype)
         logits = torch.tensor(self.lm_head(self.norm(hidden_states)).tolist())
         return logits

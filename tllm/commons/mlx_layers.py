@@ -24,14 +24,13 @@ class MyAttention(Attention):
         mask: mx.array,
         cache: AttentionData,
     ) -> mx.array:
-        B, L, D = x.shape
-
+        L, D = x.shape
         queries, keys, values = self.q_proj(x), self.k_proj(x), self.v_proj(x)
 
         # Prepare the queries, keys and values for the attention computation
-        queries = queries.reshape(B, L, self.n_heads, -1).transpose(0, 2, 1, 3)
-        keys = keys.reshape(B, L, self.n_kv_heads, -1).transpose(0, 2, 1, 3)
-        values = values.reshape(B, L, self.n_kv_heads, -1).transpose(0, 2, 1, 3)
+        queries = queries.reshape(L, self.n_heads, -1).transpose(1, 0, 2)
+        keys = keys.reshape(L, self.n_kv_heads, -1).transpose(1, 0, 2)
+        values = values.reshape(L, self.n_kv_heads, -1).transpose(1, 0, 2)
 
         # must has cache, and split by uuid
         request_cache: RequestsCache = cache.request_cache
@@ -41,8 +40,15 @@ class MyAttention(Attention):
         cache_kwargs = {"uuid_list": cache.uuid_list, "layer_idx": self.layer_idx - self.offset}
         keys, values = request_cache.update(keys, values, **cache_kwargs)
 
-        output = mx.fast.scaled_dot_product_attention(queries, keys, values, scale=self.scale, mask=mask)
-        output = output.transpose(0, 2, 1, 3).reshape(B, L, -1)
+        output = mx.fast.scaled_dot_product_attention(
+            mx.expand_dims(queries, axis=0),
+            mx.expand_dims(keys, axis=0),
+            mx.expand_dims(values, axis=0),
+            scale=self.scale,
+            mask=mask,
+        )[0]
+        output = output.transpose(1, 0, 2).reshape(L, -1)
+
         return self.o_proj(output)
 
 

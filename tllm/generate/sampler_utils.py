@@ -52,8 +52,8 @@ class SamplerUtils:
             return self.sampling_decode(logits, sampling_params)
 
     def greedy_decode(self, logits: torch.Tensor) -> List[int]:
-        # logits shape: [batch_size, sequence_length, vocab_size]
-        return torch.argmax(logits[:, -1], dim=-1).tolist()
+        # logits shape: [seq_len, vocab_size]
+        return torch.argmax(logits, dim=-1).tolist()
 
     def sampling_decode(self, logits: torch.Tensor, sampling_params: SamplingParams) -> List[int]:
         generate_logits = logits[:, -1]

@@ -140,8 +140,8 @@ class AsyncEngine:
                     yield data.to_request_output()  # 流式返回数据的内容，可以控制
                 # post_process(data)
                 try:
-                    self.logger.debug(f"[request_id] {data.request_id}] ttft: {data.ttft_cost_time:.4f} s")
-                    self.logger.debug(
+                    self.logger.info(f"[request_id] {data.request_id}] ttft: {data.ttft_cost_time:.4f} s")
+                    self.logger.info(
                         f"[request_id] {data.request_id}] tpot: {(len(data.output_ids) - 1) / (time.time() - data.decode_start_ts):.4f} token/s"
                     )
                 except:

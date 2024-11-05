@@ -166,6 +166,8 @@ class MyLlamaSdpaAttention(nn.Module):
         position_embeddings: Tuple[torch.Tensor, torch.Tensor],
         attention_data: AttentionData,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        # [seq_len, hidden_size] -> [1, seq_len, hidden_size]
+        hidden_states = hidden_states.unsqueeze(0)
         bsz, q_len, _ = hidden_states.size()
 
         query_states, key_states, value_states = self.qkv_proj(hidden_states)
@@ -193,7 +195,8 @@ class MyLlamaSdpaAttention(nn.Module):
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(bsz, q_len, -1)
 
-        attn_output = self.comm.all_reduce(self.o_proj(attn_output))
+        # [1, seq_len, hidden_size] -> [seq_len, hidden_size]
+        attn_output = self.comm.all_reduce(self.o_proj(attn_output))[0]
         return attn_output, None
 
 
