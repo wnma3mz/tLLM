@@ -130,5 +130,5 @@ def init_engine(args) -> Tuple[AsyncEngine, TokenizerUtils]:
     return engine, tok
 
 
-logger = setup_logger(__name__, logging.DEBUG)
-# logger = setup_logger(__name__, logging.INFO)
+# logger = setup_logger(__name__, logging.DEBUG)
+logger = setup_logger(__name__, logging.INFO)

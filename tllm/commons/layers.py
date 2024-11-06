@@ -23,12 +23,8 @@ class MergeParallelLayer(BaseParallelLayer):
         self.dup_layer = dup_layer
         self.layer = nn.Linear(row_size, col_size * self.dup_layer // self.world_size, bias=False)
 
-    def load_weight(self, w_list: Optional[List[torch.Tensor]] = None):
-        w = w_list[self.rank]
-        self.load_state_dict({"layer.weight": w})
-
     @torch.no_grad()
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
         node_output = self.layer(x)
         return torch.chunk(node_output, self.dup_layer, dim=-1)
 
@@ -45,12 +41,8 @@ class QKVParallelLayer(BaseParallelLayer):
         self.col_size_list = [x // self.world_size for x in col_size_list]
         self.layer = nn.Linear(row_size, col_size // self.world_size, bias=False)
 
-    def load_weight(self, w_list: Optional[List[torch.Tensor]] = None):
-        w = w_list[self.rank]
-        self.load_state_dict({"layer.weight": w})
-
     @torch.no_grad()
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
         node_output = self.layer(x)
         return torch.split(node_output, self.col_size_list, dim=-1)
 
@@ -61,12 +53,6 @@ class RowParallelLayer(BaseParallelLayer):
         assert row_size % self.world_size == 0
         self.row_size, self.col_size = row_size, col_size
         self.layer = nn.Linear(row_size // self.world_size, col_size, bias=False)
-
-    def load_weight(self, w: Optional[torch.Tensor] = None):
-        if self.world_size > 1:
-            w_list = w.chunk(self.world_size, dim=1)
-            w = w_list[self.rank]
-        self.load_state_dict({"layer.weight": w})
 
     @torch.no_grad()
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -88,19 +74,6 @@ class MyLlamaMLP(nn.Module):
 
         self.gate_up_proj = MergeParallelLayer(self.hidden_size, self.intermediate_size, 2, self.world_size, self.rank)
         self.down_proj = RowParallelLayer(self.intermediate_size, self.hidden_size, self.world_size, self.rank)
-
-    def load_state_dict(self, state_dict: Dict) -> None:
-        for key in ["down_proj"]:
-            layer_name = f"model.layers.{self.layer_idx}.mlp.{key}.weight"
-            getattr(self, key).load_weight(state_dict.get(layer_name, None))
-
-        weight_chunks = []
-        for key in ["gate_proj", "up_proj"]:
-            layer_name = f"model.layers.{self.layer_idx}.mlp.{key}.weight"
-            weight = state_dict[layer_name]
-            weight_chunks.append(torch.chunk(weight, self.world_size, dim=0))
-        combined_weights = [torch.cat([chunk[i] for chunk in weight_chunks], dim=0) for i in range(self.world_size)]
-        self.gate_up_proj.load_weight(combined_weights)
 
     def forward(self, x):
         # x: [batch_size, seq_len, hidden_size]
@@ -146,19 +119,6 @@ class MyLlamaSdpaAttention(nn.Module):
             self.rank,
         )
         self.o_proj = RowParallelLayer(self.num_heads * self.head_dim, self.hidden_size, self.world_size, self.rank)
-
-    def load_state_dict(self, state_dict: Dict) -> None:
-        for key in ["o_proj"]:
-            layer_name = f"model.layers.{self.layer_idx}.self_attn.{key}.weight"
-            getattr(self, key).load_weight(state_dict.get(layer_name, None))
-
-        weight_chunks = []
-        for key in ["q_proj", "k_proj", "v_proj"]:
-            layer_name = f"model.layers.{self.layer_idx}.self_attn.{key}.weight"
-            weight = state_dict[layer_name]
-            weight_chunks.append(torch.chunk(weight, self.world_size, dim=0))
-        combined_weights = [torch.cat([chunk[i] for chunk in weight_chunks], dim=0) for i in range(self.world_size)]
-        self.qkv_proj.load_weight(combined_weights)
 
     def forward(
         self,
@@ -212,17 +172,6 @@ class MyLlamaDecoderLayer(nn.Module):
         self.mlp = MyLlamaMLP(config, layer_idx=layer_idx)
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-    def load_state_dict(self, state_dict: Dict):
-        self.input_layernorm.load_state_dict(
-            {"weight": state_dict.pop(f"model.layers.{self.layer_idx}.input_layernorm.weight")}
-        )
-        self.post_attention_layernorm.load_state_dict(
-            {"weight": state_dict.pop(f"model.layers.{self.layer_idx}.post_attention_layernorm.weight")}
-        )
-
-        self.self_attn.load_state_dict(state_dict)
-        self.mlp.load_state_dict(state_dict)
 
     def forward(
         self,

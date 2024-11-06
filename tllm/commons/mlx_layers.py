@@ -2,14 +2,100 @@ from typing import *
 
 import mlx.core as mx
 import mlx.nn as nn
-from mlx_lm.models.llama import MLP, Attention, ModelArgs, TransformerBlock
+from mlx_lm.models.llama import ModelArgs, TransformerBlock, initialize_rope
 
 from tllm.models.cache import AttentionData, RequestsCache, cat_func, split_func
 
 
-class MyAttention(Attention):
+class BaseParallelLayer(nn.Module):
+    def __init__(self, world_size: int, rank: int) -> None:
+        self.world_size = world_size
+        self.rank = rank
+        super().__init__()
+
+
+class MergeParallelLayer(BaseParallelLayer):
+    def __init__(self, row_size: int, col_size: int, dup_layer: int, world_size: int, rank: int) -> None:
+        super().__init__(world_size, rank)
+        assert col_size % self.world_size == 0
+        self.row_size, self.col_size = row_size, col_size
+        self.dup_layer = dup_layer
+        self.layer = nn.Linear(row_size, col_size * self.dup_layer // self.world_size, bias=False)
+
+    @property
+    def index_list(self):
+        return [i * self.col_size // self.world_size for i in range(1, self.dup_layer)]
+
+    def __call__(self, x: mx.array) -> List[mx.array]:
+        node_output = self.layer(x)
+        return mx.split(node_output, self.index_list, axis=-1)
+
+
+class QKVParallelLayer(BaseParallelLayer):
+    def __init__(self, row_size: int, col_size_list: List[int], world_size: int, rank: int) -> None:
+        super().__init__(world_size, rank)
+        for x in col_size_list:
+            assert x % self.world_size == 0
+        col_size = sum(col_size_list)
+        assert col_size % self.world_size == 0
+
+        self.row_size, self.col_size = row_size, col_size
+        self.col_size_list = [x // self.world_size for x in col_size_list]
+        self.layer = nn.Linear(row_size, col_size // self.world_size, bias=False)
+
+    @property
+    def index_list(self):
+        index_list, idx = [], 0
+        for seq_len in self.col_size_list[:-1]:
+            idx += seq_len
+            index_list.append(idx)
+        return index_list
+
+    def __call__(self, x: mx.array) -> List[mx.array]:
+        node_output = self.layer(x)
+        return mx.split(node_output, self.index_list, axis=-1)
+
+
+class RowParallelLayer(BaseParallelLayer):
+    def __init__(self, row_size: int, col_size: int, world_size: int, rank: int) -> None:
+        super().__init__(world_size, rank)
+        assert row_size % self.world_size == 0
+        self.row_size, self.col_size = row_size, col_size
+        self.layer = nn.Linear(row_size // self.world_size, col_size, bias=False)
+        self.index_list = [i * row_size // self.world_size for i in range(1, self.world_size)]
+
+    def load_weight(self, w: Optional[mx.array] = None):
+        if self.world_size > 1:
+            w_list = w.split(self.index_list, axis=1)
+            w = w_list[self.rank]
+        state_dict = {"layer.weight": w}
+        self.load_weights(list(state_dict.items()))
+
+    def __call__(self, x: mx.array) -> mx.array:
+        return self.layer(x)
+
+
+class MyAttention(nn.Module):
     def __init__(self, args, layer_idx: int, offset: int):
-        super().__init__(args)
+        super().__init__()
+
+        dim = args.hidden_size
+        self.n_heads = n_heads = args.num_attention_heads
+        self.n_kv_heads = n_kv_heads = args.num_key_value_heads
+
+        self.head_dim = head_dim = args.head_dim or args.hidden_size // n_heads
+
+        self.scale = head_dim**-0.5
+        if hasattr(args, "attention_bias"):
+            attention_bias = args.attention_bias
+        else:
+            attention_bias = False
+
+        self.qkv_proj = QKVParallelLayer(dim, [n_heads * head_dim, n_kv_heads * head_dim, n_kv_heads * head_dim], 1, 0)
+        self.o_proj = nn.Linear(n_heads * head_dim, dim, bias=attention_bias)
+
+        self.rope = initialize_rope(args)
+
         self.layer_idx = layer_idx
         self.offset = offset
 
@@ -25,7 +111,7 @@ class MyAttention(Attention):
         cache: AttentionData,
     ) -> mx.array:
         L, D = x.shape
-        queries, keys, values = self.q_proj(x), self.k_proj(x), self.v_proj(x)
+        queries, keys, values = self.qkv_proj(x)
 
         # Prepare the queries, keys and values for the attention computation
         queries = queries.reshape(L, self.n_heads, -1).transpose(1, 0, 2)
@@ -50,6 +136,25 @@ class MyAttention(Attention):
         output = output.transpose(1, 0, 2).reshape(L, -1)
 
         return self.o_proj(output)
+
+
+class MLP(nn.Module):
+    def __init__(self, args: ModelArgs):
+        super().__init__()
+
+        dim = args.hidden_size
+        hidden_dim = args.intermediate_size
+        if hasattr(args, "mlp_bias"):
+            mlp_bias = args.mlp_bias
+        else:
+            mlp_bias = False
+
+        self.down_proj = nn.Linear(hidden_dim, dim, bias=mlp_bias)
+        self.gate_up_proj = MergeParallelLayer(dim, hidden_dim, 2, 1, 0)
+
+    def __call__(self, x) -> mx.array:
+        gate_out, up_out = self.gate_up_proj(x)
+        return self.down_proj(nn.silu(gate_out) * up_out)
 
 
 class MyTransformerBlock(TransformerBlock):

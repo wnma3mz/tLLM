@@ -33,12 +33,16 @@ async def main():
 
     messages_list = [messages1, messages2, messages3]
     print("异步并发请求结果")
+    s1 = time.time()
     await asyncio.gather(*[requests_func(messages) for messages in messages_list])
+    print(f"time cost: {time.time() - s1:.4f} s")
 
     print("单独请求结果")
+    s1 = time.time()
     await requests_func(messages3)
     await requests_func(messages1)
     await requests_func(messages2)
+    print(f"time cost: {time.time() - s1:.4f} s")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,7 @@
+import glob
 import math
+import os
+import re
 from typing import *
 
 import mlx.core as mx
@@ -98,6 +101,63 @@ class MyMLXLlamaModel(nn.Module):
     @property
     def dtype(self):
         return next(self.parameters()).dtype
+
+    def read_weight_from_model_path(self, model_path: str) -> Dict[str, mx.array]:
+        attn_layer_idx_pattern = re.compile(r"model\.layers\.(\d+)\.self_attn")
+        mlp_layer_idx_pattern = re.compile(r"model\.layers\.(\d+)\.mlp")
+        qkv_proj_list = ["q_proj", "k_proj", "v_proj"]
+        gate_up_list = ["gate_proj", "up_proj"]
+        weight_files = glob.glob(os.path.join(model_path, "model*.safetensors"))
+
+        weights = {}
+        for wf in weight_files:
+            weights.update(mx.load(wf))
+        prefix_key_list = ["model.embed_tokens.", "model.norm.", "lm_head."]
+        key_list = list(weights.keys())
+        for key in key_list:
+            for prefix_key in prefix_key_list:
+                if key.startswith(prefix_key):
+                    weights.pop(key)
+
+        key_list = list(weights.keys())
+
+        attn_proj_w = {}  # layer_idx -> {qkv: weight}
+        mlp_w = {}
+        for key in key_list:
+            attn_res = attn_layer_idx_pattern.findall(key)
+            mlp_res = mlp_layer_idx_pattern.findall(key)
+            if attn_res:
+                layer_idx = int(attn_res[0])
+                if layer_idx not in attn_proj_w:
+                    attn_proj_w[layer_idx] = {}
+            elif mlp_res:
+                layer_idx = int(mlp_res[0])
+                if layer_idx not in mlp_w:
+                    mlp_w[layer_idx] = {}
+            else:
+                continue
+
+            for qkv in qkv_proj_list:
+                if qkv in key:
+                    attn_proj_w[layer_idx].update({qkv: weights.pop(key)})
+            for mlp in gate_up_list:
+                if mlp in key:
+                    mlp_w[layer_idx].update({mlp: weights.pop(key)})
+
+            layer_weights = attn_proj_w.get(layer_idx, [])
+            if len(layer_weights) == 3:
+                name = f"model.layers.{layer_idx}.self_attn.qkv_proj.layer.weight"
+                weights[name] = mx.concatenate([layer_weights[qkv] for qkv in qkv_proj_list], axis=0)
+                attn_proj_w.pop(layer_idx)
+
+            layer_weights = mlp_w.get(layer_idx, [])
+            if len(layer_weights) == 2:
+                name = f"model.layers.{layer_idx}.mlp.gate_up_proj.layer.weight"
+                weights[name] = mx.concatenate([layer_weights[mlp] for mlp in gate_up_list], axis=0)
+                mlp_w.pop(layer_idx)
+
+        # TODO: support bias and TP
+        return weights
 
 
 class MyMLXLlamaForCausalLM(nn.Module):

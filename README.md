@@ -46,8 +46,6 @@ python benchmarks/run_async_requests.py
 
 使用 torch.dist 实现 张量并行，使用 rpc 实现流水并行，仅通信 hidden_states
 
-RoadMap
-
 - [ ] Speed Up
     - [x] Merge Linear
     - [x] Pipeline Parallel by grpc

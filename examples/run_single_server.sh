@@ -17,7 +17,7 @@ else
 fi
 CONFIG_PATH=./examples/config.json
 
-MODEL_PATH=/Users/jianghulu/.cache/huggingface/hub/models--mlx-community--Llama-3.2-3B-Instruct-bf16/snapshots/6d88ba43024fef71b10e52e101c7cd4598322601
+# MODEL_PATH=/Users/jianghulu/.cache/huggingface/hub/models--mlx-community--Llama-3.2-3B-Instruct-bf16/snapshots/6d88ba43024fef71b10e52e101c7cd4598322601
 # MODEL_PATH=/Users/jianghulu/.cache/huggingface/hub/models--mlx-community--Llama-3.2-1B-Instruct-8bit/snapshots/d48cdf0a4ea22d893b7c63a99d6a693e24822795
 export PYTHONPATH="./":$PYTHONPATH;
 export OMP_NUM_THREADS=8;

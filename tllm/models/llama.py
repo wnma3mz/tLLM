@@ -1,3 +1,4 @@
+import re
 from typing import *
 
 import numpy as np
@@ -41,13 +42,9 @@ class Decoder(nn.Module):
     def __init__(self, config, start_layer_idx: int, end_layer_idx: int):
         super().__init__()
         config.offset = start_layer_idx
-        self.decoder = nn.ModuleList(
+        self.layers = nn.ModuleList(
             [MyLlamaDecoderLayer(config, layer_idx) for layer_idx in range(start_layer_idx, end_layer_idx)]
         )
-
-    def load_state_dict(self, state_dict: Dict) -> None:
-        for layer in self.decoder:
-            layer.load_state_dict(state_dict)
 
     def forward(
         self,
@@ -55,7 +52,7 @@ class Decoder(nn.Module):
         position_embeddings: Tuple[torch.Tensor, torch.Tensor],
         attention_data: AttentionData,
     ) -> torch.Tensor:
-        for layer in self.decoder:
+        for layer in self.layers:
             hidden_states = layer(hidden_states, position_embeddings=position_embeddings, attention_data=attention_data)
         return hidden_states
 
@@ -67,12 +64,73 @@ class MyLlamaModel(nn.Module):
         self.vocab_size = config.vocab_size
         self.cache_manager = CacheManager()
         self.config = config
-        self.decoder = Decoder(config, config.decoder_start_layer_idx, config.decoder_end_layer_idx)
+        self.model = Decoder(config, config.decoder_start_layer_idx, config.decoder_end_layer_idx)
         self.num_decoder_layers = config.decoder_end_layer_idx - config.decoder_start_layer_idx
         self.rotary_emb = LlamaRotaryEmbedding(config=config)
 
-    def load_state_dict(self, state_dict: Dict) -> None:
-        self.decoder.load_state_dict(state_dict)
+    def read_weight_from_model_path(self, weights: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        # TODO: support bias and TP
+
+        attn_layer_idx_pattern = re.compile(r"model\.layers\.(\d+)\.self_attn")
+        mlp_layer_idx_pattern = re.compile(r"model\.layers\.(\d+)\.mlp")
+        layer_name_mapper = {
+            "self_attn.o_proj": "self_attn.o_proj.layer",
+            "mlp.down_proj": "mlp.down_proj.layer",
+        }
+        qkv_proj_list = ["q_proj", "k_proj", "v_proj"]
+        gate_up_list = ["gate_proj", "up_proj"]
+
+        prefix_key_list = ["model.embed_tokens.", "model.norm.", "lm_head."]
+        key_list = list(weights.keys())
+        for key in key_list:
+            for prefix_key in prefix_key_list:
+                if key.startswith(prefix_key):
+                    weights.pop(key)
+
+        key_list = list(weights.keys())
+
+        attn_proj_w = {}  # layer_idx -> {qkv: weight}
+        mlp_w = {}
+        for key in key_list:
+            for s_key, t_key in layer_name_mapper.items():
+                if s_key in key:
+                    # w_list = w.chunk(self.world_size, dim=1)[self.rank]
+                    weights[key.replace(s_key, t_key)] = weights.pop(key)
+            attn_res = attn_layer_idx_pattern.findall(key)
+            mlp_res = mlp_layer_idx_pattern.findall(key)
+            if attn_res:
+                layer_idx = int(attn_res[0])
+                if layer_idx not in attn_proj_w:
+                    attn_proj_w[layer_idx] = {}
+            elif mlp_res:
+                layer_idx = int(mlp_res[0])
+                if layer_idx not in mlp_w:
+                    mlp_w[layer_idx] = {}
+            else:
+                continue
+
+            for qkv in qkv_proj_list:
+                if qkv in key:
+                    attn_proj_w[layer_idx].update({qkv: weights.pop(key)})
+            for mlp in gate_up_list:
+                if mlp in key:
+                    mlp_w[layer_idx].update({mlp: weights.pop(key)})
+
+            layer_weights = attn_proj_w.get(layer_idx, [])
+            if len(layer_weights) == 3:
+                name = f"model.layers.{layer_idx}.self_attn.qkv_proj.layer.weight"
+                # torch.chunk(layer_weights[qkv], self.world_size, dim=0)
+                weights[name] = torch.cat([layer_weights[qkv] for qkv in qkv_proj_list], dim=0)
+                attn_proj_w.pop(layer_idx)
+
+            layer_weights = mlp_w.get(layer_idx, [])
+            if len(layer_weights) == 2:
+                name = f"model.layers.{layer_idx}.mlp.gate_up_proj.layer.weight"
+                # torch.chunk(layer_weights[mlp], self.world_size, dim=0)
+                weights[name] = torch.cat([layer_weights[mlp] for mlp in gate_up_list], dim=0)
+                mlp_w.pop(layer_idx)
+
+        return weights
 
     @torch.no_grad()
     def forward(self, hidden_states: torch.Tensor, seq_input: SeqInput) -> torch.Tensor:
@@ -88,7 +146,7 @@ class MyLlamaModel(nn.Module):
         attention_data = build_forward_cache(seq_input, self.cache_manager, self.num_decoder_layers)
         hidden_states = hidden_states.to(self.device)
         position_embeddings = self.rotary_emb(hidden_states, attention_data.position_ids.to(self.device))
-        hidden_states = self.decoder(
+        hidden_states = self.model(
             hidden_states, position_embeddings=position_embeddings, attention_data=attention_data
         )
 
@@ -136,14 +194,14 @@ class MyLlamaForCausalLM(nn.Module):
         cls.logger.debug(f"eos_token_ids: {cls.eos_token_ids}; Tokens: {eos_token}")
 
         state_dict = load_master_weight(model_path)
-        embedding_weight = state_dict.pop("model.embed_tokens.weight")
-        model.embed_tokens.load_state_dict({"weight": embedding_weight})
-        model.norm.load_state_dict({"weight": state_dict.pop("model.norm.weight")})
-        if "lm_head.weight" in state_dict:
-            model.lm_head.load_state_dict({"weight": state_dict.pop("lm_head.weight")})
-        else:
-            model.lm_head.load_state_dict({"weight": model.embed_tokens.weight})
+        state_dict = {k.split("model.")[-1]: v for k, v in state_dict.items()}
+        has_key_list = list(state_dict.keys())
+        if "lm_head.weight" not in state_dict:
+            for key in has_key_list:
+                if key.startswith("embed_tokens."):
+                    state_dict[key.replace("embed_tokens.", "lm_head.")] = state_dict[key]
 
+        model.load_state_dict(state_dict)
         model.eval()
         return model
 

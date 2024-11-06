@@ -11,7 +11,7 @@ from transformers import AutoConfig
 import websockets
 
 from tllm.commons.communicator import SingleNodeCommunicator
-from tllm.models.register import HAS_MLX, MODEL_REGISTER, load_weight
+from tllm.models.register import HAS_MLX, MODEL_REGISTER
 
 
 def get_unregistered_layer_idx(server_url: str) -> Tuple[int, int]:
@@ -58,9 +58,8 @@ class ModelClient:
             import mlx.core as mx
             import mlx.nn as nn
 
-            weights = load_weight(model_path)
-
             model = MY_MODEL_CLASS(config)
+            weights = model.read_weight_from_model_path(model_path)
             if getattr(config, "quantization", None) is not None:
                 # Handle legacy models which may not have everything quantized
                 def class_predicate(p, m):
@@ -73,13 +72,14 @@ class ModelClient:
                     **config.quantization,
                     class_predicate=class_predicate,
                 )
-            model.load_weights(list(weights.items()), strict=False)
+            model.load_weights(list(weights.items()))
             mx.eval(model.parameters())
         else:
             state_dict = HF_CausalLM_CLASS.from_pretrained(
                 model_path, trust_remote_code=True, device_map="cpu", torch_dtype=dtype, low_cpu_mem_usage=True
             ).state_dict()
             model = MY_MODEL_CLASS(config).to(dtype)
+            state_dict = model.read_weight_from_model_path(state_dict)
             model.load_state_dict(state_dict)
             del state_dict
 
