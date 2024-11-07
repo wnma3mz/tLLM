@@ -71,17 +71,13 @@ class LLMGenerator:
         forward_result = self.forward(input_embeds, seq_input)
         self.logger.debug(f"decoder cost time: {time.perf_counter() - s0:.4f}s")
         s1 = time.perf_counter()
-        logits: Union[torch.Tensor, "mx.array"] = self.model.get_logits(forward_result.hidden_states, seq_len_list)
+        seq_logits_list: List[Union[torch.Tensor, "mx.array"]] = self.model.get_logits(
+            forward_result.hidden_states, seq_len_list
+        )
         self.logger.debug(f"get_logits cost time: {time.perf_counter() - s1:.4f}s")
 
         s1 = time.perf_counter()
         # 根据 seq 拆开，之后直接在 sampler 中处理
-        # [seq_len1 + seq_len2 + ...,  hidden_size] -> [[seq_len1 x hidden_size], [seq_len2 x hidden_size], ...]
-        if HAS_MLX:
-            # index_list = itertools.accumulate([1] * (len(sequence_request_list) -1))
-            seq_logits_list = mx.split(logits, 1, axis=0)
-        else:
-            seq_logits_list = torch.split(logits, [1] * len(sequence_request_list), dim=0)
         for seq_logits, sequence_request in zip(seq_logits_list, sequence_request_list):
             generate_ids = sequence_request.sampler.sampling(seq_logits, sequence_request.sampling_params)
             generate_texts = sequence_request.sampler.decode(generate_ids)

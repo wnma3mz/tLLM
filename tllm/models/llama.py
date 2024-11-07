@@ -235,12 +235,12 @@ class MyLlamaForCausalLM(nn.Module):
         return self.embed_tokens(torch.tensor(x))
 
     @torch.no_grad()
-    def get_logits(self, hidden_states: torch.Tensor, seq_len_list: List[int]) -> torch.Tensor:
+    def get_logits(self, hidden_states: torch.Tensor, seq_len_list: List[int]) -> List[torch.Tensor]:
         # 只取最后一个 token 的 hidden_states
         seq_hidden_states = torch.split(hidden_states, [seq_len for seq_len in seq_len_list], dim=0)
         hidden_states = torch.cat([x[-1:, :] for x in seq_hidden_states], dim=0)
         hidden_states = hidden_states.to(self.dtype).to(self.norm.weight.device)
-        # bsz x seq_len x hidden_size
+        # seq_len x hidden_size
         logits = self.lm_head(self.norm(hidden_states))
-        # bsz: 1; seq_len: seq_len1 + seq_len2
-        return logits
+        # seq_len -> seq_len1 + seq_len2
+        return torch.split(logits, 1, dim=0)
