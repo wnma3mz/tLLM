@@ -129,6 +129,7 @@ class OpenAIServing:
                     # Abort the request if the client disconnects.
                     await self.engine.abort(request_id)
                     create_error_response("Client disconnected")
+                await asyncio.sleep(0.01)
                 final_res: RequestOutput = res
         except asyncio.CancelledError:
             await self.engine.abort(request_id)

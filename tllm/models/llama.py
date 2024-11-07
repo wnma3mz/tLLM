@@ -22,11 +22,11 @@ def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_la
             # 当 q_len 为 1 时，直接使用 kv_cache，使用历史的全部 token kv cache
             # TODO: 当 q_len > 1 时，表示只需要使用前 q_len 的 kv_cache，后面的 kv_cache 需要重新计算
             layer_cache_list, cache_seq_len = cache_manager.get(uuid)
-            position_ids = torch.tensor([cache_seq_len], dtype=torch.long).unsqueeze(0)
+            position_ids = torch.tensor([cache_seq_len], dtype=torch.long)
             actual_seq_len_list.append([q_len, cache_seq_len + q_len])  # q_len 是需要新计算 kv_cache 的长度
         else:
             layer_cache_list = None
-            position_ids = torch.arange(q_len, dtype=torch.long).unsqueeze(0)
+            position_ids = torch.arange(q_len, dtype=torch.long)
             actual_seq_len_list.append([q_len, q_len])
         request_cache.add(uuid, q_len, layer_cache_list)
         position_ids_list.append(position_ids)
@@ -57,6 +57,31 @@ class Decoder(nn.Module):
         return hidden_states
 
 
+class MyLlamaRotaryEmbedding(LlamaRotaryEmbedding):
+    @torch.no_grad()
+    def forward(self, x, position_ids):
+        if "dynamic" in self.rope_type:
+            self._dynamic_frequency_update(position_ids, device=x.device)
+
+        # Core RoPE block
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(1, -1, 1)[0]
+        position_ids_expanded = position_ids[None, :].float()
+        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
+        device_type = x.device.type
+        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(0, 1)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos()
+            sin = emb.sin()
+
+        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
+        cos = cos * self.attention_scaling
+        sin = sin * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
 class MyLlamaModel(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -66,7 +91,7 @@ class MyLlamaModel(nn.Module):
         self.config = config
         self.model = Decoder(config, config.decoder_start_layer_idx, config.decoder_end_layer_idx)
         self.num_decoder_layers = config.decoder_end_layer_idx - config.decoder_start_layer_idx
-        self.rotary_emb = LlamaRotaryEmbedding(config=config)
+        self.rotary_emb = MyLlamaRotaryEmbedding(config=config)
 
     def read_weight_from_model_path(self, weights: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         # TODO: support bias and TP

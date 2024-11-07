@@ -79,12 +79,12 @@ class RequestsCache:
         return [self.get_cache_seq_len(uuid, layer_idx) for uuid in uuid_list]
 
     def update(
-        self, key_states: Union[torch.Tensor, List["mx.array"]], value_states: MIX_TENSOR, **cache_kwargs
+        self,
+        key_states: Union[torch.Tensor, List["mx.array"]],
+        value_states: MIX_TENSOR,
+        uuid_list: List[str],
+        layer_idx: int,
     ) -> KV_CACHE_TYPE:
-        assert "uuid_list" in cache_kwargs
-        assert "layer_idx" in cache_kwargs
-        uuid_list = cache_kwargs.get("uuid_list", None)
-        layer_idx = cache_kwargs.get("layer_idx", 0)
         if HAS_MLX:
             seq_key_states = key_states  # 已经在外部 split 过了
             seq_value_states = split_func(value_states, self.get_index_list(uuid_list))

@@ -3,9 +3,21 @@ from typing import *
 import torch
 import torch.nn as nn
 from transformers.activations import ACT2FN
-from transformers.models.llama.modeling_llama import LlamaConfig, LlamaRMSNorm, apply_rotary_pos_emb, repeat_kv
+from transformers.models.llama.modeling_llama import LlamaConfig, LlamaRMSNorm, apply_rotary_pos_emb
 
 from tllm.models.cache import AttentionData, RequestsCache
+
+
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, None, :, :].expand(num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(num_key_value_heads * n_rep, slen, head_dim)
 
 
 class BaseParallelLayer(nn.Module):
@@ -76,7 +88,7 @@ class MyLlamaMLP(nn.Module):
         self.down_proj = RowParallelLayer(self.intermediate_size, self.hidden_size, self.world_size, self.rank)
 
     def forward(self, x):
-        # x: [batch_size, seq_len, hidden_size]
+        # x: [seq_len, hidden_size]
         gate_out, up_out = self.gate_up_proj(x)
         intermediate_states = self.act_fn(gate_out) * up_out
         return self.comm.all_reduce(self.down_proj(intermediate_states))
@@ -126,23 +138,24 @@ class MyLlamaSdpaAttention(nn.Module):
         position_embeddings: Tuple[torch.Tensor, torch.Tensor],
         attention_data: AttentionData,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        # [seq_len, hidden_size] -> [1, seq_len, hidden_size]
-        hidden_states = hidden_states.unsqueeze(0)
-        bsz, q_len, _ = hidden_states.size()
+        # [seq_len, hidden_size]
+        q_len, _ = hidden_states.size()
 
         query_states, key_states, value_states = self.qkv_proj(hidden_states)
 
-        query_states = query_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(q_len, -1, self.head_dim).transpose(0, 1)
+        key_states = key_states.view(q_len, -1, self.head_dim).transpose(0, 1)
+        value_states = value_states.view(q_len, -1, self.head_dim).transpose(0, 1)
 
         cos, sin = position_embeddings
-
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, attention_data.position_ids)
-
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin, attention_data.position_ids, unsqueeze_dim=0
+        )
         request_cache: RequestsCache = attention_data.request_cache
-        cache_kwargs = {"uuid_list": attention_data.uuid_list, "layer_idx": self.layer_idx - self.config.offset}
-        key_states, value_states = request_cache.update(key_states, value_states, **cache_kwargs)
+        # cache_kwargs = {"uuid_list": attention_data.uuid_list, "layer_idx": self.layer_idx - self.config.offset}
+        key_states, value_states = request_cache.update(
+            key_states, value_states, attention_data.uuid_list, self.layer_idx - self.config.offset
+        )
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -151,12 +164,11 @@ class MyLlamaSdpaAttention(nn.Module):
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states, key_states, value_states, attn_mask=attention_data.attn_mask
         )
+        attn_output = attn_output.transpose(0, 1).contiguous()
+        attn_output = attn_output.reshape(q_len, -1)
 
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(bsz, q_len, -1)
-
-        # [1, seq_len, hidden_size] -> [seq_len, hidden_size]
-        attn_output = self.comm.all_reduce(self.o_proj(attn_output))[0]
+        attn_output = self.comm.all_reduce(self.o_proj(attn_output))
+        # print("o_proj forward", time.time() - s1)
         return attn_output, None
 
 

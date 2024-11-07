@@ -123,8 +123,7 @@ class MyAttention(nn.Module):
         queries = cat_func(self._rope(queries, request_cache, cache.uuid_list))
         keys = self._rope(keys, request_cache, cache.uuid_list)
 
-        cache_kwargs = {"uuid_list": cache.uuid_list, "layer_idx": self.layer_idx - self.offset}
-        keys, values = request_cache.update(keys, values, **cache_kwargs)
+        keys, values = request_cache.update(keys, values, cache.uuid_list, self.layer_idx - self.offset)
 
         output = mx.fast.scaled_dot_product_attention(
             mx.expand_dims(queries, axis=0),

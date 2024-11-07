@@ -66,7 +66,7 @@ class AsyncEngine:
         self.decoding_queue: asyncio.Queue = asyncio.Queue()
         self.processing_task = None
         self.limit_size: int = 5  # 每次最多处理 5 个请求，prefill + decode
-        self.sleep_time: float = 0.001
+        self.sleep_time: float = 0
         self.logger = logger
         self.abort_queue: asyncio.Queue = asyncio.Queue()
 
@@ -119,7 +119,7 @@ class AsyncEngine:
                     async with sequence_data.condition:
                         sequence_data.condition.notify()
 
-                # await asyncio.sleep(0.01)
+                # await asyncio.sleep(self.sleep_time)
             except Exception as e:
                 self.logger.error(f"Error processing prefill_queue data: {str(e)}")
                 traceback.print_exc()
@@ -145,6 +145,7 @@ class AsyncEngine:
                     )
                 except:
                     pass
+                yield data.to_request_output()  # Need it?
         except asyncio.CancelledError:
             self.logger.debug(f"CancelledError: {data.request_id}")
             raise asyncio.CancelledError("CancelledError")
