@@ -122,6 +122,7 @@ def init_engine(args) -> Tuple[AsyncEngine, TokenizerUtils]:
     url_list = parse_url_list(args.config_path)
     tok = TokenizerUtils(args.model_path)
     model = MY_CausalLM_CLASS.from_pretrained(logger, config, tok, args.model_path)
+    model.eval()
     if args.is_local:
         generator = LLMGenerator(LocalRPCManager(logger, args, config), logger, model)
     else:

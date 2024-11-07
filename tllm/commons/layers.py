@@ -87,11 +87,11 @@ class MyLlamaMLP(nn.Module):
         self.gate_up_proj = MergeParallelLayer(self.hidden_size, self.intermediate_size, 2, self.world_size, self.rank)
         self.down_proj = RowParallelLayer(self.intermediate_size, self.hidden_size, self.world_size, self.rank)
 
+    @torch.no_grad()
     def forward(self, x):
         # x: [seq_len, hidden_size]
         gate_out, up_out = self.gate_up_proj(x)
-        intermediate_states = self.act_fn(gate_out) * up_out
-        return self.comm.all_reduce(self.down_proj(intermediate_states))
+        return self.comm.all_reduce(self.down_proj(self.act_fn(gate_out) * up_out))
 
 
 class MyLlamaSdpaAttention(nn.Module):
@@ -132,6 +132,7 @@ class MyLlamaSdpaAttention(nn.Module):
         )
         self.o_proj = RowParallelLayer(self.num_heads * self.head_dim, self.hidden_size, self.world_size, self.rank)
 
+    @torch.no_grad()
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -152,7 +153,6 @@ class MyLlamaSdpaAttention(nn.Module):
             query_states, key_states, cos, sin, attention_data.position_ids, unsqueeze_dim=0
         )
         request_cache: RequestsCache = attention_data.request_cache
-        # cache_kwargs = {"uuid_list": attention_data.uuid_list, "layer_idx": self.layer_idx - self.config.offset}
         key_states, value_states = request_cache.update(
             key_states, value_states, attention_data.uuid_list, self.layer_idx - self.config.offset
         )
@@ -168,7 +168,6 @@ class MyLlamaSdpaAttention(nn.Module):
         attn_output = attn_output.reshape(q_len, -1)
 
         attn_output = self.comm.all_reduce(self.o_proj(attn_output))
-        # print("o_proj forward", time.time() - s1)
         return attn_output, None
 
 
@@ -185,6 +184,7 @@ class MyLlamaDecoderLayer(nn.Module):
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @torch.no_grad()
     def forward(
         self,
         hidden_states: torch.Tensor,

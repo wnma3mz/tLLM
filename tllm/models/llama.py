@@ -46,6 +46,7 @@ class Decoder(nn.Module):
             [MyLlamaDecoderLayer(config, layer_idx) for layer_idx in range(start_layer_idx, end_layer_idx)]
         )
 
+    @torch.no_grad()
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -243,4 +244,4 @@ class MyLlamaForCausalLM(nn.Module):
         # seq_len x hidden_size
         logits = self.lm_head(self.norm(hidden_states))
         # seq_len -> seq_len1 + seq_len2
-        return torch.split(logits, 1, dim=0)
+        return torch.chunk(logits, len(seq_len_list), dim=0)
