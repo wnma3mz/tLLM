@@ -218,7 +218,7 @@ class MyMLXLlamaForCausalLM(nn.Module):
     def get_input_embeddings(self, x: np.ndarray) -> mx.array:
         return self.embed_tokens(mx.array(x))
 
-    def get_logits(self, hidden_states: mx.array, seq_len_list: List[int]) -> torch.Tensor:
+    def get_logits(self, hidden_states: mx.array, seq_len_list: List[int]) -> mx.array:
         # 只取最后一个 token 的 hidden_states
         index_list = []
         index_list, idx = [], 0
@@ -228,5 +228,5 @@ class MyMLXLlamaForCausalLM(nn.Module):
         # seq_len x hidden_size
         seq_hidden_states = mx.split(hidden_states, index_list, axis=0)
         hidden_states = mx.concat([x[-1:, :] for x in seq_hidden_states], axis=0).astype(self.dtype)
-        logits = torch.tensor(self.lm_head(self.norm(hidden_states)).tolist())
+        logits = self.lm_head(self.norm(hidden_states))
         return logits

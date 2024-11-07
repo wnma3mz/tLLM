@@ -1,13 +1,17 @@
+import itertools
 import time
-from typing import AsyncGenerator, List
+from typing import AsyncGenerator, List, Union
 
 import numpy as np
 import torch
 
+from tllm import HAS_MLX
 from tllm.models.protocol import ForwardResult, SeqInput, SequenceRequestData
-from tllm.models.register import HAS_MLX
 from tllm.models.utils import is_generate_end
 from tllm.rpc.manager import RPCManager
+
+if HAS_MLX:
+    import mlx.core as mx
 
 
 class LLMGenerator:
@@ -52,11 +56,9 @@ class LLMGenerator:
             if sequence_request.is_prefill:
                 if sequence_request.history_request_id:
                     uuid_list[-1] = sequence_request.history_request_id
-                # input_ids_list.append(np.array(sequence_request.input_ids).reshape(1, -1))
                 input_ids_list.append(np.array(sequence_request.input_ids))
                 seq_len_list.append(sequence_request.q_len)
             else:
-                # input_ids_list.append(np.array(sequence_request.output_ids[-1]).reshape(1, -1))
                 input_ids_list.append(np.array([sequence_request.output_ids[-1]]))
                 seq_len_list.append(1)
 
@@ -69,13 +71,17 @@ class LLMGenerator:
         forward_result = self.forward(input_embeds, seq_input)
         self.logger.debug(f"decoder cost time: {time.perf_counter() - s0:.4f}s")
         s1 = time.perf_counter()
-        logits = self.model.get_logits(forward_result.hidden_states, seq_len_list)
+        logits: Union[torch.Tensor, "mx.array"] = self.model.get_logits(forward_result.hidden_states, seq_len_list)
         self.logger.debug(f"get_logits cost time: {time.perf_counter() - s1:.4f}s")
 
         s1 = time.perf_counter()
         # 根据 seq 拆开，之后直接在 sampler 中处理
         # [seq_len1 + seq_len2 + ...,  hidden_size] -> [[seq_len1 x hidden_size], [seq_len2 x hidden_size], ...]
-        seq_logits_list = torch.split(logits, [1] * len(sequence_request_list), dim=0)
+        if HAS_MLX:
+            # index_list = itertools.accumulate([1] * (len(sequence_request_list) -1))
+            seq_logits_list = mx.split(logits, 1, axis=0)
+        else:
+            seq_logits_list = torch.split(logits, [1] * len(sequence_request_list), dim=0)
         for seq_logits, sequence_request in zip(seq_logits_list, sequence_request_list):
             generate_ids = sequence_request.sampler.sampling(seq_logits, sequence_request.sampling_params)
             generate_texts = sequence_request.sampler.decode(generate_ids)

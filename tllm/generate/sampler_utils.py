@@ -3,8 +3,12 @@ from typing import *
 import torch
 import torch.nn.functional as F
 
+from tllm import HAS_MLX
 from tllm.generate.sampling_params import SamplingParams
 from tllm.generate.token_utils import TokenizerUtils
+
+if HAS_MLX:
+    import mlx.core as mx
 
 
 def top_k_sampling(logits: torch.Tensor, k: int = 10) -> torch.Tensor:
@@ -51,9 +55,12 @@ class SamplerUtils:
         elif self.method == "sampling":
             return self.sampling_decode(logits, sampling_params)
 
-    def greedy_decode(self, logits: torch.Tensor) -> List[int]:
+    def greedy_decode(self, logits: Union[torch.Tensor, "mx.array"]) -> List[int]:
         # logits shape: [seq_len, vocab_size]
-        return torch.argmax(logits, dim=-1).tolist()
+        if HAS_MLX:
+            return mx.argmax(logits, axis=-1).tolist()
+        else:
+            return torch.argmax(logits, dim=-1).tolist()
 
     def sampling_decode(self, logits: torch.Tensor, sampling_params: SamplingParams) -> List[int]:
         generate_logits = logits[:, -1]
