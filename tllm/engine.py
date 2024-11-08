@@ -7,18 +7,47 @@ from tllm.generate.llm_generator import LLMGenerator
 from tllm.generate.token_utils import TokenizerUtils
 from tllm.models.protocol import SequenceRequestData
 
-conversations_dict = {}  # List[int] -> Tuple[str, int], TODO LRU 缓存
+conversations_dict = {}  # List[int] -> str, TODO LRU 缓存
+
+
+class Node:
+    def __init__(self):
+        self.children = {}  # int -> Node
+        self.is_end_of_word = False  # 是否是单词的结束
+        self.path = None
+
+
+class RadixTree:
+    def __init__(self):
+        self.root = Node()  # 根节点
+
+    def insert(self, input_ids: List[int]):
+        node = self.root
+        path = []
+        for id_ in input_ids:
+            if id_ not in node.children:
+                node.children[id_] = Node()
+            node = node.children[id_]
+            path.append(id_)
+            node.path = path[:]
+        node.is_end_of_word = True
+
+    def longest_common_prefix(self, input_ids: List[int]) -> List[int]:
+        node = self.root
+        longest = []
+        for id_ in input_ids:
+            if id_ not in node.children:
+                return longest
+            node = node.children[id_]
+            if node.path is not None and len(node.path) > len(longest):
+                longest = node.path[:]
+        return longest
 
 
 def post_process(data: SequenceRequestData):
-    # TODO
     # 保存输入 + 输出
-    # token_ids = data.input_ids + data.output_ids
-    # conversations_dict[token_ids] = (data.history_request_id, len(token_ids)) if data.history_request_id else (data.request_id, len(token_ids))
-
-    # 保存输入
-    # token_ids = data.input_ids
-    # conversations_dict[token_ids] = (data.history_request_id, len(token_ids)) if data.history_request_id else (data.request_id, len(token_ids))
+    token_ids = data.input_ids + data.output_ids
+    conversations_dict[token_ids] = data.history_request_id if data.history_request_id else data.request_id
     return
 
 
@@ -40,22 +69,17 @@ class MessageProcessor:
     def preprocess(self, messages: List[Dict[str, str]]) -> List[int]:
         return self.tok.preprocess(messages=messages).input_ids
 
-    def fetch_request_id(self, messages: List[Dict[str, str]]) -> Tuple[Optional[str], int]:
-        # TODO
-        # 根据 message 找到历史生成 request_id
-        # 每轮对话以此向上查找
-        # while messages:
-        #     # QAQ 是否生成过
-        #     input_ids = self.tok.preprocess(messages=messages).input_ids
-        #     if input_ids in self.conversations_dict:
-        #         return self.conversations_dict[input_ids]
-        #     if len(messages) < 0:
-        #         break
-        #     # QA 是否生成过
-        #     messages.pop()  # 去掉最新的Q
-        #     input_ids = self.tok.preprocess(messages=messages, add_generation_prompt=False).input_ids
-        #     if input_ids in self.conversations_dict:
-        #         return self.conversations_dict[input_ids]
+    def fetch_request_id(self, input_ids: List[int]) -> Tuple[Optional[str], int]:
+        # max_index, max_id = -1, -1
+        # for cache_input_ids, id_ in conversations_dict.items():
+        #     index = list_common_prefix(input_ids, cache_input_ids)
+        #     if index > max_index:
+        #         max_id = id_
+        #         max_index = index
+
+        # if max_index == 0 or max_id == -1:
+        #     return None, -1
+        # return max_id, max_index
         return None, -1
 
 

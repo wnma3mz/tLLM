@@ -54,7 +54,7 @@ class OpenAIServing:
         request_id = f"chat-{random_uuid()}"
         messages = self.message_processor.parse_message(request.messages)
         input_ids = self.message_processor.preprocess(messages)
-        history_request_id, q_len = self.message_processor.fetch_request_id(messages)
+        history_request_id, q_len = self.message_processor.fetch_request_id(input_ids)
 
         if request.temperature == 0.0:
             method = "greedy"
