@@ -60,13 +60,18 @@ def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_la
     )
 
 
+def empty_func(h, mask, cache):
+    # TODO
+    return h
+
+
 class Decoder(nn.Module):
     def __init__(self, args: ModelArgs, start_layer_idx: int, end_layer_idx: int):
         super().__init__()
         self.args = args
         self.vocab_size = args.vocab_size
         self.num_hidden_layers = args.num_hidden_layers
-        self.layers = [
+        self.layers = [empty_func] * start_layer_idx + [
             MyTransformerBlock(args=args, layer_idx=layer_idx, offset=start_layer_idx)
             for layer_idx in range(start_layer_idx, end_layer_idx)
         ]
@@ -84,6 +89,7 @@ class MyMLXLlamaModel(nn.Module):
         self.vocab_size = args.vocab_size
         self.cache_manager = CacheManager()
         self.args = args
+        self.config = config
         self.model = Decoder(args, config.decoder_start_layer_idx, config.decoder_end_layer_idx)
         self.num_layers = config.decoder_end_layer_idx - config.decoder_start_layer_idx
 
@@ -104,6 +110,7 @@ class MyMLXLlamaModel(nn.Module):
         return next(self.parameters()).dtype
 
     def read_weight_from_model_path(self, model_path: str) -> Dict[str, mx.array]:
+        print(f"start_idx: {self.config.decoder_start_layer_idx}, end_idx: {self.config.decoder_end_layer_idx}")
         attn_layer_idx_pattern = re.compile(r"model\.layers\.(\d+)\.self_attn")
         mlp_layer_idx_pattern = re.compile(r"model\.layers\.(\d+)\.mlp")
         qkv_proj_list = ["q_proj", "k_proj", "v_proj"]
@@ -114,6 +121,12 @@ class MyMLXLlamaModel(nn.Module):
         for wf in weight_files:
             weights.update(mx.load(wf))
         prefix_key_list = ["model.embed_tokens.", "model.norm.", "lm_head."]
+
+        prefix_key_list += [
+            f"model.layers.{i}."
+            for i in range(self.config.num_hidden_layers)
+            if not (self.config.decoder_start_layer_idx <= i < self.config.decoder_end_layer_idx)
+        ]
         key_list = list(weights.keys())
         for key in key_list:
             for prefix_key in prefix_key_list:

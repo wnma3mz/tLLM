@@ -73,6 +73,7 @@ class ModelClient:
                     class_predicate=class_predicate,
                 )
             model.load_weights(list(weights.items()))
+            model.set_dtype(mx.bfloat16)
             mx.eval(model.parameters())
         else:
             state_dict = HF_CausalLM_CLASS.from_pretrained(

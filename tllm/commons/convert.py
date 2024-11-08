@@ -103,12 +103,14 @@ def serialize_tensor(tensor: Union[torch.Tensor, "mx.array"]) -> BFloat16Tensor:
         tensor_bytes = tensor.to(torch.float16).detach().numpy().tobytes()
     else:
         tensor_bytes = bytes(tensor.astype(mx.float16))
-    tensor_proto.data = lz4.frame.compress(tensor_bytes) if tensor.shape[1] >= 64 else tensor_bytes
+    flag = tensor.shape[1] >= 64
+    tensor_proto.data = lz4.frame.compress(tensor_bytes) if flag else tensor_bytes
     return tensor_proto
 
 
 def deserialize_tensor(tensor_proto: BFloat16Tensor, to_tensor: bool = False) -> Union[torch.Tensor, "mx.array"]:
-    tensor_bytes = lz4.frame.decompress(tensor_proto.data) if tensor_proto.shape[1] >= 64 else tensor_proto.data
+    flag = tensor_proto.shape[1] >= 64
+    tensor_bytes = lz4.frame.decompress(tensor_proto.data) if flag else tensor_proto.data
     if HAS_MLX and to_tensor == False:
         data = np.frombuffer(tensor_bytes, dtype=np.float16)
         return mx.array(data, dtype=mx.bfloat16).reshape(*tensor_proto.shape)

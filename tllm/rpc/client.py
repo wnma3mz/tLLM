@@ -60,6 +60,7 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
         s1 = time.perf_counter()
         output_hidden_states = self.model(hidden_states, seq_input)
         cost_time = time.perf_counter() - s1
+        print(f"forward cost time: {cost_time:.4f}")
 
         output = serialize_tensor(output_hidden_states)
 

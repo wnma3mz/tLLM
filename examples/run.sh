@@ -17,7 +17,6 @@ else
     exit 1
 fi
 CONFIG_PATH=./examples/config.json
-# CONFIG_PATH=./examples/remote_config.json
 
 export PYTHONPATH="./":$PYTHONPATH;
 export OMP_NUM_THREADS=8;

@@ -1,4 +1,3 @@
-import itertools
 import time
 from typing import AsyncGenerator, List, Union
 
@@ -28,9 +27,11 @@ class LLMGenerator:
             is_first = pp_idx == 0
             is_last = pp_idx == self.pp_size - 1
             s1 = time.perf_counter()
+            self.logger.debug(f"start pp idx: {pp_idx} hidden_states: {hidden_states.shape}")
             hidden_states, pp_cost_time = self.server.forward(
                 pp_idx, hidden_states, seq_input, is_first, is_last, to_tensor=not HAS_MLX
             )
+            self.logger.debug(f"finish pp idx: {pp_idx}")
             comm_cost_time_list.append(time.perf_counter() - s1 - pp_cost_time)
             calc_cost_time_list.append(pp_cost_time)
         return ForwardResult(
