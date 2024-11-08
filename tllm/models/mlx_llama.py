@@ -1,4 +1,5 @@
 import glob
+import itertools
 import math
 import os
 import re
@@ -220,13 +221,9 @@ class MyMLXLlamaForCausalLM(nn.Module):
 
     def get_logits(self, hidden_states: mx.array, seq_len_list: List[int]) -> List[mx.array]:
         # 只取最后一个 token 的 hidden_states
-        index_list = []
-        index_list, idx = [], 0
-        for seq_len in seq_len_list[:-1]:
-            idx += seq_len
-            index_list.append(idx)
-        # seq_len x hidden_size
+        index_list = list(itertools.accumulate(seq_len_list[:-1]))
         seq_hidden_states = mx.split(hidden_states, index_list, axis=0)
         hidden_states = mx.concat([x[-1:, :] for x in seq_hidden_states], axis=0).astype(self.dtype)
         logits = self.lm_head(self.norm(hidden_states))
-        return mx.split(logits, 1, axis=0)
+        ind = list(itertools.accumulate([1] * (len(seq_len_list) - 1)))
+        return mx.split(logits, ind, axis=0)

@@ -74,14 +74,13 @@ class LLMGenerator:
         seq_logits_list: List[Union[torch.Tensor, "mx.array"]] = self.model.get_logits(
             forward_result.hidden_states, seq_len_list
         )
-        self.logger.debug(f"get_logits cost time: {time.perf_counter() - s1:.4f}s")
+        assert len(seq_logits_list) == len(sequence_request_list)
 
         s1 = time.perf_counter()
         # 根据 seq 拆开，之后直接在 sampler 中处理
         for seq_logits, sequence_request in zip(seq_logits_list, sequence_request_list):
             generate_ids = sequence_request.sampler.sampling(seq_logits, sequence_request.sampling_params)
             generate_texts = sequence_request.sampler.decode(generate_ids)
-
             sequence_request.output_ids.append(generate_ids[0])
 
             end = is_generate_end(

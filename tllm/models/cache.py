@@ -48,7 +48,7 @@ class RequestsCache:
 
     def get_index_list(self, uuid_list: List[str]) -> List[int]:
         # 获取每个 uuid 请求的 seq_len，用于 split key_states/value_states。for MLX framework
-        return list(itertools.accumulate(self.get_seq_len_list(uuid_list)[:-1]))[:-1]
+        return list(itertools.accumulate(self.get_seq_len_list(uuid_list)[:-1]))
 
     def add(self, uuid: str, seq_len: int, layer_cache_list: Optional[List[KVCache]] = None):
         # 保存每个 uuid 请求所有层的 cache

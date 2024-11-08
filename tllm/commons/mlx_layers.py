@@ -1,3 +1,4 @@
+import itertools
 from typing import *
 
 import mlx.core as mx
@@ -21,14 +22,11 @@ class MergeParallelLayer(BaseParallelLayer):
         self.row_size, self.col_size = row_size, col_size
         self.dup_layer = dup_layer
         self.layer = nn.Linear(row_size, col_size * self.dup_layer // self.world_size, bias=False)
-
-    @property
-    def index_list(self):
-        return [i * self.col_size // self.world_size for i in range(1, self.dup_layer)]
+        self.ind = [i * col_size // self.world_size for i in range(1, self.dup_layer)]
 
     def __call__(self, x: mx.array) -> List[mx.array]:
         node_output = self.layer(x)
-        return mx.split(node_output, self.index_list, axis=-1)
+        return mx.split(node_output, self.ind, axis=-1)
 
 
 class QKVParallelLayer(BaseParallelLayer):
@@ -42,18 +40,11 @@ class QKVParallelLayer(BaseParallelLayer):
         self.row_size, self.col_size = row_size, col_size
         self.col_size_list = [x // self.world_size for x in col_size_list]
         self.layer = nn.Linear(row_size, col_size // self.world_size, bias=False)
-
-    @property
-    def index_list(self):
-        index_list, idx = [], 0
-        for seq_len in self.col_size_list[:-1]:
-            idx += seq_len
-            index_list.append(idx)
-        return index_list
+        self.ind = list(itertools.accumulate(self.col_size_list[:-1]))
 
     def __call__(self, x: mx.array) -> List[mx.array]:
         node_output = self.layer(x)
-        return mx.split(node_output, self.index_list, axis=-1)
+        return mx.split(node_output, self.ind, axis=-1)
 
 
 class RowParallelLayer(BaseParallelLayer):
@@ -62,11 +53,11 @@ class RowParallelLayer(BaseParallelLayer):
         assert row_size % self.world_size == 0
         self.row_size, self.col_size = row_size, col_size
         self.layer = nn.Linear(row_size // self.world_size, col_size, bias=False)
-        self.index_list = [i * row_size // self.world_size for i in range(1, self.world_size)]
+        self.ind = [i * row_size // self.world_size for i in range(1, self.world_size)]
 
     def load_weight(self, w: Optional[mx.array] = None):
         if self.world_size > 1:
-            w_list = w.split(self.index_list, axis=1)
+            w_list = w.split(self.ind, axis=1)
             w = w_list[self.rank]
         state_dict = {"layer.weight": w}
         self.load_weights(list(state_dict.items()))

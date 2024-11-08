@@ -90,7 +90,7 @@ class AsyncEngine:
         self.decoding_queue: asyncio.Queue = asyncio.Queue()
         self.processing_task = None
         self.limit_size: int = 5  # 每次最多处理 5 个请求，prefill + decode
-        self.sleep_time: float = 0
+        self.sleep_time: float = 0.0
         self.logger = logger
         self.abort_queue: asyncio.Queue = asyncio.Queue()
 
@@ -151,7 +151,7 @@ class AsyncEngine:
                 self.logger.error(f"BaseException Error processing prefill_queue data: {str(e)}")
                 traceback.print_exc()
             finally:
-                await asyncio.sleep(self.sleep_time)
+                await asyncio.sleep(0)
 
     async def generate_stream(self, data: SequenceRequestData):
         await self.prefill_queue.put(data)
