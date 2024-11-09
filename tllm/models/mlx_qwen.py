@@ -17,10 +17,12 @@ from tllm.models.protocol import SeqInput
 from tllm.models.utils import load_master_weight
 
 
-class MyMLXQwenModel(nn.Module):
+class MLXQwen2Model(nn.Module):
     def __init__(self, config: AutoConfig, is_merge: bool = True):
         super().__init__()
-        args = ModelArgs.from_dict(config.to_dict())
+        config_dict = config.to_dict()
+        config_dict.pop("rope_scaling") # TODO: remove this line
+        args = ModelArgs.from_dict(config_dict)
         args.attention_bias = True  # for qwen
         args.o_proj_bias = False  # for qwen
         self.vocab_size = args.vocab_size
@@ -76,7 +78,7 @@ class MyMLXQwenModel(nn.Module):
         weights = {}
         for wf in weight_files:
             weights.update(mx.load(wf))
-        prefix_key_list = ["model.embed_tokens.", "model.norm.", "lm_head."]
+        prefix_key_list = ["model.embed_tokens.", "model.norm.", "lm_head.", "visual."]
 
         prefix_key_list += [
             f"model.layers.{i}."
@@ -144,7 +146,7 @@ class MyMLXQwenModel(nn.Module):
         return weights
 
 
-class MyMLXQwenForCausalLM(nn.Module):
+class MLXQwen2ForCausalLM(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.vocab_size = config.vocab_size

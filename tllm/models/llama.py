@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 from transformers.models.llama.modeling_llama import LlamaForCausalLM, LlamaRMSNorm, LlamaRotaryEmbedding
 
-from tllm.commons.layers import MyLlamaDecoderLayer
+from tllm.commons.layers import LlamaDecoderLayer
 from tllm.generate.token_utils import TokenizerUtils
 from tllm.models.cache import AttentionData, CacheManager, RequestsCache
 from tllm.models.protocol import SeqInput
@@ -43,7 +43,7 @@ class Decoder(nn.Module):
         super().__init__()
         config.offset = start_layer_idx
         self.layers = nn.ModuleList(
-            [MyLlamaDecoderLayer(config, layer_idx, is_merge) for layer_idx in range(start_layer_idx, end_layer_idx)]
+            [LlamaDecoderLayer(config, layer_idx, is_merge) for layer_idx in range(start_layer_idx, end_layer_idx)]
         )
 
     @torch.no_grad()
@@ -58,7 +58,7 @@ class Decoder(nn.Module):
         return hidden_states
 
 
-class MyLlamaRotaryEmbedding(LlamaRotaryEmbedding):
+class TLlamaRotaryEmbedding(LlamaRotaryEmbedding):
     @torch.no_grad()
     def forward(self, x, position_ids):
         if "dynamic" in self.rope_type:
@@ -83,7 +83,7 @@ class MyLlamaRotaryEmbedding(LlamaRotaryEmbedding):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-class MyLlamaModel(nn.Module):
+class LlamaModel(nn.Module):
     def __init__(self, config, is_merge: bool = True):
         super().__init__()
         self.padding_idx = config.pad_token_id
@@ -92,7 +92,7 @@ class MyLlamaModel(nn.Module):
         self.config = config
         self.model = Decoder(config, config.decoder_start_layer_idx, config.decoder_end_layer_idx, is_merge)
         self.num_decoder_layers = config.decoder_end_layer_idx - config.decoder_start_layer_idx
-        self.rotary_emb = MyLlamaRotaryEmbedding(config=config)
+        self.rotary_emb = TLlamaRotaryEmbedding(config=config)
 
     @classmethod
     def from_pretrained(cls, config, model_path: str, state_dict: Optional[Any] = None):
@@ -205,7 +205,7 @@ class MyLlamaModel(nn.Module):
         return next(self.parameters()).device
 
 
-class MyLlamaForCausalLM(nn.Module):
+class TLlamaForCausalLM(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.vocab_size = config.vocab_size

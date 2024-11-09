@@ -59,6 +59,7 @@ python benchmarks/run_async_requests.py
     - [x] Temperature Sampling
 - [ ] Model
     - [x] LLaMA
+    - [x] Qwen2
 - [ ] split model before load
 - [x] MLX Framework
     - [x] With Torch Inference
@@ -74,7 +75,7 @@ python benchmarks/run_async_requests.py
         - [x] System
         - [x] Button
 - [ ] Multi-Modal
-    - [ ] LLaVA
+    - [ ] Qwen2-VL (in progress, todo test input image)
 - [x] Backend
     - [x] Client Send Url and Port
     - [ ] Auto Layer Split

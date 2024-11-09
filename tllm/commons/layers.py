@@ -77,7 +77,7 @@ class RowParallelLayer(BaseParallelLayer):
         return self.layer(x)
 
 
-class MyLlamaMLP(nn.Module):
+class MergedLlamaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -99,7 +99,7 @@ class MyLlamaMLP(nn.Module):
         return self.comm.all_reduce(self.down_proj(self.act_fn(gate_out) * up_out))
 
 
-class MyLlamaSdpaAttention(nn.Module):
+class MergedLlamaSdpaAttention(nn.Module):
     def __init__(self, config: LlamaConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
@@ -176,7 +176,7 @@ class MyLlamaSdpaAttention(nn.Module):
         return attn_output, None
 
 
-class MyPlainLlamaSdpaAttention(LlamaSdpaAttention):
+class PlainLlamaSdpaAttention(LlamaSdpaAttention):
 
     @torch.no_grad()
     def forward(
@@ -220,7 +220,7 @@ class MyPlainLlamaSdpaAttention(LlamaSdpaAttention):
         return self.o_proj(attn_output), None
 
 
-class MyLlamaDecoderLayer(nn.Module):
+class LlamaDecoderLayer(nn.Module):
     def __init__(self, config: LlamaConfig, layer_idx: int, is_merge: bool) -> None:
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -228,11 +228,11 @@ class MyLlamaDecoderLayer(nn.Module):
         self.layer_idx = layer_idx
 
         if is_merge:
-            self.mlp = MyLlamaMLP(config)
-            self.self_attn = MyLlamaSdpaAttention(config=config, layer_idx=layer_idx)
+            self.mlp = MergedLlamaMLP(config)
+            self.self_attn = MergedLlamaSdpaAttention(config=config, layer_idx=layer_idx)
         else:
             self.mlp = LlamaMLP(config)
-            self.self_attn = MyPlainLlamaSdpaAttention(config=config, layer_idx=layer_idx)
+            self.self_attn = PlainLlamaSdpaAttention(config=config, layer_idx=layer_idx)
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 

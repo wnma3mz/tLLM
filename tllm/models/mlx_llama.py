@@ -11,7 +11,7 @@ from mlx_lm.models.llama import ModelArgs
 import numpy as np
 from transformers import AutoConfig
 
-from tllm.commons.mlx_layers import MyTransformerBlock
+from tllm.commons.mlx_layers import TransformerBlock
 from tllm.generate.token_utils import TokenizerUtils
 from tllm.models.cache import AttentionData, CacheManager, RequestsCache
 from tllm.models.protocol import SeqInput
@@ -89,7 +89,7 @@ class Decoder(nn.Module):
         self.vocab_size = args.vocab_size
         self.num_hidden_layers = args.num_hidden_layers
         self.layers = [empty_func] * start_layer_idx + [
-            MyTransformerBlock(args=args, layer_idx=layer_idx, offset=start_layer_idx, is_merge=is_merge)
+            TransformerBlock(args=args, layer_idx=layer_idx, offset=start_layer_idx, is_merge=is_merge)
             for layer_idx in range(start_layer_idx, end_layer_idx)
         ]
 
@@ -99,7 +99,7 @@ class Decoder(nn.Module):
         return h
 
 
-class MyMLXLlamaModel(nn.Module):
+class MLXLlamaModel(nn.Module):
     def __init__(self, config: AutoConfig, is_merge: bool = True):
         super().__init__()
         args = ModelArgs.from_dict(config.to_dict())
@@ -211,7 +211,7 @@ class MyMLXLlamaModel(nn.Module):
         return weights
 
 
-class MyMLXLlamaForCausalLM(nn.Module):
+class MLXLlamaForCausalLM(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.vocab_size = config.vocab_size
