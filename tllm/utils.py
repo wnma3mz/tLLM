@@ -124,10 +124,10 @@ def init_engine(
     else:
         config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
         arch = config.architectures[0]
-        if arch not in MODEL_REGISTER:
-            raise ValueError(f"Model {arch} not supported")
         if HAS_MLX:
             arch = "MLX" + arch
+        if arch not in MODEL_REGISTER:
+            raise ValueError(f"Model {arch} not supported")
         tok = TokenizerUtils(model_path)
         state_dict = None
 

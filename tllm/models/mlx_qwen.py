@@ -1,6 +1,5 @@
 import glob
 import itertools
-import math
 import os
 import re
 from typing import *
@@ -11,98 +10,19 @@ from mlx_lm.models.llama import ModelArgs
 import numpy as np
 from transformers import AutoConfig
 
-from tllm.commons.mlx_layers import MyTransformerBlock
 from tllm.generate.token_utils import TokenizerUtils
-from tllm.models.cache import AttentionData, CacheManager, RequestsCache
+from tllm.models.cache import CacheManager
+from tllm.models.mlx_llama import Decoder, build_forward_cache, quantization_func
 from tllm.models.protocol import SeqInput
 from tllm.models.utils import load_master_weight
 
 
-def build_mlx_mask(seq_len_list: List[Tuple[int, int]], total_L: int, total_S: int) -> mx.array:
-    mask_list = [
-        mx.tril(mx.ones((L, S), dtype=mx.bool_), k=0) if L > 1 else mx.ones((L, S), dtype=mx.bool_)
-        for (L, S) in seq_len_list
-    ]
-
-    combined_mask = mx.zeros((total_L, total_S), dtype=mx.bool_)
-
-    l_index, r_index = 0, 0
-    for mask in mask_list:
-        combined_mask[l_index : l_index + mask.shape[0], r_index : r_index + mask.shape[1]] = mask
-        l_index += mask.shape[0]
-        r_index += mask.shape[1]
-
-    final_mask = mx.where(combined_mask, 0, -math.inf)
-    return final_mask
-
-
-def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_layers: int) -> AttentionData:
-    request_cache = RequestsCache(num_layers)
-    actual_seq_len_list = []
-    L, S = 0, 0
-    for uuid, q_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
-        if uuid in cache_manager.cache_dict:
-            layer_cache_list, cache_seq_len = cache_manager.get(uuid)
-            actual_seq_len_list.append([q_len, cache_seq_len + q_len])
-            L += q_len
-            S += cache_seq_len + q_len
-        else:
-            layer_cache_list = None
-            actual_seq_len_list.append([q_len, q_len])
-            L += q_len
-            S += q_len
-        request_cache.add(uuid, q_len, layer_cache_list)
-    return AttentionData(
-        request_cache=request_cache,
-        attn_mask=build_mlx_mask(actual_seq_len_list, L, S),
-        uuid_list=seq_input.uuid_list,
-    )
-
-
-def quantization_func(config, model, state_dict):
-    if getattr(config, "quantization", None) is not None:
-        # Handle legacy models which may not have everything quantized
-        def class_predicate(p, m):
-            if not hasattr(m, "to_quantized"):
-                return False
-            return f"{p}.scales" in state_dict
-
-        nn.quantize(
-            model,
-            **config.quantization,
-            class_predicate=class_predicate,
-        )
-    else:
-        model.set_dtype(mx.bfloat16)
-
-    return model
-
-
-def empty_func(h, mask, cache):
-    # TODO
-    return h
-
-
-class Decoder(nn.Module):
-    def __init__(self, args: ModelArgs, start_layer_idx: int, end_layer_idx: int, is_merge: bool):
-        super().__init__()
-        self.vocab_size = args.vocab_size
-        self.num_hidden_layers = args.num_hidden_layers
-        self.layers = [empty_func] * start_layer_idx + [
-            MyTransformerBlock(args=args, layer_idx=layer_idx, offset=start_layer_idx, is_merge=is_merge)
-            for layer_idx in range(start_layer_idx, end_layer_idx)
-        ]
-
-    def __call__(self, h: mx.array, mask, cache: AttentionData) -> mx.array:
-        for layer in self.layers:
-            h = layer(h, mask, cache=cache)
-        return h
-
-
-class MyMLXLlamaModel(nn.Module):
+class MyMLXQwenModel(nn.Module):
     def __init__(self, config: AutoConfig, is_merge: bool = True):
         super().__init__()
         args = ModelArgs.from_dict(config.to_dict())
+        args.attention_bias = True  # for qwen
+        args.o_proj_bias = False  # for qwen
         self.vocab_size = args.vocab_size
         self.cache_manager = CacheManager()
         self.config = config
@@ -174,14 +94,19 @@ class MyMLXLlamaModel(nn.Module):
         key_list = list(weights.keys())
 
         attn_proj_w = {}  # layer_idx -> {qkv: weight}
+        attn_proj_b = {}  # layer_idx -> {qkv: bias}
         mlp_w = {}
         for key in key_list:
             attn_res = attn_layer_idx_pattern.findall(key)
             mlp_res = mlp_layer_idx_pattern.findall(key)
             if attn_res:
                 layer_idx = int(attn_res[0])
-                if layer_idx not in attn_proj_w:
-                    attn_proj_w[layer_idx] = {}
+                if ".weight" in key:
+                    if layer_idx not in attn_proj_w:
+                        attn_proj_w[layer_idx] = {}
+                elif ".bias" in key:
+                    if layer_idx not in attn_proj_b:
+                        attn_proj_b[layer_idx] = {}
             elif mlp_res:
                 layer_idx = int(mlp_res[0])
                 if layer_idx not in mlp_w:
@@ -190,8 +115,10 @@ class MyMLXLlamaModel(nn.Module):
                 continue
 
             for qkv in qkv_proj_list:
-                if qkv in key:
+                if qkv in key and ".weight" in key:
                     attn_proj_w[layer_idx].update({qkv: weights.pop(key)})
+                elif qkv in key and ".bias" in key:
+                    attn_proj_b[layer_idx].update({qkv: weights.pop(key)})
             for mlp in gate_up_list:
                 if mlp in key:
                     mlp_w[layer_idx].update({mlp: weights.pop(key)})
@@ -202,6 +129,12 @@ class MyMLXLlamaModel(nn.Module):
                 weights[name] = mx.concatenate([layer_weights[qkv] for qkv in qkv_proj_list], axis=0)
                 attn_proj_w.pop(layer_idx)
 
+            layer_weights = attn_proj_b.get(layer_idx, [])
+            if len(layer_weights) == 3:
+                name = f"model.layers.{layer_idx}.self_attn.qkv_proj.layer.bias"
+                weights[name] = mx.concatenate([layer_weights[qkv] for qkv in qkv_proj_list], axis=0)
+                attn_proj_b.pop(layer_idx)
+
             layer_weights = mlp_w.get(layer_idx, [])
             if len(layer_weights) == 2:
                 name = f"model.layers.{layer_idx}.mlp.gate_up_proj.layer.weight"
@@ -211,7 +144,7 @@ class MyMLXLlamaModel(nn.Module):
         return weights
 
 
-class MyMLXLlamaForCausalLM(nn.Module):
+class MyMLXQwenForCausalLM(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.vocab_size = config.vocab_size

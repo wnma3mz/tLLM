@@ -16,12 +16,14 @@ class BaseParallelLayer(nn.Module):
 
 
 class MergeParallelLayer(BaseParallelLayer):
-    def __init__(self, row_size: int, col_size: int, dup_layer: int, world_size: int, rank: int) -> None:
+    def __init__(
+        self, row_size: int, col_size: int, dup_layer: int, world_size: int, rank: int, bias: bool = False
+    ) -> None:
         super().__init__(world_size, rank)
         assert col_size % self.world_size == 0
         self.row_size, self.col_size = row_size, col_size
         self.dup_layer = dup_layer
-        self.layer = nn.Linear(row_size, col_size * self.dup_layer // self.world_size, bias=False)
+        self.layer = nn.Linear(row_size, col_size * self.dup_layer // self.world_size, bias=bias)
         self.ind = [i * col_size // self.world_size for i in range(1, self.dup_layer)]
 
     def __call__(self, x: mx.array) -> List[mx.array]:
@@ -30,7 +32,7 @@ class MergeParallelLayer(BaseParallelLayer):
 
 
 class QKVParallelLayer(BaseParallelLayer):
-    def __init__(self, row_size: int, col_size_list: List[int], world_size: int, rank: int) -> None:
+    def __init__(self, row_size: int, col_size_list: List[int], world_size: int, rank: int, bias: bool = False) -> None:
         super().__init__(world_size, rank)
         for x in col_size_list:
             assert x % self.world_size == 0
@@ -39,7 +41,7 @@ class QKVParallelLayer(BaseParallelLayer):
 
         self.row_size, self.col_size = row_size, col_size
         self.col_size_list = [x // self.world_size for x in col_size_list]
-        self.layer = nn.Linear(row_size, col_size // self.world_size, bias=False)
+        self.layer = nn.Linear(row_size, col_size // self.world_size, bias=bias)
         self.ind = list(itertools.accumulate(self.col_size_list[:-1]))
 
     def __call__(self, x: mx.array) -> List[mx.array]:
@@ -48,11 +50,11 @@ class QKVParallelLayer(BaseParallelLayer):
 
 
 class RowParallelLayer(BaseParallelLayer):
-    def __init__(self, row_size: int, col_size: int, world_size: int, rank: int) -> None:
+    def __init__(self, row_size: int, col_size: int, world_size: int, rank: int, bias: bool = False) -> None:
         super().__init__(world_size, rank)
         assert row_size % self.world_size == 0
         self.row_size, self.col_size = row_size, col_size
-        self.layer = nn.Linear(row_size // self.world_size, col_size, bias=False)
+        self.layer = nn.Linear(row_size // self.world_size, col_size, bias=bias)
         self.ind = [i * row_size // self.world_size for i in range(1, self.world_size)]
 
     def load_weight(self, w: Optional[mx.array] = None):
@@ -81,9 +83,15 @@ class MyAttention(nn.Module):
             attention_bias = args.attention_bias
         else:
             attention_bias = False
+        if hasattr(args, "o_proj_bias"):
+            o_proj_bias = args.o_proj_bias
+        else:
+            o_proj_bias = False
 
-        self.qkv_proj = QKVParallelLayer(dim, [n_heads * head_dim, n_kv_heads * head_dim, n_kv_heads * head_dim], 1, 0)
-        self.o_proj = nn.Linear(n_heads * head_dim, dim, bias=attention_bias)
+        self.qkv_proj = QKVParallelLayer(
+            dim, [n_heads * head_dim, n_kv_heads * head_dim, n_kv_heads * head_dim], 1, 0, bias=attention_bias
+        )
+        self.o_proj = nn.Linear(n_heads * head_dim, dim, bias=o_proj_bias)
 
         self.rope = initialize_rope(args)
 
@@ -131,6 +139,7 @@ class MyAttention(nn.Module):
 class MyPlainAttention(Attention):
     def __init__(self, args, layer_idx: int, offset: int):
         super().__init__(args)
+        self.o_proj = nn.Linear(self.n_heads * self.head_dim, args.hidden_size, bias=args.o_proj_bias)
         self.layer_idx = layer_idx
         self.offset = offset
 
@@ -184,7 +193,7 @@ class MyMLP(nn.Module):
             mlp_bias = False
 
         self.down_proj = nn.Linear(hidden_dim, dim, bias=mlp_bias)
-        self.gate_up_proj = MergeParallelLayer(dim, hidden_dim, 2, 1, 0)
+        self.gate_up_proj = MergeParallelLayer(dim, hidden_dim, 2, 1, 0, bias=mlp_bias)
 
     def __call__(self, x) -> mx.array:
         gate_out, up_out = self.gate_up_proj(x)
