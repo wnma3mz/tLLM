@@ -4,7 +4,7 @@ from typing import *
 import numpy as np
 import torch
 import torch.nn as nn
-from transformers.models.llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
+from transformers.models.llama.modeling_llama import LlamaForCausalLM, LlamaRMSNorm, LlamaRotaryEmbedding
 
 from tllm.commons.layers import MyLlamaDecoderLayer
 from tllm.generate.token_utils import TokenizerUtils
@@ -93,6 +93,18 @@ class MyLlamaModel(nn.Module):
         self.model = Decoder(config, config.decoder_start_layer_idx, config.decoder_end_layer_idx)
         self.num_decoder_layers = config.decoder_end_layer_idx - config.decoder_start_layer_idx
         self.rotary_emb = MyLlamaRotaryEmbedding(config=config)
+
+    @classmethod
+    def from_pretrained(cls, config, tok: TokenizerUtils, model_path: str, state_dict: Optional[Any] = None):
+        model = cls(config)
+        state_dict = LlamaForCausalLM.from_pretrained(
+            model_path, trust_remote_code=True, device_map="cpu", torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
+        ).state_dict()
+        state_dict = model.read_weight_from_model_path(state_dict)
+        model.load_state_dict(state_dict)
+        del state_dict
+        model.eval()
+        return model
 
     def read_weight_from_model_path(self, weights: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         # TODO: support bias and TP
@@ -228,6 +240,7 @@ class MyLlamaForCausalLM(nn.Module):
                     state_dict[key.replace("embed_tokens.", "lm_head.")] = state_dict[key]
 
         model.load_state_dict(state_dict)
+        model.to(model.dtype)
         model.eval()
         return model
 

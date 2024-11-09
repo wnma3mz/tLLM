@@ -13,7 +13,7 @@ from tllm.commons.communicator import Communicator, SingleNodeCommunicator
 from tllm.commons.convert import deserialize_tensor, serialize_tensor
 from tllm.models.protocol import SeqInput
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
-from tllm.rpc.model_client import ModelClient
+from tllm.rpc.model_client import ClientArgs, ModelClient
 from tllm.utils import setup_logger
 
 
@@ -67,7 +67,7 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
         s1 = time.perf_counter()
         output = serialize_tensor(output_hidden_states)
         print(f"serialize_tensor cost time: {time.perf_counter() - s1:.4f}")
-        print("="*20)
+        print("=" * 20)
         return schemas_pb2.ForwardResponse(
             msg="Forward pass completed",
             status=200,
@@ -117,9 +117,16 @@ def run(args, is_debug=False):
     logger = setup_logger("client_" + __name__, logging.DEBUG)
     config.comm = comm
 
-    model_client = ModelClient(logger=logger, args=args)
+    client_args = ClientArgs(
+        start_layer_idx=args.start_layer_idx,
+        end_layer_idx=args.end_layer_idx,
+        ip_addr=args.ip_addr,
+        port=args.port,
+        master_url=args.master_url,
+    )
+    model_client = ModelClient(logger=logger, args=client_args)
     model_client.start()
-    model = model_client.load_model(config, args.model_path, torch.bfloat16)
+    model = model_client.load_model(config, args.model_path)
 
     start_grpc_server(comm, model, logger, args, is_debug)
 

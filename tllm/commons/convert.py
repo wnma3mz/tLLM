@@ -6,6 +6,7 @@ import torch
 
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.rpc.schemas_pb2 import BFloat16Tensor
+from tllm.schemas import MIX_TENSOR
 
 try:
     import mlx.core as mx  # type: ignore
@@ -94,7 +95,7 @@ def list_to_protobuf(data: List):
     return multi_array_proto
 
 
-def serialize_tensor(tensor: Union[torch.Tensor, "mx.array"]) -> BFloat16Tensor:
+def serialize_tensor(tensor: MIX_TENSOR) -> BFloat16Tensor:
     # TODO: support bfloat16
     tensor_proto = BFloat16Tensor()
     # bsz x seq_len x hidden_size
@@ -108,7 +109,7 @@ def serialize_tensor(tensor: Union[torch.Tensor, "mx.array"]) -> BFloat16Tensor:
     return tensor_proto
 
 
-def deserialize_tensor(tensor_proto: BFloat16Tensor, to_tensor: bool = False) -> Union[torch.Tensor, "mx.array"]:
+def deserialize_tensor(tensor_proto: BFloat16Tensor, to_tensor: bool = False) -> MIX_TENSOR:
     flag = tensor_proto.shape[0] >= 64
     tensor_bytes = lz4.frame.decompress(tensor_proto.data) if flag else tensor_proto.data
     if HAS_MLX and to_tensor == False:

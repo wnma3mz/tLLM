@@ -6,6 +6,7 @@ import torch
 
 from tllm.generate.sampler_utils import SamplerUtils
 from tllm.generate.sampling_params import SamplingParams
+from tllm.schemas import MIX_TENSOR
 
 finish_reason_type = Literal["length", "stop", None]
 
@@ -55,7 +56,7 @@ class RequestOutput:
 
 @dataclass
 class ForwardResult:
-    hidden_states: Union[torch.Tensor, "mx.array"]
+    hidden_states: MIX_TENSOR
     comm_cost_time_list: List[float]
     calc_cost_time_list: List[float]
 

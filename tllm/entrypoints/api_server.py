@@ -12,7 +12,7 @@ import uvicorn
 from tllm.entrypoints.layer_manager import LayerManager
 from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionResponse
 from tllm.entrypoints.server_chat import OpenAIServing
-from tllm.utils import init_engine, logger, setup_seed, start_client
+from tllm.utils import init_engine, logger, parse_url_list, setup_seed, start_client
 
 
 @asynccontextmanager
@@ -132,7 +132,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=str, required=True)
     parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--config_path", type=str, required=True)
+    parser.add_argument("--config_path", type=str, default=None)
     parser.add_argument("--need_start_client", action="store_true")
     parser.add_argument("--is_local", action="store_true")
     return parser.parse_args()
@@ -143,7 +143,8 @@ if __name__ == "__main__":
     args = parse_args()
     port = args.port
 
-    engine, tok = init_engine(args)
+    url_list = None if args.config_path is None else parse_url_list(args.config_path)
+    engine, tok = init_engine(args.model_path, args.is_local, url_list)
 
     s1 = time.time()
     if args.need_start_client:

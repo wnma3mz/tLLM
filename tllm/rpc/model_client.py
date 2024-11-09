@@ -1,5 +1,6 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 import json
 import threading
 import time
@@ -21,14 +22,19 @@ def get_unregistered_layer_idx(server_url: str) -> Tuple[int, int]:
     return -1, -1
 
 
-class ModelClient:
-    def __init__(self, logger, args):
-        self.start_idx = args.start_layer_idx
-        self.end_idx = args.end_layer_idx
-        self.ip_addr = args.ip_addr
-        self.port = args.port
+@dataclass
+class ClientArgs:
+    start_idx: int
+    end_idx: int
+    ip_addr: str
+    port: int
+    master_url: str
 
-        self.client_id = f"client-{str(uuid.uuid4())[:8]}-pp{args.start_layer_idx}-{args.end_layer_idx}"
+
+class ModelClient:
+    def __init__(self, logger, args: ClientArgs):
+        self.client_args = args
+        self.client_id = f"client-{str(uuid.uuid4())[:8]}-pp{args.start_idx}-{args.end_idx}"
 
         self.server_url = args.master_url.replace("http://", "ws://").replace("https://", "wss://")
 
@@ -39,54 +45,33 @@ class ModelClient:
         self._thread = None
         self._executor = ThreadPoolExecutor(max_workers=1)
 
-    def load_model(self, config: AutoConfig, model_path: str, dtype):
-        config.decoder_start_layer_idx = self.start_idx
-        config.decoder_end_layer_idx = self.end_idx
+    def load_model(self, config: AutoConfig, model_path: str):
+        config.decoder_start_layer_idx = self.client_args.start_idx
+        config.decoder_end_layer_idx = self.client_args.end_idx
         if not hasattr(config, "comm"):
             config.comm = SingleNodeCommunicator()
 
-        arch = config.architectures[0]
-        if HAS_MLX:
-            arch = "MLX" + arch
-        if arch not in MODEL_REGISTER:
-            raise ValueError(f"Model {arch} not supported")
+        if model_path.endswith(".gguf"):
+            arch = "MLXLlamaForCausalLM"
+        else:
+            arch = config.architectures[0]
+            if HAS_MLX:
+                arch = "MLX" + arch
 
-        HF_CausalLM_CLASS, _, MY_MODEL_CLASS = MODEL_REGISTER[arch]
+            if arch not in MODEL_REGISTER:
+                raise ValueError(f"Model {arch} not supported")
+
+        _, MY_MODEL_CLASS = MODEL_REGISTER[arch]
 
         s1 = time.time()
-        if HAS_MLX:
-            import mlx.core as mx
-            import mlx.nn as nn
-
-            model = MY_MODEL_CLASS(config)
-            weights = model.read_weight_from_model_path(model_path)
-            if getattr(config, "quantization", None) is not None:
-                # Handle legacy models which may not have everything quantized
-                def class_predicate(p, m):
-                    if not hasattr(m, "to_quantized"):
-                        return False
-                    return f"{p}.scales" in weights
-
-                nn.quantize(
-                    model,
-                    **config.quantization,
-                    class_predicate=class_predicate,
-                )
-            model.load_weights(list(weights.items()))
-            model.set_dtype(mx.bfloat16)
-            mx.eval(model.parameters())
-        else:
-            state_dict = HF_CausalLM_CLASS.from_pretrained(
-                model_path, trust_remote_code=True, device_map="cpu", torch_dtype=dtype, low_cpu_mem_usage=True
-            ).state_dict()
-            model = MY_MODEL_CLASS(config).to(dtype)
-            state_dict = model.read_weight_from_model_path(state_dict)
-            model.load_state_dict(state_dict)
-            del state_dict
-
+        # if model_path.endswith(".gguf"):
+        #     weights, config, _ = load_gguf_weight(model_path)
+        #     config.decoder_start_layer_idx = self.client_args.start_idx
+        #     config.decoder_end_layer_idx = self.client_args.end_idx
+        #     config.comm = SingleNodeCommunicator()
+        model = MY_MODEL_CLASS.from_pretrained(config, model_path)
         self.logger.debug(f"[Rank: {config.comm.rank}] Cost time {time.time() - s1}")
 
-        model.eval()
         return model
 
     def _create_event_loop(self):
@@ -105,10 +90,10 @@ class ModelClient:
                 json.dumps(
                     {
                         "type": "register_layers",
-                        "start_idx": self.start_idx,
-                        "end_idx": self.end_idx,
-                        "ip_addr": self.ip_addr,
-                        "port": self.port,
+                        "start_idx": self.client_args.start_idx,
+                        "end_idx": self.client_args.end_idx,
+                        "ip_addr": self.client_args.ip_addr,
+                        "port": self.client_args.port,
                     }
                 )
             )

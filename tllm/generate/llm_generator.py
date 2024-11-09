@@ -8,6 +8,7 @@ from tllm import HAS_MLX
 from tllm.models.protocol import ForwardResult, SeqInput, SequenceRequestData
 from tllm.models.utils import is_generate_end
 from tllm.rpc.manager import RPCManager
+from tllm.schemas import MIX_TENSOR
 
 if HAS_MLX:
     import mlx.core as mx
@@ -72,9 +73,9 @@ class LLMGenerator:
         forward_result = self.forward(input_embeds, seq_input)
         self.logger.debug(f"decoder cost time: {time.perf_counter() - s0:.4f}s")
         s1 = time.perf_counter()
-        seq_logits_list: List[Union[torch.Tensor, "mx.array"]] = self.model.get_logits(
-            forward_result.hidden_states, seq_len_list
-        )
+        seq_logits_list: List[MIX_TENSOR] = self.model.get_logits(forward_result.hidden_states, seq_len_list)
+        self.logger.debug(f"logits cost time: {time.perf_counter() - s1:.4f}s")
+        s1 = time.perf_counter()
         assert len(seq_logits_list) == len(sequence_request_list)
 
         s1 = time.perf_counter()

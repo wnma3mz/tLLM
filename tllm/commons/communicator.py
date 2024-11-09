@@ -3,6 +3,8 @@ from typing import *
 import torch
 import torch.distributed as dist
 
+from tllm.schemas import MIX_TENSOR
+
 
 class SingleNodeCommunicator:
     def __init__(self) -> None:
@@ -24,7 +26,7 @@ class SingleNodeCommunicator:
     def gather(self, x: torch.Tensor):
         return x
 
-    def broadcast(self, x: Union[torch.Tensor, "mx.array"]):
+    def broadcast(self, x: MIX_TENSOR):
         return x
 
     def broadcast_object(self, x: List[Any]):

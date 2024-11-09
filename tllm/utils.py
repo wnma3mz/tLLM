@@ -110,27 +110,32 @@ def parse_url_list(config_path: str) -> List[str]:
     return [pp_config["url"] for pp_config in config_list]
 
 
-def init_engine(args) -> Tuple[AsyncEngine, TokenizerUtils]:
-    config = AutoConfig.from_pretrained(args.model_path, trust_remote_code=True)
-    arch = config.architectures[0]
-    if arch not in MODEL_REGISTER:
-        raise ValueError(f"Model {arch} not supported")
-    if HAS_MLX:
-        arch = "MLX" + arch
-    _, MY_CausalLM_CLASS, _ = MODEL_REGISTER[arch]
+def init_engine(
+    model_path: str, is_local: str, url_list: Optional[List[str]] = None
+) -> Tuple[AsyncEngine, TokenizerUtils]:
+    if model_path.endswith(".gguf"):
+        raise ValueError("GGUF model not supported")
+        arch = "MLXLlamaForCausalLM"
+        from tllm.models.gguf_utils import load_gguf_weight
 
-    url_list = parse_url_list(args.config_path)
-    tok = TokenizerUtils(args.model_path)
-    model = MY_CausalLM_CLASS.from_pretrained(logger, config, tok, args.model_path)
-    if HAS_MLX:
-        import mlx.core as mx
-
-        model.set_dtype(mx.bfloat16)
+        state_dict, config, _ = load_gguf_weight(model_path)
+        tok_path = ...
+        tok = TokenizerUtils(tok_path)
     else:
-        model.to(torch.bfloat16)
-    model.eval()
-    if args.is_local:
-        generator = LLMGenerator(LocalRPCManager(logger, args, config), logger, model)
+        config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
+        arch = config.architectures[0]
+        if arch not in MODEL_REGISTER:
+            raise ValueError(f"Model {arch} not supported")
+        if HAS_MLX:
+            arch = "MLX" + arch
+        tok = TokenizerUtils(model_path)
+        state_dict = None
+
+    MY_CausalLM_CLASS, _ = MODEL_REGISTER[arch]
+
+    model = MY_CausalLM_CLASS.from_pretrained(logger, config, tok, model_path, state_dict)
+    if is_local:
+        generator = LLMGenerator(LocalRPCManager(logger, model_path, config), logger, model)
     else:
         generator = LLMGenerator(RPCManager(url_list), logger, model)
     engine = AsyncEngine(logger, generator)

@@ -5,6 +5,7 @@ from typing import *
 import torch
 
 from tllm import HAS_MLX
+from tllm.schemas import MIX_TENSOR
 
 if HAS_MLX:
     import mlx.core as mx
@@ -16,7 +17,6 @@ else:
     split_func = lambda tensor, indices: torch.split(tensor, indices, dim=-2)
 
 
-MIX_TENSOR = Union[torch.Tensor, "mx.array"]
 KV_CACHE_TYPE = Tuple[MIX_TENSOR, MIX_TENSOR]
 
 

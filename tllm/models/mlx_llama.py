@@ -9,7 +9,6 @@ import mlx.core as mx
 import mlx.nn as nn
 from mlx_lm.models.llama import ModelArgs
 import numpy as np
-import torch
 from transformers import AutoConfig
 
 from tllm.commons.mlx_layers import MyTransformerBlock
@@ -60,19 +59,38 @@ def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_la
     )
 
 
+def quantization_func(config, model, state_dict):
+    if getattr(config, "quantization", None) is not None:
+        # Handle legacy models which may not have everything quantized
+        def class_predicate(p, m):
+            if not hasattr(m, "to_quantized"):
+                return False
+            return f"{p}.scales" in state_dict
+
+        nn.quantize(
+            model,
+            **config.quantization,
+            class_predicate=class_predicate,
+        )
+    else:
+        model.set_dtype(mx.bfloat16)
+
+    return model
+
+
 def empty_func(h, mask, cache):
     # TODO
     return h
 
 
 class Decoder(nn.Module):
-    def __init__(self, args: ModelArgs, start_layer_idx: int, end_layer_idx: int):
+    def __init__(self, args: ModelArgs, start_layer_idx: int, end_layer_idx: int, is_merge: bool):
         super().__init__()
         self.args = args
         self.vocab_size = args.vocab_size
         self.num_hidden_layers = args.num_hidden_layers
         self.layers = [empty_func] * start_layer_idx + [
-            MyTransformerBlock(args=args, layer_idx=layer_idx, offset=start_layer_idx)
+            MyTransformerBlock(args=args, layer_idx=layer_idx, offset=start_layer_idx, is_merge=is_merge)
             for layer_idx in range(start_layer_idx, end_layer_idx)
         ]
 
@@ -90,7 +108,8 @@ class MyMLXLlamaModel(nn.Module):
         self.cache_manager = CacheManager()
         self.args = args
         self.config = config
-        self.model = Decoder(args, config.decoder_start_layer_idx, config.decoder_end_layer_idx)
+        is_merge = getattr(config, "is_merge", True)
+        self.model = Decoder(args, config.decoder_start_layer_idx, config.decoder_end_layer_idx, is_merge)
         self.num_layers = config.decoder_end_layer_idx - config.decoder_start_layer_idx
 
     def __call__(self, hidden_states: mx.array, seq_input: SeqInput) -> mx.array:
@@ -109,7 +128,25 @@ class MyMLXLlamaModel(nn.Module):
     def dtype(self):
         return next(self.parameters()).dtype
 
+    @classmethod
+    def from_pretrained(cls, config: AutoConfig, model_path: str, state_dict: Optional[Any] = None):
+        model = cls(config)
+        if state_dict is None:
+            weights = model.read_weight_from_model_path(model_path)
+        else:
+            weights = state_dict
+
+        model = quantization_func(config, model, weights)
+        model.load_weights(list(weights.items()), strict=False)
+        if getattr(config, "quantization", None) is None:
+            model.set_dtype(mx.bfloat16)
+
+        mx.eval(model.parameters())
+        model.eval()
+        return model
+
     def read_weight_from_model_path(self, model_path: str) -> Dict[str, mx.array]:
+        # Not Support quantization
         print(f"start_idx: {self.config.decoder_start_layer_idx}, end_idx: {self.config.decoder_end_layer_idx}")
         attn_layer_idx_pattern = re.compile(r"model\.layers\.(\d+)\.self_attn")
         mlp_layer_idx_pattern = re.compile(r"model\.layers\.(\d+)\.mlp")
@@ -184,7 +221,7 @@ class MyMLXLlamaForCausalLM(nn.Module):
         self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @classmethod
-    def from_pretrained(cls, logger, config, tok: TokenizerUtils, model_path: str):
+    def from_pretrained(cls, logger, config, tok: TokenizerUtils, model_path: str, state_dict: Optional[Any] = None):
         model = cls(config)
 
         cls.config = config
@@ -200,30 +237,24 @@ class MyMLXLlamaForCausalLM(nn.Module):
 
         if tok.tokenizer.eos_token_id:
             cls.eos_token_ids.add(tok.tokenizer.eos_token_id)
-        eos_token = tok.tokenizer.convert_ids_to_tokens(list(cls.eos_token_ids))
+        eos_token = tok.tokenizer.decode(list(cls.eos_token_ids))
         cls.logger.debug(f"eos_token_ids: {cls.eos_token_ids}; Tokens: {eos_token}")
 
-        state_dict = load_master_weight(model_path)
-        state_dict = {k.split("model.")[-1]: v for k, v in state_dict.items()}
+        if state_dict is None:
+            state_dict = load_master_weight(model_path)
+        new_state_dict = {}
+        for k, v in state_dict.items():
+            if k.startswith("model.") and not k.startswith("model.layers."):
+                new_state_dict[k.split("model.")[-1]] = v
+        state_dict = new_state_dict
         has_key_list = list(state_dict.keys())
         if "lm_head.weight" not in state_dict:
             for key in has_key_list:
                 if key.startswith("embed_tokens."):
                     state_dict[key.replace("embed_tokens.", "lm_head.")] = state_dict[key]
 
-        if getattr(config, "quantization", None) is not None:
-            # Handle legacy models which may not have everything quantized
-            def class_predicate(p, m):
-                if not hasattr(m, "to_quantized"):
-                    return False
-                return f"{p}.scales" in state_dict
-
-            nn.quantize(
-                model,
-                **config.quantization,
-                class_predicate=class_predicate,
-            )
-        model.load_weights(list(state_dict.items()))
+        model = quantization_func(config, model, state_dict)
+        model.load_weights(list(state_dict.items()), strict=False)
 
         mx.eval(model.parameters())
         model.eval()

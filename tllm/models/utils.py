@@ -7,6 +7,7 @@ import torch
 
 from tllm import HAS_MLX
 from tllm.models.protocol import GenerateEnd
+from tllm.schemas import MIX_TENSOR
 
 
 def is_generate_end(output_ids: List[int], eos_token_ids: Set[int], max_tokens: int) -> GenerateEnd:
@@ -68,7 +69,7 @@ def read_from_mlx_safetensors(file_path: str, key_list: List[str]) -> Dict[str, 
     return tensors
 
 
-def load_master_weight(model_path: str) -> Dict[str, Union[torch.Tensor, "mx.array"]]:
+def load_master_weight(model_path: str) -> Dict[str, MIX_TENSOR]:
     index_path = os.path.join(model_path, "model.safetensors.index.json")
     file_set = set()
     prefix_key_list = ["model.embed_tokens.", "model.norm.", "lm_head."]

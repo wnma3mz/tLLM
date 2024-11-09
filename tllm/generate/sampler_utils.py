@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from tllm import HAS_MLX
 from tllm.generate.sampling_params import SamplingParams
 from tllm.generate.token_utils import TokenizerUtils
+from tllm.schemas import MIX_TENSOR
 
 if HAS_MLX:
     import mlx.core as mx
@@ -54,7 +55,7 @@ class SamplerUtils:
         elif self.method == "sampling":
             return self.sampling_decode(logits, sampling_params)
 
-    def greedy_decode(self, logits: Union[torch.Tensor, "mx.array"]) -> List[int]:
+    def greedy_decode(self, logits: MIX_TENSOR) -> List[int]:
         # logits shape: [seq_len, vocab_size]
         if HAS_MLX:
             return mx.argmax(logits, axis=-1).tolist()
