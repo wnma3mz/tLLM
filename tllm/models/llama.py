@@ -39,11 +39,11 @@ def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_la
 
 
 class Decoder(nn.Module):
-    def __init__(self, config, start_layer_idx: int, end_layer_idx: int):
+    def __init__(self, config, start_layer_idx: int, end_layer_idx: int, is_merge: bool):
         super().__init__()
         config.offset = start_layer_idx
         self.layers = nn.ModuleList(
-            [MyLlamaDecoderLayer(config, layer_idx) for layer_idx in range(start_layer_idx, end_layer_idx)]
+            [MyLlamaDecoderLayer(config, layer_idx, is_merge) for layer_idx in range(start_layer_idx, end_layer_idx)]
         )
 
     @torch.no_grad()
@@ -84,29 +84,30 @@ class MyLlamaRotaryEmbedding(LlamaRotaryEmbedding):
 
 
 class MyLlamaModel(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, is_merge: bool = True):
         super().__init__()
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.cache_manager = CacheManager()
         self.config = config
-        self.model = Decoder(config, config.decoder_start_layer_idx, config.decoder_end_layer_idx)
+        self.model = Decoder(config, config.decoder_start_layer_idx, config.decoder_end_layer_idx, is_merge)
         self.num_decoder_layers = config.decoder_end_layer_idx - config.decoder_start_layer_idx
         self.rotary_emb = MyLlamaRotaryEmbedding(config=config)
 
     @classmethod
-    def from_pretrained(cls, config, tok: TokenizerUtils, model_path: str, state_dict: Optional[Any] = None):
-        model = cls(config)
+    def from_pretrained(cls, config, model_path: str, state_dict: Optional[Any] = None):
+        is_merge = True
+        model = cls(config, is_merge)
         state_dict = LlamaForCausalLM.from_pretrained(
             model_path, trust_remote_code=True, device_map="cpu", torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
         ).state_dict()
-        state_dict = model.read_weight_from_model_path(state_dict)
+        state_dict = model.read_weight_from_model_path(state_dict, is_merge)
         model.load_state_dict(state_dict)
         del state_dict
         model.eval()
         return model
 
-    def read_weight_from_model_path(self, weights: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def read_weight_from_model_path(self, weights: Dict[str, torch.Tensor], is_merge: bool) -> Dict[str, torch.Tensor]:
         # TODO: support bias and TP
 
         attn_layer_idx_pattern = re.compile(r"model\.layers\.(\d+)\.self_attn")
@@ -124,6 +125,8 @@ class MyLlamaModel(nn.Module):
             for prefix_key in prefix_key_list:
                 if key.startswith(prefix_key):
                     weights.pop(key)
+        if not is_merge:
+            return weights
 
         key_list = list(weights.keys())
 
@@ -212,7 +215,7 @@ class MyLlamaForCausalLM(nn.Module):
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps).to(self.dtype)
 
     @classmethod
-    def from_pretrained(cls, logger, config, tok: TokenizerUtils, model_path: str):
+    def from_pretrained(cls, logger, config, tok: TokenizerUtils, model_path: str, state_dict: Optional[Any] = None):
         model = cls(config)
 
         cls.config = config

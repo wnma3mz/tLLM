@@ -3,7 +3,13 @@ from typing import *
 import torch
 import torch.nn as nn
 from transformers.activations import ACT2FN
-from transformers.models.llama.modeling_llama import LlamaConfig, LlamaRMSNorm, apply_rotary_pos_emb
+from transformers.models.llama.modeling_llama import (
+    LlamaConfig,
+    LlamaMLP,
+    LlamaRMSNorm,
+    LlamaSdpaAttention,
+    apply_rotary_pos_emb,
+)
 
 from tllm.models.cache import AttentionData, RequestsCache
 
@@ -72,9 +78,8 @@ class RowParallelLayer(BaseParallelLayer):
 
 
 class MyLlamaMLP(nn.Module):
-    def __init__(self, config, layer_idx: int):
+    def __init__(self, config):
         super().__init__()
-        self.layer_idx = layer_idx
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
@@ -171,16 +176,63 @@ class MyLlamaSdpaAttention(nn.Module):
         return attn_output, None
 
 
+class MyPlainLlamaSdpaAttention(LlamaSdpaAttention):
+
+    @torch.no_grad()
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        attention_data: AttentionData,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        # [seq_len, hidden_size]
+        q_len, _ = hidden_states.size()
+
+        query_states, key_states, value_states = (
+            self.q_proj(hidden_states),
+            self.k_proj(hidden_states),
+            self.v_proj(hidden_states),
+        )
+
+        query_states = query_states.view(q_len, -1, self.head_dim).transpose(0, 1)
+        key_states = key_states.view(q_len, -1, self.head_dim).transpose(0, 1)
+        value_states = value_states.view(q_len, -1, self.head_dim).transpose(0, 1)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin, attention_data.position_ids, unsqueeze_dim=0
+        )
+        request_cache: RequestsCache = attention_data.request_cache
+        key_states, value_states = request_cache.update(
+            key_states, value_states, attention_data.uuid_list, self.layer_idx - self.config.offset
+        )
+
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
+
+        # TODO: speed up the following line
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_states, key_states, value_states, attn_mask=attention_data.attn_mask
+        )
+        attn_output = attn_output.transpose(0, 1).contiguous()
+        attn_output = attn_output.reshape(q_len, -1)
+
+        return self.o_proj(attn_output), None
+
+
 class MyLlamaDecoderLayer(nn.Module):
-    def __init__(self, config: LlamaConfig, layer_idx: int) -> None:
+    def __init__(self, config: LlamaConfig, layer_idx: int, is_merge: bool) -> None:
         super().__init__()
         self.hidden_size = config.hidden_size
         self.config = config
         self.layer_idx = layer_idx
 
-        self.self_attn = MyLlamaSdpaAttention(config=config, layer_idx=layer_idx)
-
-        self.mlp = MyLlamaMLP(config, layer_idx=layer_idx)
+        if is_merge:
+            self.mlp = MyLlamaMLP(config)
+            self.self_attn = MyLlamaSdpaAttention(config=config, layer_idx=layer_idx)
+        else:
+            self.mlp = LlamaMLP(config)
+            self.self_attn = MyPlainLlamaSdpaAttention(config=config, layer_idx=layer_idx)
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 

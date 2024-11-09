@@ -86,7 +86,6 @@ def empty_func(h, mask, cache):
 class Decoder(nn.Module):
     def __init__(self, args: ModelArgs, start_layer_idx: int, end_layer_idx: int, is_merge: bool):
         super().__init__()
-        self.args = args
         self.vocab_size = args.vocab_size
         self.num_hidden_layers = args.num_hidden_layers
         self.layers = [empty_func] * start_layer_idx + [
@@ -101,14 +100,12 @@ class Decoder(nn.Module):
 
 
 class MyMLXLlamaModel(nn.Module):
-    def __init__(self, config: AutoConfig):
+    def __init__(self, config: AutoConfig, is_merge: bool = True):
         super().__init__()
         args = ModelArgs.from_dict(config.to_dict())
         self.vocab_size = args.vocab_size
         self.cache_manager = CacheManager()
-        self.args = args
         self.config = config
-        is_merge = getattr(config, "is_merge", True)
         self.model = Decoder(args, config.decoder_start_layer_idx, config.decoder_end_layer_idx, is_merge)
         self.num_layers = config.decoder_end_layer_idx - config.decoder_start_layer_idx
 
@@ -130,14 +127,16 @@ class MyMLXLlamaModel(nn.Module):
 
     @classmethod
     def from_pretrained(cls, config: AutoConfig, model_path: str, state_dict: Optional[Any] = None):
-        model = cls(config)
+        if getattr(config, "quantization", None) is not None or state_dict is not None:
+            is_merge = False
+        model = cls(config, is_merge)
         if state_dict is None:
-            weights = model.read_weight_from_model_path(model_path)
+            weights = model.read_weight_from_model_path(model_path, is_merge)
         else:
             weights = state_dict
 
         model = quantization_func(config, model, weights)
-        model.load_weights(list(weights.items()), strict=False)
+        model.load_weights(list(weights.items()))  # strict=False
         if getattr(config, "quantization", None) is None:
             model.set_dtype(mx.bfloat16)
 
@@ -145,8 +144,7 @@ class MyMLXLlamaModel(nn.Module):
         model.eval()
         return model
 
-    def read_weight_from_model_path(self, model_path: str) -> Dict[str, mx.array]:
-        # Not Support quantization
+    def read_weight_from_model_path(self, model_path: str, is_merge: bool = True) -> Dict[str, mx.array]:
         print(f"start_idx: {self.config.decoder_start_layer_idx}, end_idx: {self.config.decoder_end_layer_idx}")
         attn_layer_idx_pattern = re.compile(r"model\.layers\.(\d+)\.self_attn")
         mlp_layer_idx_pattern = re.compile(r"model\.layers\.(\d+)\.mlp")
@@ -169,6 +167,8 @@ class MyMLXLlamaModel(nn.Module):
             for prefix_key in prefix_key_list:
                 if key.startswith(prefix_key):
                     weights.pop(key)
+        if not is_merge:
+            return weights
 
         key_list = list(weights.keys())
 
@@ -207,7 +207,6 @@ class MyMLXLlamaModel(nn.Module):
                 weights[name] = mx.concatenate([layer_weights[mlp] for mlp in gate_up_list], axis=0)
                 mlp_w.pop(layer_idx)
 
-        # TODO: support bias and TP
         return weights
 
 
@@ -254,7 +253,7 @@ class MyMLXLlamaForCausalLM(nn.Module):
                     state_dict[key.replace("embed_tokens.", "lm_head.")] = state_dict[key]
 
         model = quantization_func(config, model, state_dict)
-        model.load_weights(list(state_dict.items()), strict=False)
+        model.load_weights(list(state_dict.items()))  # , strict=False
 
         mx.eval(model.parameters())
         model.eval()
