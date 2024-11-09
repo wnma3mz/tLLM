@@ -10,7 +10,6 @@ from tllm.models.protocol import SeqInput
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.rpc.model_client import ModelClient
 
-
 class RPCManager:
     def __init__(self, url_list: List[Optional[str]]):
         self.stub_list: List[schemas_pb2_grpc.RPCServiceStub] = []
@@ -52,7 +51,6 @@ class RPCManager:
             "seq_len": seq_input.seq_len_list,
             "hidden_states": hidden_states,
         }
-
         request = schemas_pb2.ForwardRequest(**forward_request)
         response = self.stub_list[url_idx].Forward(request)
         if is_last:

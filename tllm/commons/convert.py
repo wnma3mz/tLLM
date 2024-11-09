@@ -98,18 +98,18 @@ def serialize_tensor(tensor: Union[torch.Tensor, "mx.array"]) -> BFloat16Tensor:
     # TODO: support bfloat16
     tensor_proto = BFloat16Tensor()
     # bsz x seq_len x hidden_size
-    tensor_proto.shape.extend(tensor.shape)  # 添加形状
+    tensor_proto.shape.extend(tensor.shape)
     if isinstance(tensor, torch.Tensor):
         tensor_bytes = tensor.to(torch.float16).detach().numpy().tobytes()
     else:
         tensor_bytes = bytes(tensor.astype(mx.float16))
-    flag = tensor.shape[1] >= 64
+    flag = tensor.shape[0] >= 64
     tensor_proto.data = lz4.frame.compress(tensor_bytes) if flag else tensor_bytes
     return tensor_proto
 
 
 def deserialize_tensor(tensor_proto: BFloat16Tensor, to_tensor: bool = False) -> Union[torch.Tensor, "mx.array"]:
-    flag = tensor_proto.shape[1] >= 64
+    flag = tensor_proto.shape[0] >= 64
     tensor_bytes = lz4.frame.decompress(tensor_proto.data) if flag else tensor_proto.data
     if HAS_MLX and to_tensor == False:
         data = np.frombuffer(tensor_bytes, dtype=np.float16)

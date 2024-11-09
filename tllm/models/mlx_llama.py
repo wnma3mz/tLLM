@@ -76,7 +76,7 @@ class Decoder(nn.Module):
             for layer_idx in range(start_layer_idx, end_layer_idx)
         ]
 
-    def __call__(self, h: mx.array, mask, cache: AttentionData):
+    def __call__(self, h: mx.array, mask, cache: AttentionData) -> mx.array:
         for layer in self.layers:
             h = layer(h, mask, cache=cache)
         return h
@@ -93,7 +93,7 @@ class MyMLXLlamaModel(nn.Module):
         self.model = Decoder(args, config.decoder_start_layer_idx, config.decoder_end_layer_idx)
         self.num_layers = config.decoder_end_layer_idx - config.decoder_start_layer_idx
 
-    def __call__(self, hidden_states: mx.array, seq_input: SeqInput) -> np.ndarray:
+    def __call__(self, hidden_states: mx.array, seq_input: SeqInput) -> mx.array:
         attention_data = build_forward_cache(seq_input, self.cache_manager, self.num_layers)
 
         mask = attention_data.attn_mask

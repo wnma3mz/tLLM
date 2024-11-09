@@ -25,7 +25,7 @@
 
     3.2 (with communication)
 
-    - edit `examples/mlx_run_single_client.sh`
+    - edit `examples/run_single_client.sh`
 
     - edit `examples/run.sh`
 
@@ -34,7 +34,7 @@
     bash examples/run.sh 1
 
     # in another terminal
-    bash examples/mlx_run_single_client.sh 1
+    bash examples/run_single_client.sh 1
     ```
 
 4. testing
@@ -191,3 +191,16 @@ TODO: Meta-Llama-3-8B-Instruct in GPU
 
 - 多维数组实现（float32）: 单机通信在 0.002 s 左右 （seq-len=1）
 - bytes 实现（float32）: 单机通信在 0.001 s 左右 （seq-len=1）
+
+
+for 1b
+
+- mac mini m2
+![alt text](asserts/image.png)
+
+- m3 pro
+![alt text](asserts/image-1.png)
+
+for 8b
+- m3 pro (layer=8) + mac mini m2 (layer=24) 
+![alt text](asserts/image-2.png)
