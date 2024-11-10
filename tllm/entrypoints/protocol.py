@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from transformers import PreTrainedTokenizer
 from typing_extensions import Annotated
 
-from tllm.generate.sampling_params import SamplingParams
+from tllm.schemas import SamplingParams
 
 
 def random_uuid() -> str:
@@ -161,19 +161,22 @@ class ChatCompletionRequest(OpenAIBaseModel):
     )
     # doc: end-chat-completion-extra-params
 
-    def to_sampling_params(self, tokenizer: PreTrainedTokenizer, default_max_tokens: int) -> SamplingParams:
+    def to_sampling_params(
+        self, tokenizer: PreTrainedTokenizer, default_max_tokens: Optional[int] = None
+    ) -> SamplingParams:
         max_tokens = self.max_tokens
         if max_tokens is None:
             max_tokens = default_max_tokens
-
+        if isinstance(tokenizer.eos_token_id, list):
+            stop_token_ids = tokenizer.eos_token_id
+        else:
+            stop_token_ids = [tokenizer.eos_token_id]
         return SamplingParams(
-            n=self.n,
-            temperature=self.temperature,
-            top_p=self.top_p,
             top_k=self.top_k,
-            stop=self.stop,
-            stop_token_ids=self.stop_token_ids,
-            max_tokens=max_tokens,
+            top_p=self.top_p,
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+            stop_token_ids=self.stop_token_ids + stop_token_ids,
         )
 
     @model_validator(mode="before")

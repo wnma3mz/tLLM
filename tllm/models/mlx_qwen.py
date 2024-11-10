@@ -10,18 +10,17 @@ from mlx_lm.models.llama import ModelArgs
 import numpy as np
 from transformers import AutoConfig
 
-from tllm.generate.token_utils import TokenizerUtils
 from tllm.models.cache import CacheManager
 from tllm.models.mlx_llama import Decoder, build_forward_cache, quantization_func
-from tllm.models.protocol import SeqInput
 from tllm.models.utils import load_master_weight
+from tllm.schemas import SeqInput
 
 
 class MLXQwen2Model(nn.Module):
     def __init__(self, config: AutoConfig, is_merge: bool = True):
         super().__init__()
         config_dict = config.to_dict()
-        config_dict.pop("rope_scaling") # TODO: remove this line
+        config_dict.pop("rope_scaling")  # TODO: remove this line
         args = ModelArgs.from_dict(config_dict)
         args.attention_bias = True  # for qwen
         args.o_proj_bias = False  # for qwen
@@ -156,7 +155,7 @@ class MLXQwen2ForCausalLM(nn.Module):
         self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @classmethod
-    def from_pretrained(cls, logger, config, tok: TokenizerUtils, model_path: str, state_dict: Optional[Any] = None):
+    def from_pretrained(cls, logger, config, model_path: str, state_dict: Optional[Any] = None):
         model = cls(config)
 
         cls.config = config
@@ -169,11 +168,6 @@ class MLXQwen2ForCausalLM(nn.Module):
                 cls.eos_token_ids |= set(config.eos_token_ids)
             else:
                 cls.eos_token_ids.add(config.eos_token_id)
-
-        if tok.tokenizer.eos_token_id:
-            cls.eos_token_ids.add(tok.tokenizer.eos_token_id)
-        eos_token = tok.tokenizer.decode(list(cls.eos_token_ids))
-        cls.logger.debug(f"eos_token_ids: {cls.eos_token_ids}; Tokens: {eos_token}")
 
         if state_dict is None:
             state_dict = load_master_weight(model_path)

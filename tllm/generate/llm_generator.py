@@ -1,17 +1,16 @@
 import time
-from typing import AsyncGenerator, List, Union
+from typing import AsyncGenerator, Dict, List, Optional, Union
 
 import numpy as np
 import torch
 
-from tllm import HAS_MLX
-from tllm.models.protocol import ForwardResult, SeqInput, SequenceRequestData
 from tllm.models.utils import is_generate_end
 from tllm.rpc.manager import RPCManager
-from tllm.schemas import MIX_TENSOR
+from tllm.schemas import MIX_TENSOR, ForwardResult, SeqInput, SequenceRequestData
 
-if HAS_MLX:
-    import mlx.core as mx
+
+def merge_mm_input(mm_input_list: List[Dict[str, List[MIX_TENSOR]]]) -> Optional[Dict[str, List[MIX_TENSOR]]]:
+    return None
 
 
 class LLMGenerator:
@@ -21,7 +20,7 @@ class LLMGenerator:
         self.logger = logger
         self.model = model
 
-    def forward(self, inputs_embeds, seq_input: SeqInput) -> ForwardResult:
+    def forward(self, inputs_embeds: MIX_TENSOR, seq_input: SeqInput) -> ForwardResult:
         hidden_states = inputs_embeds
         comm_cost_time_list, calc_cost_time_list = [], []
         for pp_idx in range(self.pp_size):
@@ -29,9 +28,7 @@ class LLMGenerator:
             is_last = pp_idx == self.pp_size - 1
             s1 = time.perf_counter()
             self.logger.debug(f"start pp idx: {pp_idx} hidden_states: {hidden_states.shape}")
-            hidden_states, pp_cost_time = self.server.forward(
-                pp_idx, hidden_states, seq_input, is_first, is_last, to_tensor=not HAS_MLX
-            )
+            hidden_states, pp_cost_time = self.server.forward(pp_idx, hidden_states, seq_input, is_first, is_last)
             self.logger.debug(f"finish pp idx: {pp_idx}")
             comm_cost_time_list.append(time.perf_counter() - s1 - pp_cost_time)
             calc_cost_time_list.append(pp_cost_time)
@@ -50,7 +47,7 @@ class LLMGenerator:
                     input_ids: torch.Tensor
 
         """
-        uuid_list, input_ids_list, seq_len_list = [], [], []
+        uuid_list, input_ids_list, seq_len_list, mm_input_list = [], [], [], []
         for sequence_request in sequence_request_list:
             uuid_list.append(sequence_request.request_id)
             # 如果是 prefilling，则为 input_ids; 否则，为 output_ids[-1]
@@ -60,13 +57,18 @@ class LLMGenerator:
                     uuid_list[-1] = sequence_request.history_request_id
                 input_ids_list.append(np.array(sequence_request.input_ids))
                 seq_len_list.append(sequence_request.q_len)
+                mm_input_list.append(sequence_request.multi_modal_inputs)  # TODO: multi_modal_inputs
             else:
                 input_ids_list.append(np.array([sequence_request.output_ids[-1]]))
                 seq_len_list.append(1)
 
+        mm_input = merge_mm_input(mm_input_list)
         input_ids = np.concatenate(input_ids_list, axis=-1)
         # [seq_len1 + seq_len2 + ...] -> [seq_len1 + seq_len2 + ..., hidden_size]
-        input_embeds = self.model.get_input_embeddings(input_ids)
+        if mm_input is None:
+            input_embeds = self.model.get_input_embeddings(input_ids)
+        else:
+            input_embeds = self.model.get_input_embeddings(input_ids, **mm_input)
 
         seq_input = SeqInput(uuid_list=uuid_list, seq_len_list=seq_len_list)
         s0 = time.perf_counter()
@@ -87,7 +89,7 @@ class LLMGenerator:
 
             end = is_generate_end(
                 sequence_request.output_ids,
-                eos_token_ids=self.model.eos_token_ids,
+                eos_token_ids=sequence_request.sampling_params.stop_token_ids,
                 max_tokens=sequence_request.sampling_params.max_tokens,
             )
             if end.is_end:

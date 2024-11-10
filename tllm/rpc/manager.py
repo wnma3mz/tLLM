@@ -6,10 +6,9 @@ import grpc
 import torch
 
 from tllm.commons.convert import deserialize_tensor, serialize_tensor
-from tllm.models.protocol import SeqInput
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.rpc.model_client import ClientArgs, ModelClient
-from tllm.schemas import MIX_TENSOR
+from tllm.schemas import MIX_TENSOR, SeqInput
 
 
 class RPCManager:
@@ -44,7 +43,6 @@ class RPCManager:
         seq_input: SeqInput,
         is_first: bool = False,
         is_last: bool = False,
-        to_tensor: bool = True,
     ) -> Tuple[Union[torch.Tensor, bytes], float]:
         if is_first:
             hidden_states = serialize_tensor(hidden_states)
@@ -56,7 +54,7 @@ class RPCManager:
         request = schemas_pb2.ForwardRequest(**forward_request)
         response = self.stub_list[url_idx].Forward(request)
         if is_last:
-            return deserialize_tensor(response.output, to_tensor=to_tensor), response.cost_time
+            return deserialize_tensor(response.output), response.cost_time
         else:
             return response.output, response.cost_time
 
@@ -87,7 +85,6 @@ class LocalRPCManager:
         seq_input: SeqInput,
         is_first: bool,
         is_last: bool,
-        to_tensor: bool,
     ) -> Tuple[MIX_TENSOR, float]:
         s1 = time.perf_counter()
         output_hidden_states = self.model(hidden_states, seq_input)

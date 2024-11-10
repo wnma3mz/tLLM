@@ -4,9 +4,9 @@ import torch
 import torch.nn.functional as F
 
 from tllm import HAS_MLX
-from tllm.generate.sampling_params import SamplingParams
-from tllm.generate.token_utils import TokenizerUtils
-from tllm.schemas import MIX_TENSOR
+from tllm.schemas import MIX_TENSOR, SamplingParams
+
+# from .token_utils import TokenizerUtils
 
 if HAS_MLX:
     import mlx.core as mx
@@ -39,7 +39,7 @@ def temperature_scaling(logits: torch.Tensor, temperature: float = 1.0) -> torch
 
 
 class SamplerUtils:
-    def __init__(self, method: str, tok: TokenizerUtils) -> None:
+    def __init__(self, method: str, tok: "TokenizerUtils") -> None:
         self.method = method
         self.tok = tok
         assert self.method in ["greedy", "beam_search", "sampling"]

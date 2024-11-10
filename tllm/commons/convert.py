@@ -109,10 +109,10 @@ def serialize_tensor(tensor: MIX_TENSOR) -> BFloat16Tensor:
     return tensor_proto
 
 
-def deserialize_tensor(tensor_proto: BFloat16Tensor, to_tensor: bool = False) -> MIX_TENSOR:
+def deserialize_tensor(tensor_proto: BFloat16Tensor) -> MIX_TENSOR:
     flag = tensor_proto.shape[0] >= 64
     tensor_bytes = lz4.frame.decompress(tensor_proto.data) if flag else tensor_proto.data
-    if HAS_MLX and to_tensor == False:
+    if HAS_MLX:
         data = np.frombuffer(tensor_bytes, dtype=np.float16)
         return mx.array(data, dtype=mx.bfloat16).reshape(*tensor_proto.shape)
     else:

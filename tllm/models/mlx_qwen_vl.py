@@ -1,4 +1,3 @@
-
 import glob
 import itertools
 import os
@@ -11,10 +10,9 @@ from mlx_lm.models.llama import ModelArgs
 import numpy as np
 from transformers import AutoConfig
 
-from tllm.generate.token_utils import TokenizerUtils
+from tllm.commons.mlx_layers import PatchEmbed, PatchMerger, VisionMlp, VisionRotaryEmbedding, VisionSdpaAttention
 from tllm.models.mlx_llama import quantization_func
 from tllm.models.utils import load_master_weight
-from tllm.commons.mlx_layers import VisionMlp, VisionSdpaAttention, PatchEmbed, PatchMerger, VisionRotaryEmbedding 
 
 
 class Qwen2VLVisionBlock(nn.Module):
@@ -24,9 +22,7 @@ class Qwen2VLVisionBlock(nn.Module):
         self.norm2 = nn.LayerNorm(config.embed_dim, eps=1e-6)
         mlp_hidden_dim = int(config.embed_dim * config.mlp_ratio)
 
-        self.attn = VisionSdpaAttention(
-            config.embed_dim, num_heads=config.num_heads
-        )
+        self.attn = VisionSdpaAttention(config.embed_dim, num_heads=config.num_heads)
         self.mlp = VisionMlp(dim=config.embed_dim, hidden_dim=mlp_hidden_dim, hidden_act=config.hidden_act)
 
     def forward(self, hidden_states, cu_seqlens, rotary_pos_emb) -> mx.array:
@@ -35,6 +31,7 @@ class Qwen2VLVisionBlock(nn.Module):
         )
         hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
         return hidden_states
+
 
 class Qwen2VisionModel(nn.Module):
     def __init__(self, config) -> None:
@@ -88,9 +85,7 @@ class Qwen2VisionModel(nn.Module):
         hidden_states = self.patch_embed(hidden_states)
         rotary_pos_emb = self.rot_pos_emb(grid_thw)
 
-        cu_seqlens = mx.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0, dtype=mx.int32
-        )
+        cu_seqlens = mx.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(dim=0, dtype=mx.int32)
         cu_seqlens = mx.pad(cu_seqlens, (1, 0), value=0)
 
         for blk in self.blocks:
@@ -110,7 +105,7 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
         self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @classmethod
-    def from_pretrained(cls, logger, config, tok: TokenizerUtils, model_path: str, state_dict: Optional[Any] = None):
+    def from_pretrained(cls, logger, config, model_path: str, state_dict: Optional[Any] = None):
         model = cls(config)
 
         cls.config = config
@@ -123,11 +118,6 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
                 cls.eos_token_ids |= set(config.eos_token_ids)
             else:
                 cls.eos_token_ids.add(config.eos_token_id)
-
-        if tok.tokenizer.eos_token_id:
-            cls.eos_token_ids.add(tok.tokenizer.eos_token_id)
-        eos_token = tok.tokenizer.decode(list(cls.eos_token_ids))
-        cls.logger.debug(f"eos_token_ids: {cls.eos_token_ids}; Tokens: {eos_token}")
 
         if state_dict is None:
             state_dict = {}
@@ -157,11 +147,17 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
         model.eval()
         return model
 
-    def get_input_embeddings(self, x: np.ndarray, pixel_values: Optional[mx.array] = None, pixel_values_videos: Optional[mx.array] = None, image_grid_thw: Optional[mx.array] = None,
-        video_grid_thw: Optional[mx.array] = None,) -> mx.array:
+    def get_input_embeddings(
+        self,
+        x: np.ndarray,
+        pixel_values: Optional[mx.array] = None,
+        pixel_values_videos: Optional[mx.array] = None,
+        image_grid_thw: Optional[mx.array] = None,
+        video_grid_thw: Optional[mx.array] = None,
+    ) -> mx.array:
         input_ids = mx.array(x)
         inputs_embeds = self.embed_tokens(input_ids)
-    
+
         if pixel_values is not None:
             pixel_values = pixel_values.type(self.visual.get_dtype())
             image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
@@ -199,7 +195,6 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
         return inputs_embeds
-    
 
     def get_logits(self, hidden_states: mx.array, seq_len_list: List[int]) -> List[mx.array]:
         # 只取最后一个 token 的 hidden_states
@@ -209,4 +204,3 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
         logits = self.lm_head(self.norm(hidden_states))
         ind = list(itertools.accumulate([1] * (len(seq_len_list) - 1)))
         return mx.split(logits, ind, axis=0)
-    

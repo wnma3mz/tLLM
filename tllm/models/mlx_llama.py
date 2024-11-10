@@ -12,10 +12,9 @@ import numpy as np
 from transformers import AutoConfig
 
 from tllm.commons.mlx_layers import TransformerBlock
-from tllm.generate.token_utils import TokenizerUtils
 from tllm.models.cache import AttentionData, CacheManager, RequestsCache
-from tllm.models.protocol import SeqInput
 from tllm.models.utils import load_master_weight
+from tllm.schemas import SeqInput
 
 
 def build_mlx_mask(seq_len_list: List[Tuple[int, int]], total_L: int, total_S: int) -> mx.array:
@@ -221,7 +220,7 @@ class MLXLlamaForCausalLM(nn.Module):
         self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @classmethod
-    def from_pretrained(cls, logger, config, tok: TokenizerUtils, model_path: str, state_dict: Optional[Any] = None):
+    def from_pretrained(cls, logger, config, model_path: str, state_dict: Optional[Any] = None):
         model = cls(config)
 
         cls.config = config
@@ -234,11 +233,6 @@ class MLXLlamaForCausalLM(nn.Module):
                 cls.eos_token_ids |= set(config.eos_token_ids)
             else:
                 cls.eos_token_ids.add(config.eos_token_id)
-
-        if tok.tokenizer.eos_token_id:
-            cls.eos_token_ids.add(tok.tokenizer.eos_token_id)
-        eos_token = tok.tokenizer.decode(list(cls.eos_token_ids))
-        cls.logger.debug(f"eos_token_ids: {cls.eos_token_ids}; Tokens: {eos_token}")
 
         if state_dict is None:
             state_dict = load_master_weight(model_path)

@@ -5,7 +5,7 @@ from typing import *
 
 from fastapi import HTTPException, Request
 
-from tllm.engine import AsyncEngine, MessageProcessor, SequenceRequestData
+from tllm.engine import AsyncEngine, SequenceRequestData
 from tllm.entrypoints.protocol import (
     ChatCompletionRequest,
     ChatCompletionResponse,
@@ -20,19 +20,8 @@ from tllm.entrypoints.protocol import (
     UsageInfo,
     random_uuid,
 )
-from tllm.generate.sampler_utils import SamplerUtils
-from tllm.generate.sampling_params import SamplingParams
-from tllm.generate.token_utils import TokenizerUtils
-from tllm.models.protocol import RequestOutput
-
-
-def to_sampling_params(request: ChatCompletionRequest) -> SamplingParams:
-    return SamplingParams(
-        top_k=request.top_k,
-        top_p=request.top_p,
-        temperature=request.temperature,
-        max_tokens=request.max_tokens,
-    )
+from tllm.generate import MessageProcessor, SamplerUtils, TokenizerUtils
+from tllm.schemas import RequestOutput
 
 
 def create_error_response(message: str) -> ChatCompletionResponse:
@@ -65,7 +54,7 @@ class OpenAIServing:
             request_id=request_id,
             history_request_id=history_request_id,
             q_len=q_len,
-            sampling_params=to_sampling_params(request),
+            sampling_params=request.to_sampling_params(self.message_processor.tok.tokenizer),
             input_ids=input_ids,
             sampler=SamplerUtils(method, self.message_processor.tok),
         )

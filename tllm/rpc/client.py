@@ -11,9 +11,9 @@ from transformers import AutoConfig
 
 from tllm.commons.communicator import Communicator, SingleNodeCommunicator
 from tllm.commons.convert import deserialize_tensor, serialize_tensor
-from tllm.models.protocol import SeqInput
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.rpc.model_client import ClientArgs, ModelClient
+from tllm.schemas import SeqInput
 from tllm.utils import setup_logger
 
 

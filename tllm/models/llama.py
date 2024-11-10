@@ -7,10 +7,9 @@ import torch.nn as nn
 from transformers.models.llama.modeling_llama import LlamaForCausalLM, LlamaRMSNorm, LlamaRotaryEmbedding
 
 from tllm.commons.layers import LlamaDecoderLayer
-from tllm.generate.token_utils import TokenizerUtils
 from tllm.models.cache import AttentionData, CacheManager, RequestsCache
-from tllm.models.protocol import SeqInput
 from tllm.models.utils import build_mask, load_master_weight
+from tllm.schemas import SeqInput
 
 
 def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_layers: int) -> AttentionData:
@@ -215,7 +214,7 @@ class TLlamaForCausalLM(nn.Module):
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps).to(self.dtype)
 
     @classmethod
-    def from_pretrained(cls, logger, config, tok: TokenizerUtils, model_path: str, state_dict: Optional[Any] = None):
+    def from_pretrained(cls, logger, config, model_path: str, state_dict: Optional[Any] = None):
         model = cls(config)
 
         cls.config = config
@@ -228,11 +227,6 @@ class TLlamaForCausalLM(nn.Module):
                 cls.eos_token_ids |= set(config.eos_token_ids)
             else:
                 cls.eos_token_ids.add(config.eos_token_id)
-
-        if tok.tokenizer.eos_token_id:
-            cls.eos_token_ids.add(tok.tokenizer.eos_token_id)
-        eos_token = tok.tokenizer.convert_ids_to_tokens(list(cls.eos_token_ids))
-        cls.logger.debug(f"eos_token_ids: {cls.eos_token_ids}; Tokens: {eos_token}")
 
         state_dict = load_master_weight(model_path)
         state_dict = {k.split("model.")[-1]: v for k, v in state_dict.items()}

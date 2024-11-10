@@ -10,8 +10,7 @@ import torch
 from transformers import AutoConfig
 
 from tllm.engine import AsyncEngine
-from tllm.generate.llm_generator import LLMGenerator
-from tllm.generate.token_utils import TokenizerUtils
+from tllm.generate import LLMGenerator, TokenizerUtils
 from tllm.models.register import HAS_MLX, MODEL_REGISTER
 from tllm.rpc.manager import LocalRPCManager, RPCManager
 from tllm.schemas import NodeConfig
@@ -133,7 +132,7 @@ def init_engine(
 
     MY_CausalLM_CLASS, _ = MODEL_REGISTER[arch]
 
-    model = MY_CausalLM_CLASS.from_pretrained(logger, config, tok, model_path, state_dict)
+    model = MY_CausalLM_CLASS.from_pretrained(logger, config, model_path, state_dict)
     if is_local:
         generator = LLMGenerator(LocalRPCManager(logger, model_path, config), logger, model)
     else:

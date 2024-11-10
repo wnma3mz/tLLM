@@ -1,6 +1,8 @@
 # coding: utf-8
 # Modified by https://github.com/ml-explore/mlx-examples/blob/main/clip/model.py
 
+from dataclasses import dataclass
+
 # only vision model
 from typing import *
 
@@ -10,10 +12,10 @@ from mlx_lm.models.llama import ModelArgs
 import numpy as np
 from transformers import AutoConfig
 
-from tllm.models.mlx_llama import Decoder
 from tllm.commons.mlx_layers import VisionEmbeddings
+from tllm.models.mlx_llama import Decoder
 from tllm.models.utils import load_master_weight
-from dataclasses import dataclass
+
 
 @dataclass
 class CLIPVisionConfig:
@@ -29,7 +31,12 @@ class CLIPVisionConfig:
 
 class ClipVisionModel(nn.Module):
     """Implements the vision encoder transformer from CLIP."""
-    def __init__(self, config: CLIPVisionConfig, first_num_layers: int = -1,):
+
+    def __init__(
+        self,
+        config: CLIPVisionConfig,
+        first_num_layers: int = -1,
+    ):
         super().__init__()
         self.embeddings = VisionEmbeddings(config)
         self.pre_layrnorm = nn.LayerNorm(config.hidden_size)

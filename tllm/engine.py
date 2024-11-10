@@ -3,9 +3,8 @@ import time
 import traceback
 from typing import *
 
-from tllm.generate.llm_generator import LLMGenerator
-from tllm.generate.token_utils import TokenizerUtils
-from tllm.models.protocol import SequenceRequestData
+from tllm.generate import LLMGenerator
+from tllm.schemas import SequenceRequestData
 
 conversations_dict = {}  # List[int] -> str, TODO LRU 缓存
 
@@ -49,38 +48,6 @@ def post_process(data: SequenceRequestData):
     token_ids = data.input_ids + data.output_ids
     conversations_dict[token_ids] = data.history_request_id if data.history_request_id else data.request_id
     return
-
-
-class MessageProcessor:
-    # TODO async
-    def __init__(self, tok: TokenizerUtils):
-        self.tok = tok
-        self.role_set = {"user", "system", "assistant"}
-
-    def parse_message(self, messages: List[Dict[str, Any]]) -> List[Dict[str, str]]:
-        new_messages = []
-        for msg in messages:
-            assert "role" in msg and "content" in msg, ValueError("role and content must be in message")
-            if msg["role"] not in self.role_set:
-                raise ValueError(f"role must be in {self.role_set}")
-            new_messages.append({"role": msg["role"], "content": msg["content"]})
-        return new_messages
-
-    def preprocess(self, messages: List[Dict[str, str]]) -> List[int]:
-        return self.tok.preprocess(messages=messages).input_ids
-
-    def fetch_request_id(self, input_ids: List[int]) -> Tuple[Optional[str], int]:
-        # max_index, max_id = -1, -1
-        # for cache_input_ids, id_ in conversations_dict.items():
-        #     index = list_common_prefix(input_ids, cache_input_ids)
-        #     if index > max_index:
-        #         max_id = id_
-        #         max_index = index
-
-        # if max_index == 0 or max_id == -1:
-        #     return None, -1
-        # return max_id, max_index
-        return None, -1
 
 
 class AsyncEngine:

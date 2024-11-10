@@ -6,8 +6,7 @@ from safetensors import safe_open
 import torch
 
 from tllm import HAS_MLX
-from tllm.models.protocol import GenerateEnd
-from tllm.schemas import MIX_TENSOR
+from tllm.schemas import MIX_TENSOR, GenerateEnd
 
 
 def is_generate_end(output_ids: List[int], eos_token_ids: Set[int], max_tokens: int) -> GenerateEnd:

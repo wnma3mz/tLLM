@@ -67,6 +67,7 @@ class RowParallelLayer(BaseParallelLayer):
     def __call__(self, x: mx.array) -> mx.array:
         return self.layer(x)
 
+
 class VisionRotaryEmbedding(nn.Module):
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
@@ -76,6 +77,7 @@ class VisionRotaryEmbedding(nn.Module):
         seq = mx.arange(seqlen, dtype=self._freqs.dtype)
         freqs = mx.outer(seq, self._freqs)
         return freqs
+
 
 class VisionEmbeddings(nn.Module):
     def __init__(self, config):
@@ -109,14 +111,13 @@ class VisionEmbeddings(nn.Module):
         embed_dim = patch_embeddings.shape[-1]
         # Prepend <CLS> embeddings
         # [batch_size, 1, embed_dim]
-        cls_embeddings = mx.broadcast_to(
-            self.class_embedding, (batch_size, 1, embed_dim)
-        )
+        cls_embeddings = mx.broadcast_to(self.class_embedding, (batch_size, 1, embed_dim))
         # [batch_size, num_patches + 1, embed_dim]
         embeddings = mx.concatenate((cls_embeddings, patch_embeddings), axis=1)
         # Add positional encoding
         embeddings += self.position_embedding.weight
         return embeddings
+
 
 class PatchEmbed(nn.Module):
     def __init__(
@@ -143,6 +144,7 @@ class PatchEmbed(nn.Module):
         hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)
         return hidden_states
 
+
 class PatchMerger(nn.Module):
     def __init__(self, dim: int, context_dim: int, spatial_merge_size: int = 2) -> None:
         super().__init__()
@@ -157,6 +159,7 @@ class PatchMerger(nn.Module):
     def __call__(self, x: mx.array) -> mx.array:
         x = self.mlp(self.ln_q(x).view(-1, self.hidden_size))
         return x
+
 
 class VisionMlp(nn.Module):
     def __init__(self, dim: int, hidden_dim: int, hidden_act: str) -> None:
@@ -175,6 +178,7 @@ def rotate_half(x):
     x2 = x[..., x.shape[-1] // 2 :]
     return mx.concatenate((-x2, x1), axis=-1)
 
+
 def apply_rotary_pos_emb_vision(tensor: mx.array, freqs: mx.array) -> mx.array:
     orig_dtype = tensor.dtype
     tensor = tensor.float()
@@ -186,6 +190,7 @@ def apply_rotary_pos_emb_vision(tensor: mx.array, freqs: mx.array) -> mx.array:
     output = output.to(orig_dtype)
     return output
 
+
 class VisionSdpaAttention(nn.Module):
     def __init__(self, dim: int, num_heads: int = 16) -> None:
         super().__init__()
@@ -193,9 +198,7 @@ class VisionSdpaAttention(nn.Module):
         self.qkv = nn.Linear(dim, dim * 3, bias=True)
         self.proj = nn.Linear(dim, dim)
 
-    def __call__(
-        self, hidden_states: mx.array, cu_seqlens: mx.array, rotary_pos_emb: mx.array = None
-    ) -> mx.array:
+    def __call__(self, hidden_states: mx.array, cu_seqlens: mx.array, rotary_pos_emb: mx.array = None) -> mx.array:
         seq_length = hidden_states.shape[0]
         q, k, v = self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
         q = apply_rotary_pos_emb_vision(q.unsqueeze(0), rotary_pos_emb).squeeze(0)
