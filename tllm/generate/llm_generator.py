@@ -5,13 +5,14 @@ import numpy as np
 import torch
 from transformers import AutoImageProcessor, AutoProcessor
 
+from tllm.models.register import sampling_func
 from tllm.models.utils import is_generate_end
 from tllm.rpc.manager import RPCManager
 from tllm.schemas import MIX_TENSOR, ForwardResult, SeqInput, SequenceRequestData
 
 
 def merge_mm_input(mm_input_list: List[Dict[str, List[np.ndarray]]]) -> Optional[Dict[str, List[MIX_TENSOR]]]:
-    if all([x is None for x in mm_input_list]):
+    if all([x is None for x in mm_input_list]) or all([len(x) == 0 for x in mm_input_list]):
         return None
     # TODO: merge multi request
     return {
@@ -134,7 +135,7 @@ class LLMGenerator:
         s1 = time.perf_counter()
         # 根据 seq 拆开，之后直接在 sampler 中处理
         for seq_logits, sequence_request in zip(seq_logits_list, sequence_request_list):
-            generate_ids = sequence_request.sampler.sampling(seq_logits, sequence_request.sampling_params)
+            generate_ids = sampling_func(seq_logits)  # TODO: sequence_request.sampling_params
             generate_texts = sequence_request.sampler.decode(generate_ids)
             sequence_request.output_ids.append(generate_ids[0])
 

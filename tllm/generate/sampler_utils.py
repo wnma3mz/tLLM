@@ -47,20 +47,13 @@ class SamplerUtils:
     def decode(self, generate_ids: List[int]) -> List[str]:
         return [self.tok.decode([x]) for x in generate_ids]
 
-    def sampling(self, logits: torch.Tensor, sampling_params: Optional[SamplingParams] = None) -> List[int]:
+    def sampling(self, logits: MIX_TENSOR, sampling_params: Optional[SamplingParams] = None) -> List[int]:
         if self.method == "greedy":
-            return self.greedy_decode(logits)
+            raise ValueError("Greedy decoding is not supported in sampling method")
         elif self.method == "beam_search":
             return self.beam_search_decode(logits, sampling_params)
         elif self.method == "sampling":
             return self.sampling_decode(logits, sampling_params)
-
-    def greedy_decode(self, logits: MIX_TENSOR) -> List[int]:
-        # logits shape: [seq_len, vocab_size]
-        if HAS_MLX:
-            return mx.argmax(logits, axis=-1).tolist()
-        else:
-            return torch.argmax(logits, dim=-1).tolist()
 
     def sampling_decode(self, logits: torch.Tensor, sampling_params: SamplingParams) -> List[int]:
         generate_logits = logits[:, -1]

@@ -12,3 +12,11 @@ if HAS_MLX:
     MODEL_REGISTER.update({"MLXLlamaForCausalLM": (MLXLlamaForCausalLM, MLXLlamaModel)})
     MODEL_REGISTER.update({"MLXQwen2ForCausalLM": (MLXQwen2ForCausalLM, MLXQwen2Model)})
     MODEL_REGISTER.update({"MLXQwen2VLForConditionalGeneration": (MLXQwen2VLForConditionalGeneration, MLXQwen2Model)})
+
+    from tllm.models.mlx_helper import greedy_decode
+
+    sampling_func = greedy_decode
+else:
+    from tllm.models.torch_helper import greedy_decode
+
+    sampling_func = greedy_decode

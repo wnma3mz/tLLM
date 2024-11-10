@@ -170,8 +170,6 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
 
         if pixel_values is not None:
             pixel_values = mx.array(pixel_values).astype(self.dtype)
-            print("pixel_values shape: ", pixel_values.shape)
-            print("pixel_values type: ", pixel_values.dtype)
             image_embeds = self.visual(pixel_values, grid_thw=mx.array(image_grid_thw))
             n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
             n_image_features = image_embeds.shape[0]
