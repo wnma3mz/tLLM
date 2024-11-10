@@ -35,19 +35,22 @@ class ChatInterface:
         chatbot = gr.Chatbot(height=600, show_label=False)
 
         with gr.Row():
-            msg = gr.Textbox(
-                show_label=False,
-                placeholder="输入消息...",
-                container=False,
-                scale=12,
-            )
-            submit_btn = gr.Button("发送", elem_classes="button-primary", scale=1)
+            with gr.Column(scale=0.05):
+                img = gr.Image(type="filepath", label="上传图片", container=True)
+            with gr.Column(scale=13):
+                with gr.Row():
+                    msg = gr.Textbox(
+                        show_label=False,
+                        placeholder="输入消息...",
+                        container=False,
+                    )
+                    submit_btn = gr.Button("发送", elem_classes="button-primary", scale=0.05)
 
-        with gr.Row():
-            stop_btn = gr.Button("停止生成", elem_classes="button-secondary", scale=1)
-            clear_btn = gr.Button("清空对话", elem_classes="button-secondary", scale=1)
+                with gr.Row():
+                    stop_btn = gr.Button("停止生成", elem_classes="button-secondary", scale=1)
+                    clear_btn = gr.Button("清空对话", elem_classes="button-secondary", scale=1)
 
-        return chatbot, msg, submit_btn, stop_btn, clear_btn
+        return chatbot, img, msg, submit_btn, stop_btn, clear_btn
 
     def _create_config_column(self) -> List[gr.components.Component]:
         """创建配置界面的侧列"""
@@ -85,9 +88,14 @@ class ChatInterface:
             formatted_history.append({"role": "system", "content": self.config.system_prompt})
 
         for message in history:
-            formatted_history.append({"role": "user", "content": message[0]})
-            if message[1] is not None:
-                formatted_history.append({"role": "assistant", "content": message[1]})
+            mm_input, user_input, assistant_response = message
+            if mm_input is None:
+                formatted_history.append({"role": "user", "content": user_input})
+            else:
+                mm_content = [{"type": "text", "text": user_input}, {"type": "image_url", "image_url": mm_input}]
+                formatted_history.append({"role": "user", "content": mm_content})
+            if assistant_response is not None:
+                formatted_history.append({"role": "assistant", "content": assistant_response})
 
         return formatted_history
 
@@ -133,9 +141,11 @@ class ChatInterface:
 
                     yield history, self.metric_text.format(token_nums=tokens_generated, speed=tokens_per_second)
 
-    def _handle_user_input(self, user_message: str, history: List[List[str]]) -> Tuple[gr.update, List[List[str]]]:
+    def _handle_user_input(
+        self, img_path: str, user_message: str, history: List[List[str]]
+    ) -> Tuple[gr.update, List[List[str]]]:
         """处理用户输入"""
-        return gr.update(value="", interactive=True), history + [[user_message, None]]
+        return gr.update(value="", interactive=True), history + [[img_path, user_message, None]]
 
     def _handle_stop_generation(self) -> None:
         """处理停止生成"""
@@ -151,7 +161,7 @@ class ChatInterface:
         with gr.Blocks(css=custom_css, title="tLLM Chat Demo") as demo:
             with gr.Row():
                 with gr.Column(scale=4):
-                    chatbot, msg, submit_btn, stop_btn, clear_btn = self._create_chat_column()
+                    chatbot, img, msg, submit_btn, stop_btn, clear_btn = self._create_chat_column()
 
                 with gr.Column(scale=1):
                     config_components = self._create_config_column()
@@ -159,11 +169,11 @@ class ChatInterface:
 
             self._setup_config_updates(config_components)
 
-            submit_btn.click(self._handle_user_input, inputs=[msg, chatbot], outputs=[msg, chatbot], queue=False).then(
-                self._handle_bot_response, inputs=[chatbot], outputs=[chatbot, metrics]
-            )
+            submit_btn.click(
+                self._handle_user_input, inputs=[img, msg, chatbot], outputs=[msg, chatbot], queue=False
+            ).then(self._handle_bot_response, inputs=[chatbot], outputs=[chatbot, metrics])
 
-            msg.submit(self._handle_user_input, inputs=[msg, chatbot], outputs=[msg, chatbot], queue=False).then(
+            msg.submit(self._handle_user_input, inputs=[img, msg, chatbot], outputs=[msg, chatbot], queue=False).then(
                 self._handle_bot_response, inputs=[chatbot], outputs=[chatbot, metrics]
             )
 

@@ -8,7 +8,8 @@ from transformers.models.llama.modeling_llama import LlamaForCausalLM, LlamaRMSN
 
 from tllm.commons.layers import LlamaDecoderLayer
 from tllm.models.cache import AttentionData, CacheManager, RequestsCache
-from tllm.models.utils import build_mask, load_master_weight
+from tllm.models.torch_helper import build_mask
+from tllm.models.utils import load_master_weight
 from tllm.schemas import SeqInput
 
 
