@@ -3,14 +3,61 @@ from typing import AsyncGenerator, Dict, List, Optional, Union
 
 import numpy as np
 import torch
+from transformers import AutoImageProcessor, AutoProcessor
 
 from tllm.models.utils import is_generate_end
 from tllm.rpc.manager import RPCManager
 from tllm.schemas import MIX_TENSOR, ForwardResult, SeqInput, SequenceRequestData
 
 
-def merge_mm_input(mm_input_list: List[Dict[str, List[MIX_TENSOR]]]) -> Optional[Dict[str, List[MIX_TENSOR]]]:
-    return None
+def merge_mm_input(mm_input_list: List[Dict[str, List[np.ndarray]]]) -> Optional[Dict[str, List[MIX_TENSOR]]]:
+    if all([x is None for x in mm_input_list]):
+        return None
+    # TODO: merge multi request
+    return {
+        "pixel_values": mm_input_list[0]["image"]["pixel_values"],
+        "image_grid_thw": mm_input_list[0]["image"]["image_grid_thw"],
+    }
+
+
+def process_mm_input(
+    seq_request: SequenceRequestData, processor: AutoProcessor, **kwargs
+) -> Dict[str, List[np.ndarray]]:
+    if seq_request.multi_modal_inputs is None and len(seq_request.multi_modal_inputs) == 0:
+        return {}
+    assert processor is not None
+    image_processor: AutoImageProcessor = processor.image_processor
+    images = seq_request.multi_modal_inputs.get("image", None)
+    videos = seq_request.multi_modal_inputs.get("video", None)
+
+    vision_start_id = kwargs["vision_start_id"]
+    vision_end_id = kwargs["vision_end_id"]
+
+    if images:
+        image_inputs = image_processor(images=images, videos=None)
+        image_grid_thw = image_inputs["image_grid_thw"]
+        merge_length = image_processor.merge_size**2
+        # 全部放到开头
+        image_token_id = kwargs["image_token_id"]
+        image_input_ids = []
+        for x in image_grid_thw:
+            repeat_times = x.prod() // merge_length
+            image_input_ids += [vision_start_id] + [image_token_id] * repeat_times + [vision_end_id]
+        seq_request.input_ids = image_input_ids + seq_request.input_ids
+        return {"image": image_inputs}
+    if videos:
+        video_inputs = image_processor(images=None, videos=videos)
+        video_grid_thw = video_inputs["image_grid_thw"]
+        merge_length = image_processor.merge_size**2
+        # 全部放到开头
+        video_end_id = kwargs["video_end_id"]
+        image_input_ids = []
+        for x in video_grid_thw:
+            repeat_times = x.prod() // merge_length
+            image_input_ids += [vision_start_id] + [video_end_id] * repeat_times + [vision_end_id]
+        seq_request.input_ids = image_input_ids + seq_request.input_ids
+        return {"video": video_inputs}
+    return {}
 
 
 class LLMGenerator:
@@ -19,6 +66,8 @@ class LLMGenerator:
         self.pp_size = len(server)
         self.logger = logger
         self.model = model
+        self.processor = getattr(model, "processor", None)
+        self.mm_config = getattr(model, "mm_config", None)
 
     def forward(self, inputs_embeds: MIX_TENSOR, seq_input: SeqInput) -> ForwardResult:
         hidden_states = inputs_embeds
@@ -51,13 +100,15 @@ class LLMGenerator:
         for sequence_request in sequence_request_list:
             uuid_list.append(sequence_request.request_id)
             # 如果是 prefilling，则为 input_ids; 否则，为 output_ids[-1]
-            # input_ids: bsz x seq_len
+            # input_ids: seq_len
             if sequence_request.is_prefill:
-                if sequence_request.history_request_id:
-                    uuid_list[-1] = sequence_request.history_request_id
+                # if sequence_request.history_request_id:
+                #     uuid_list[-1] = sequence_request.history_request_id
+                if self.processor is not None:
+                    mm_input_list.append(process_mm_input(sequence_request, self.processor, **self.mm_config))
                 input_ids_list.append(np.array(sequence_request.input_ids))
-                seq_len_list.append(sequence_request.q_len)
-                mm_input_list.append(sequence_request.multi_modal_inputs)  # TODO: multi_modal_inputs
+                # seq_len_list.append(sequence_request.q_len) # 需要搭配 history_request_id 使用
+                seq_len_list.append(len(sequence_request.input_ids))
             else:
                 input_ids_list.append(np.array([sequence_request.output_ids[-1]]))
                 seq_len_list.append(1)

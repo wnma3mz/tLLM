@@ -41,7 +41,7 @@ class OpenAIServing:
 
     async def create_chat_completion(self, request: ChatCompletionRequest, raw_request: Request):
         request_id = f"chat-{random_uuid()}"
-        messages = self.message_processor.parse_message(request.messages)
+        messages, mm_input_dict = await self.message_processor.parse_message(request.messages)
         input_ids = self.message_processor.preprocess(messages)
         history_request_id, q_len = self.message_processor.fetch_request_id(input_ids)
 
@@ -57,6 +57,7 @@ class OpenAIServing:
             sampling_params=request.to_sampling_params(self.message_processor.tok.tokenizer),
             input_ids=input_ids,
             sampler=SamplerUtils(method, self.message_processor.tok),
+            multi_modal_inputs=mm_input_dict,
         )
         result_generator = self.engine.generate_stream(sequence_data)
 

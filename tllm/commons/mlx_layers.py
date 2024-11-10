@@ -1,4 +1,5 @@
 import itertools
+import math
 from typing import *
 
 import mlx.core as mx
@@ -73,7 +74,7 @@ class VisionRotaryEmbedding(nn.Module):
         super().__init__()
         self._freqs = 1.0 / (theta ** (mx.arange(0, dim, 2) / dim))
 
-    def forward(self, seqlen: int) -> mx.array:
+    def __call__(self, seqlen: int) -> mx.array:
         seq = mx.arange(seqlen, dtype=self._freqs.dtype)
         freqs = mx.outer(seq, self._freqs)
         return freqs
@@ -137,11 +138,10 @@ class PatchEmbed(nn.Module):
         self.proj = nn.Conv3d(in_channels, embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=False)
 
     def __call__(self, hidden_states: mx.array) -> mx.array:
-        target_dtype = self.proj.weight.dtype
-        hidden_states = hidden_states.view(
-            -1, self.in_channels, self.temporal_patch_size, self.patch_size, self.patch_size
+        hidden_states = hidden_states.reshape(
+            -1, self.temporal_patch_size, self.patch_size, self.patch_size, self.in_channels
         )
-        hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)
+        hidden_states = self.proj(hidden_states).reshape(-1, self.embed_dim)
         return hidden_states
 
 
@@ -157,7 +157,9 @@ class PatchMerger(nn.Module):
         ]
 
     def __call__(self, x: mx.array) -> mx.array:
-        x = self.mlp(self.ln_q(x).view(-1, self.hidden_size))
+        x = self.ln_q(x).reshape(-1, self.hidden_size)
+        for layer in self.mlp:
+            x = layer(x)
         return x
 
 
@@ -180,14 +182,14 @@ def rotate_half(x):
 
 
 def apply_rotary_pos_emb_vision(tensor: mx.array, freqs: mx.array) -> mx.array:
-    orig_dtype = tensor.dtype
-    tensor = tensor.float()
+    # orig_dtype = tensor.dtype
+    # tensor = tensor.float()
     cos = freqs.cos()
     sin = freqs.sin()
-    cos = cos.unsqueeze(1).repeat(1, 1, 2).unsqueeze(0).float()
-    sin = sin.unsqueeze(1).repeat(1, 1, 2).unsqueeze(0).float()
+    cos = mx.expand_dims(mx.tile(mx.expand_dims(cos, axis=1), (1, 1, 2)), axis=0)
+    sin = mx.expand_dims(mx.tile(mx.expand_dims(sin, axis=1), (1, 1, 2)), axis=0)
     output = (tensor * cos) + (rotate_half(tensor) * sin)
-    output = output.to(orig_dtype)
+    # output = output.to(orig_dtype)
     return output
 
 
@@ -198,20 +200,29 @@ class VisionSdpaAttention(nn.Module):
         self.qkv = nn.Linear(dim, dim * 3, bias=True)
         self.proj = nn.Linear(dim, dim)
 
-    def __call__(self, hidden_states: mx.array, cu_seqlens: mx.array, rotary_pos_emb: mx.array = None) -> mx.array:
+    def __call__(self, hidden_states: mx.array, cu_seqlens: List[int], rotary_pos_emb: mx.array = None) -> mx.array:
         seq_length = hidden_states.shape[0]
-        q, k, v = self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
-        q = apply_rotary_pos_emb_vision(q.unsqueeze(0), rotary_pos_emb).squeeze(0)
-        k = apply_rotary_pos_emb_vision(k.unsqueeze(0), rotary_pos_emb).squeeze(0)
+        q, k, v = self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).transpose(1, 0, 2, 3)
+        q = apply_rotary_pos_emb_vision(mx.expand_dims(q, axis=0), rotary_pos_emb)[0]
+        k = apply_rotary_pos_emb_vision(mx.expand_dims(k, axis=0), rotary_pos_emb)[0]
 
-        attention_mask = mx.zeros([1, seq_length, seq_length], device=q.device, dtype=mx.bool)
+        attention_mask = mx.zeros(shape=(1, seq_length, seq_length))
         for i in range(1, len(cu_seqlens)):
-            attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = True
-        q = q.transpose(0, 1)
-        k = k.transpose(0, 1)
-        v = v.transpose(0, 1)
-        attn_output = mx.fast.scaled_dot_product_attention(q, k, v, attention_mask)
-        attn_output = attn_output.transpose(0, 1)
+            l, r = cu_seqlens[i - 1], cu_seqlens[i]
+            attention_mask[..., l:r, l:r] = 1
+        attention_mask = mx.where(attention_mask, 0, -math.inf)
+
+        q = q.transpose(1, 0, 2)
+        k = k.transpose(1, 0, 2)
+        v = v.transpose(1, 0, 2)
+        attn_output = mx.fast.scaled_dot_product_attention(
+            mx.expand_dims(q, axis=0),
+            mx.expand_dims(k, axis=0),
+            mx.expand_dims(v, axis=0),
+            scale=1.0,
+            mask=attention_mask,
+        )[0]
+        attn_output = attn_output.transpose(1, 0, 2)
         attn_output = attn_output.reshape(seq_length, -1)
         attn_output = self.proj(attn_output)
         return attn_output

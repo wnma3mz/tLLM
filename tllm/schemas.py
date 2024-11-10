@@ -8,8 +8,23 @@ import numpy as np
 from pydantic import BaseModel
 
 finish_reason_type = Literal["length", "stop", None]
+modal_type = Literal["text", "image_url"]
 
 MIX_TENSOR = Union[np.ndarray, "torch.Tensor", "mx.array"]
+
+
+class UrlItem(BaseModel):
+    url: Optional[str] = None
+    file_path: Optional[str] = None
+
+
+class MultiModalContent(BaseModel):
+    type: modal_type
+    text: Optional[str] = None
+    image_url: Optional[UrlItem] = None
+
+
+MESSAGES = List[Dict[str, Union[str, List[MultiModalContent]]]]
 
 
 class NodeConfig(BaseModel):
@@ -115,7 +130,7 @@ class SequenceRequestData:
     request_id: str
     input_ids: List[int]
     sampling_params: SamplingParams
-    sampler: "SamplerUtils" # TODO
+    sampler: "SamplerUtils"  # TODO
 
     multi_modal_inputs: Optional[Dict[str, List[PIL.Image.Image]]] = None
     history_request_id: Optional[str] = None

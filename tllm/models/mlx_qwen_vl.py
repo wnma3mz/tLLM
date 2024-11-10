@@ -1,14 +1,12 @@
 import glob
 import itertools
 import os
-import re
 from typing import *
 
 import mlx.core as mx
 import mlx.nn as nn
-from mlx_lm.models.llama import ModelArgs
 import numpy as np
-from transformers import AutoConfig
+from transformers import AutoConfig, AutoProcessor
 
 from tllm.commons.mlx_layers import PatchEmbed, PatchMerger, VisionMlp, VisionRotaryEmbedding, VisionSdpaAttention
 from tllm.models.mlx_llama import quantization_func
@@ -16,7 +14,7 @@ from tllm.models.utils import load_master_weight
 
 
 class Qwen2VLVisionBlock(nn.Module):
-    def __init__(self, config) -> None:
+    def __init__(self, config: AutoConfig) -> None:
         super().__init__()
         self.norm1 = nn.LayerNorm(config.embed_dim, eps=1e-6)
         self.norm2 = nn.LayerNorm(config.embed_dim, eps=1e-6)
@@ -25,7 +23,7 @@ class Qwen2VLVisionBlock(nn.Module):
         self.attn = VisionSdpaAttention(config.embed_dim, num_heads=config.num_heads)
         self.mlp = VisionMlp(dim=config.embed_dim, hidden_dim=mlp_hidden_dim, hidden_act=config.hidden_act)
 
-    def forward(self, hidden_states, cu_seqlens, rotary_pos_emb) -> mx.array:
+    def __call__(self, hidden_states, cu_seqlens, rotary_pos_emb) -> mx.array:
         hidden_states = hidden_states + self.attn(
             self.norm1(hidden_states), cu_seqlens=cu_seqlens, rotary_pos_emb=rotary_pos_emb
         )
@@ -54,27 +52,29 @@ class Qwen2VisionModel(nn.Module):
 
     def rot_pos_emb(self, grid_thw):
         pos_ids = []
-        for t, h, w in grid_thw:
-            hpos_ids = mx.arange(h).unsqueeze(1).expand(-1, w)
+
+        for thw in grid_thw:
+            t, h, w = thw.tolist()
+            hpos_ids = mx.repeat(mx.expand_dims(mx.arange(h), axis=1), w, axis=1)
             hpos_ids = hpos_ids.reshape(
                 h // self.spatial_merge_size,
                 self.spatial_merge_size,
                 w // self.spatial_merge_size,
                 self.spatial_merge_size,
             )
-            hpos_ids = hpos_ids.permute(0, 2, 1, 3)
+            hpos_ids = hpos_ids.transpose(0, 2, 1, 3)
             hpos_ids = hpos_ids.flatten()
 
-            wpos_ids = mx.arange(w).unsqueeze(0).expand(h, -1)
+            wpos_ids = mx.repeat(mx.expand_dims(mx.arange(w), axis=0), h, axis=0)
             wpos_ids = wpos_ids.reshape(
                 h // self.spatial_merge_size,
                 self.spatial_merge_size,
                 w // self.spatial_merge_size,
                 self.spatial_merge_size,
             )
-            wpos_ids = wpos_ids.permute(0, 2, 1, 3)
+            wpos_ids = wpos_ids.transpose(0, 2, 1, 3)
             wpos_ids = wpos_ids.flatten()
-            pos_ids.append(mx.stack([hpos_ids, wpos_ids], axis=-1).repeat(t, 1))
+            pos_ids.append(mx.repeat(mx.stack([hpos_ids, wpos_ids], axis=-1), t, axis=1))
         pos_ids = mx.concatenate(pos_ids, axis=0)
         max_grid_size = grid_thw[:, 1:].max()
         rotary_pos_emb_full = self.rotary_pos_emb(max_grid_size)
@@ -85,8 +85,9 @@ class Qwen2VisionModel(nn.Module):
         hidden_states = self.patch_embed(hidden_states)
         rotary_pos_emb = self.rot_pos_emb(grid_thw)
 
-        cu_seqlens = mx.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(dim=0, dtype=mx.int32)
-        cu_seqlens = mx.pad(cu_seqlens, (1, 0), value=0)
+        repeated = mx.repeat(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0])
+        cu_seqlens = mx.cumsum(repeated)
+        cu_seqlens = mx.pad(cu_seqlens, pad_width=(1, 0)).tolist()
 
         for blk in self.blocks:
             hidden_states = blk(hidden_states, cu_seqlens=cu_seqlens, rotary_pos_emb=rotary_pos_emb)
@@ -107,6 +108,15 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
     @classmethod
     def from_pretrained(cls, logger, config, model_path: str, state_dict: Optional[Any] = None):
         model = cls(config)
+
+        # load processor
+        model.processor = AutoProcessor.from_pretrained(model_path, trust_remote_code=True)
+        model.mm_config = {
+            "vision_start_id": config.vision_start_token_id,
+            "vision_end_id": config.vision_end_token_id,
+            "image_token_id": config.image_token_id,
+            "video_token_id": config.video_token_id,
+        }
 
         cls.config = config
         cls.num_layers = config.num_hidden_layers
@@ -150,49 +160,46 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
     def get_input_embeddings(
         self,
         x: np.ndarray,
-        pixel_values: Optional[mx.array] = None,
-        pixel_values_videos: Optional[mx.array] = None,
-        image_grid_thw: Optional[mx.array] = None,
-        video_grid_thw: Optional[mx.array] = None,
+        pixel_values: Optional[np.ndarray] = None,
+        pixel_values_videos: Optional[np.ndarray] = None,
+        image_grid_thw: Optional[np.ndarray] = None,
+        video_grid_thw: Optional[np.ndarray] = None,
     ) -> mx.array:
         input_ids = mx.array(x)
         inputs_embeds = self.embed_tokens(input_ids)
 
         if pixel_values is not None:
-            pixel_values = pixel_values.type(self.visual.get_dtype())
-            image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
+            pixel_values = mx.array(pixel_values).astype(self.dtype)
+            print("pixel_values shape: ", pixel_values.shape)
+            print("pixel_values type: ", pixel_values.dtype)
+            image_embeds = self.visual(pixel_values, grid_thw=mx.array(image_grid_thw))
             n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
             n_image_features = image_embeds.shape[0]
             if n_image_tokens != n_image_features:
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
                 )
-            image_mask = (
-                (input_ids == self.config.image_token_id)
-                .unsqueeze(-1)
-                .expand_as(inputs_embeds)
-                .to(inputs_embeds.device)
-            )
-            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+
+            image_mask = input_ids == self.config.image_token_id  # shape: (seq_len, )
+            image_mask_ind = [i for i, val in enumerate(image_mask) if val]
+            image_embeds = image_embeds.astype(inputs_embeds.dtype)
+
+            inputs_embeds[image_mask_ind] = image_embeds  # mlx not support bool mask
 
         if pixel_values_videos is not None:
-            pixel_values_videos = pixel_values_videos.type(self.visual.get_dtype())
-            video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
+            pixel_values_videos = mx.array(pixel_values_videos).astype(self.dtype)
+            video_embeds = self.visual(pixel_values_videos, grid_thw=mx.array(video_grid_thw))
             n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
             n_video_features = video_embeds.shape[0]
             if n_video_tokens != n_video_features:
                 raise ValueError(
                     f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
                 )
-            video_mask = (
-                (input_ids == self.config.video_token_id)
-                .unsqueeze(-1)
-                .expand_as(inputs_embeds)
-                .to(inputs_embeds.device)
-            )
-            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+
+            video_mask = input_ids == self.config.video_token_id  # shape: (seq_len, )
+            video_mask_ind = [i for i, val in enumerate(video_mask) if val]
+            video_embeds = video_embeds.astype(inputs_embeds.dtype)
+            inputs_embeds[video_mask_ind] = video_embeds  # mlx not support bool mask
 
         return inputs_embeds
 

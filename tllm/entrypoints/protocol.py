@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from transformers import PreTrainedTokenizer
 from typing_extensions import Annotated
 
-from tllm.schemas import SamplingParams
+from tllm.schemas import MESSAGES, SamplingParams
 
 
 def random_uuid() -> str:
@@ -98,7 +98,7 @@ class ChatCompletionNamedToolChoiceParam(OpenAIBaseModel):
 class ChatCompletionRequest(OpenAIBaseModel):
     # Ordered by official OpenAI API documentation
     # https://platform.openai.com/docs/api-reference/chat/create
-    messages: List[Dict[str, Any]]
+    messages: MESSAGES
     model: str
     frequency_penalty: Optional[float] = 0.0
     logit_bias: Optional[Dict[str, float]] = None
