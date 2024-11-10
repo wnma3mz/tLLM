@@ -80,7 +80,7 @@ class ChatInterface:
         for component in components:
             component.change(update_config, inputs=components)
 
-    def _format_chat_history(self, history: List[List[str]]) -> List[Dict[str, str]]:
+    def _format_chat_history(self, img_path, history: List[List[str]]) -> List[Dict[str, str]]:
         """将聊天历史转换为OpenAI格式"""
         formatted_history = []
 
@@ -88,21 +88,24 @@ class ChatInterface:
             formatted_history.append({"role": "system", "content": self.config.system_prompt})
 
         for message in history:
-            mm_input, user_input, assistant_response = message
-            if mm_input is None:
+            user_input, assistant_response = message
+            if img_path is None:
                 formatted_history.append({"role": "user", "content": user_input})
             else:
-                mm_content = [{"type": "text", "text": user_input}, {"type": "image_url", "image_url": mm_input}]
+                mm_content = [
+                    {"type": "text", "text": user_input},
+                    {"type": "image_url", "image_url": {"url": img_path}},
+                ]
                 formatted_history.append({"role": "user", "content": mm_content})
             if assistant_response is not None:
                 formatted_history.append({"role": "assistant", "content": assistant_response})
 
         return formatted_history
 
-    def _prepare_request_data(self, history: List[List[str]]) -> Dict[str, Any]:
+    def _prepare_request_data(self, img_path: str, history: List[List[str]]) -> Dict[str, Any]:
         """准备请求数据"""
         return {
-            "messages": self._format_chat_history(history),
+            "messages": self._format_chat_history(img_path, history),
             "model": "tt",
             "stream": True,
             "temperature": self.config.temperature,
@@ -111,10 +114,10 @@ class ChatInterface:
             "max_tokens": self.config.max_tokens,
         }
 
-    def _handle_bot_response(self, history: List[List[str]]) -> Generator:
+    def _handle_bot_response(self, img_path: str, history: List[List[str]]) -> Generator:
         """处理机器人的响应"""
         self.should_stop = False
-        data = self._prepare_request_data(history)
+        data = self._prepare_request_data(img_path, history)
         response = requests.post(self.config.chat_url, json=data, stream=True)
 
         tokens_generated = 0
@@ -141,11 +144,9 @@ class ChatInterface:
 
                     yield history, self.metric_text.format(token_nums=tokens_generated, speed=tokens_per_second)
 
-    def _handle_user_input(
-        self, img_path: str, user_message: str, history: List[List[str]]
-    ) -> Tuple[gr.update, List[List[str]]]:
+    def _handle_user_input(self, user_message: str, history: List[List[str]]) -> Tuple[gr.update, List[List[str]]]:
         """处理用户输入"""
-        return gr.update(value="", interactive=True), history + [[img_path, user_message, None]]
+        return gr.update(value="", interactive=True), history + [[user_message, None]]
 
     def _handle_stop_generation(self) -> None:
         """处理停止生成"""
@@ -169,12 +170,12 @@ class ChatInterface:
 
             self._setup_config_updates(config_components)
 
-            submit_btn.click(
-                self._handle_user_input, inputs=[img, msg, chatbot], outputs=[msg, chatbot], queue=False
-            ).then(self._handle_bot_response, inputs=[chatbot], outputs=[chatbot, metrics])
+            submit_btn.click(self._handle_user_input, inputs=[msg, chatbot], outputs=[msg, chatbot], queue=False).then(
+                self._handle_bot_response, inputs=[img, chatbot], outputs=[chatbot, metrics]
+            )
 
-            msg.submit(self._handle_user_input, inputs=[img, msg, chatbot], outputs=[msg, chatbot], queue=False).then(
-                self._handle_bot_response, inputs=[chatbot], outputs=[chatbot, metrics]
+            msg.submit(self._handle_user_input, inputs=[msg, chatbot], outputs=[msg, chatbot], queue=False).then(
+                self._handle_bot_response, inputs=[img, chatbot], outputs=[chatbot, metrics]
             )
 
             stop_btn.click(self._handle_stop_generation, queue=False)
