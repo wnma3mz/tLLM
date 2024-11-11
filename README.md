@@ -8,7 +8,7 @@
 
 2. install dependencies
 
-- for mlx:   `pip install -r requirements[mlx].txt`
+- for mlx:   `pip install -r requirements-mlx.txt`
 - for intel: `pip install -r requirements.txt`
 
 3. run server 
