@@ -5,6 +5,7 @@ from typing import *
 import grpc
 import torch
 
+from tllm.commons.communicator import SingleNodeCommunicator
 from tllm.commons.convert import deserialize_tensor, serialize_tensor
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.rpc.model_client import ClientArgs, ModelClient
@@ -69,16 +70,16 @@ class RPCManager:
 
 class LocalRPCManager:
     # 并不发生通信，仅加载模型
-    def __init__(self, logger, model_path: str, config):
+    def __init__(self, logger, model_path: str, num_hidden_layers: int):
         client_args = ClientArgs(
             ip_addr="localhost",
             port=-1,
             start_idx=0,
-            end_idx=config.num_hidden_layers,
+            end_idx=num_hidden_layers,
             master_url="localhost",
         )
         model_client = ModelClient(logger=logger, args=client_args)
-        self.model = model_client.load_model(config, model_path)
+        self.model = model_client.load_model(SingleNodeCommunicator(), model_path)
 
     def __len__(self):
         return 1

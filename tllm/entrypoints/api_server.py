@@ -1,5 +1,6 @@
 import argparse
 from contextlib import asynccontextmanager
+import logging
 import os
 import time
 from typing import *
@@ -12,7 +13,7 @@ import uvicorn
 from tllm.entrypoints.layer_manager import LayerManager
 from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionResponse
 from tllm.entrypoints.server_chat import OpenAIServing
-from tllm.utils import init_engine, logger, parse_url_list, setup_seed, start_client
+from tllm.utils import init_engine, parse_url_list, setup_logger, setup_seed, start_client
 
 
 @asynccontextmanager
@@ -143,12 +144,13 @@ if __name__ == "__main__":
     args = parse_args()
     port = args.port
 
+    logger = setup_logger(__name__, logging.DEBUG)  # logging.INFO
     url_list = None if args.config_path is None else parse_url_list(args.config_path)
-    engine, tok = init_engine(args.model_path, args.is_local, url_list)
+    engine, tok = init_engine(args.model_path, args.is_local, logger, url_list)
 
     s1 = time.time()
     if args.need_start_client:
-        start_client(logger, args.config_path, args.model_path)
+        start_client(logger, args.config_path, args.model_path, logger)
     logger.info(f"init cost time {time.time() - s1}")
     openai_serving_chat = OpenAIServing(engine, tok, args)
 

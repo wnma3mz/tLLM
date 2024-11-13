@@ -27,6 +27,7 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
         self.ip_addr = ip_addr
         self.prefix_log_str = f"IP: [{self.ip_addr}]"
         uuid_shape_list = [None, None]
+        self.server = None
         if self.rank == 0:
             pass
         else:
@@ -38,11 +39,28 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
 
                 _ = self.model.forward(hidden_states, seq_input=seq_input)
 
-    def InitModel(self, request: schemas_pb2.ModelConfig, context: grpc.ServicerContext):
-        self.init_model_flag = True
-        self.master_url = request.master_url
-        self.next_pp_rank = request.next_pp_rank
-        return schemas_pb2.StatusResponse(msg="Init model completed", status=200)
+    def start(self):
+        self.server = grpc.server(
+            futures.ThreadPoolExecutor(max_workers=10),
+            options=[
+                ("grpc.max_metadata_size", 32 * 1024 * 1024),
+                ("grpc.max_send_message_length", 128 * 1024 * 1024),
+                ("grpc.max_receive_message_length", 128 * 1024 * 1024),
+            ],
+        )
+
+        schemas_pb2_grpc.add_RPCServiceServicer_to_server(self, self.server)
+        self.server.add_insecure_port(f"[::]:{args.port}")
+        self.logger.info(f"Starting gRPC server on port {args.port}")
+        self.server.start()
+
+    def stop(self):
+        if self.server:
+            try:
+                self.server.stop(grace=5)
+                self.server.wait_for_termination()
+            except Exception as e:
+                pass
 
     def Forward(self, request: schemas_pb2.ForwardRequest, context: grpc.ServicerContext):
         """
@@ -78,9 +96,6 @@ class RPCServicer(schemas_pb2_grpc.RPCServiceServicer):
     def Health(self, request, context):
         return schemas_pb2.HealthResponse(msg="Healthy", status=200)
 
-    def InitModelFlag(self, request, context):
-        return schemas_pb2.InitModelFlagResponse(msg=self.init_model_flag, status=200)
-
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -95,34 +110,11 @@ def parse_args():
     return parser.parse_args()
 
 
-def start_grpc_server(comm: Communicator, model, logger, args, is_debug=False):
-    server = grpc.server(
-        futures.ThreadPoolExecutor(max_workers=10),
-        options=[
-            ("grpc.max_metadata_size", 32 * 1024 * 1024),
-            ("grpc.max_send_message_length", 128 * 1024 * 1024),
-            ("grpc.max_receive_message_length", 128 * 1024 * 1024),
-        ],
-    )
-    rpc_servicer = RPCServicer(comm, model, comm.rank, args.pp_rank, args.ip_addr)
-    if comm.is_rank0():
-        schemas_pb2_grpc.add_RPCServiceServicer_to_server(rpc_servicer, server)
-        server.add_insecure_port(f"[::]:{args.port}")
-        logger.info(f"Starting gRPC server on port {args.port}")
-        server.start()
-        if not is_debug:
-            server.wait_for_termination()
-
-
-def run(args, is_debug=False):
-    comm = (
-        Communicator(is_torchrun=True)
-        if "WORLD_SIZE" in os.environ and int(os.environ["WORLD_SIZE"]) > 1
-        else SingleNodeCommunicator()
-    )
-    config = AutoConfig.from_pretrained(args.model_path, trust_remote_code=True)
+def run(args):
+    comm = SingleNodeCommunicator()
+    if "WORLD_SIZE" in os.environ and int(os.environ["WORLD_SIZE"]) > 1:
+        comm = Communicator(is_torchrun=True)
     logger = setup_logger("client_" + __name__, logging.DEBUG)
-    config.comm = comm
 
     client_args = ClientArgs(
         start_layer_idx=args.start_layer_idx,
@@ -133,9 +125,11 @@ def run(args, is_debug=False):
     )
     model_client = ModelClient(logger=logger, args=client_args)
     model_client.start()
-    model = model_client.load_model(config, args.model_path)
+    model = model_client.load_model(comm, args.model_path)
 
-    start_grpc_server(comm, model, logger, args, is_debug)
+    rpc_servicer = RPCServicer(comm, model, comm.rank, args.pp_rank, args.ip_addr)
+    if comm.rank == 0:
+        rpc_servicer.start()
 
 
 if __name__ == "__main__":

@@ -58,9 +58,11 @@ python benchmarks/run_async_requests.py
     - [x] Top-P Sampling
     - [x] Temperature Sampling
 - [ ] Model
-    - [x] LLaMA
-    - [x] Qwen2
-- [ ] split model before load
+    - [ ] LLM
+        - [x] LLaMA
+        - [x] Qwen2
+    - [ ] Multi-Modal
+        - [ ] Qwen2-VL (in progress, todo multi request)    
 - [x] MLX Framework
     - [x] With Torch Inference
         - [x] Some bugs with multi requests
@@ -74,26 +76,26 @@ python benchmarks/run_async_requests.py
         - [x] Parameters
         - [x] System
         - [x] Button
-- [ ] Multi-Modal
-    - [ ] Qwen2-VL (in progress, todo test input image)
 - [x] Backend
+    - [x] OpenAI API format
+        - [x] Streaming Output
+        - [x] chat completion(stream)
+        - [x] chat completion(non-stream)
+        - [x] using anythingLLM
     - [x] Client Send Url and Port
     - [ ] Auto Layer Split
         - [x] get free layer idx
         - [ ] calculate layer memory and recommend split
+        - [ ] split model before load
     - [x] Async Generation
         - [x] Multi-Sequence Batch=1
         - [x] Queuing mechanism
         - [x] Continuous Batch
         - [x] Test Cases
         - [x] Client Disconnect and Abort
-    - [x] OpenAI API format
-        - [x] Streaming Output
-        - [x] chat completion(stream)
-        - [x] chat completion(non-stream)
-        - [x] using anythingLLM
     - [x] Communication
         - [x] Communication Time Benchmark
+        - [ ] Async GRPC
 - [ ] KV Cache
     - [x] Request/Sequence Cache
     - [x] Custom KV Cache Class

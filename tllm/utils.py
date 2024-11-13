@@ -76,7 +76,7 @@ def setup_logger(name, level=logging.INFO):
     return logger
 
 
-def start_client(config_path: str, model_path: str) -> None:
+def start_client(config_path: str, model_path: str, logger) -> None:
     # 启动 client
     with open(config_path, "r") as f:
         config_list = json.load(f)
@@ -110,7 +110,7 @@ def parse_url_list(config_path: str) -> List[str]:
 
 
 def init_engine(
-    model_path: str, is_local: str, url_list: Optional[List[str]] = None
+    model_path: str, is_local: str, logger, url_list: Optional[List[str]] = None
 ) -> Tuple[AsyncEngine, TokenizerUtils]:
     if model_path.endswith(".gguf"):
         raise ValueError("GGUF model not supported")
@@ -134,12 +134,8 @@ def init_engine(
 
     model = MY_CausalLM_CLASS.from_pretrained(logger, config, model_path, state_dict)
     if is_local:
-        generator = LLMGenerator(LocalRPCManager(logger, model_path, config), logger, model)
+        generator = LLMGenerator(LocalRPCManager(logger, model_path, config.num_hidden_layers), logger, model)
     else:
         generator = LLMGenerator(RPCManager(url_list), logger, model)
     engine = AsyncEngine(logger, generator)
     return engine, tok
-
-
-logger = setup_logger(__name__, logging.DEBUG)
-# logger = setup_logger(__name__, logging.INFO)

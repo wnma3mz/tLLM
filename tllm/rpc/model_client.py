@@ -45,11 +45,12 @@ class ModelClient:
         self._thread = None
         self._executor = ThreadPoolExecutor(max_workers=1)
 
-    def load_model(self, config: AutoConfig, model_path: str):
+    def load_model(self, comm: SingleNodeCommunicator, model_path: str):
+        config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
+        config.comm = comm
+
         config.decoder_start_layer_idx = self.client_args.start_idx
         config.decoder_end_layer_idx = self.client_args.end_idx
-        if not hasattr(config, "comm"):
-            config.comm = SingleNodeCommunicator()
 
         if model_path.endswith(".gguf"):
             arch = "MLXLlamaForCausalLM"
