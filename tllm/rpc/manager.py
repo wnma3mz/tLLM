@@ -14,9 +14,14 @@ from tllm.schemas import MIX_TENSOR, SeqInput
 class RPCManager:
     def __init__(self, url_list: List[Optional[str]]):
         self.stub_list: List[schemas_pb2_grpc.RPCServiceStub] = []
+        self.grpc_options = [
+            ("grpc.max_metadata_size", 32 * 1024 * 1024),
+            ("grpc.max_receive_message_length", 32 * 1024 * 1024),
+            ("grpc.max_send_message_length", 32 * 1024 * 1024),
+        ]
         for url in url_list:
             if url is not None:
-                channel = grpc.insecure_channel(url)
+                channel = grpc.insecure_channel(url, options=self.grpc_options)
                 self.stub_list.append(schemas_pb2_grpc.RPCServiceStub(channel))
             else:
                 self.stub_list.append(None)
@@ -24,7 +29,7 @@ class RPCManager:
     def update_url(self, pp_idx: int, url: str) -> bool:
         if pp_idx >= len(self.stub_list):
             return False
-        self.stub_list[pp_idx] = schemas_pb2_grpc.RPCServiceStub(grpc.insecure_channel(url))
+        self.stub_list[pp_idx] = schemas_pb2_grpc.RPCServiceStub(grpc.insecure_channel(url, options=self.grpc_options))
         return True
 
     def remove_url(self, pp_idx: int) -> bool:
