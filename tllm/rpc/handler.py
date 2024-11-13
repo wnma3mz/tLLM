@@ -1,5 +1,6 @@
 import argparse
 from concurrent import futures
+import json
 import logging
 import os
 import time
@@ -7,15 +8,14 @@ from typing import *
 
 import grpc
 import torch
-import json
 
 from tllm.commons.communicator import Communicator, SingleNodeCommunicator
 from tllm.commons.convert import deserialize_tensor, serialize_tensor
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.rpc.model_client import HandlerArgs, ModelClient
+from tllm.rpc.schemas_pb2 import BFloat16Tensor
 from tllm.schemas import SeqInput
 from tllm.utils import setup_logger
-from tllm.rpc.schemas_pb2 import BFloat16Tensor
 
 
 class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
@@ -71,20 +71,15 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
         return config_data
 
     def _get_next_addr(self, pp_idx):
-        return self.config[pp_idx+1]["url"]
-    
+        return self.config[pp_idx + 1]["url"]
+
     def send_next_node(self, request: schemas_pb2.ForwardRequest, hidden_states: BFloat16Tensor):
-        url = self._get_next_addr() # request.pp_idx + 1, 需要判断是否是最后一个，返回 master 节点
+        url = self._get_next_addr()  # request.pp_idx + 1, 需要判断是否是最后一个，返回 master 节点
         channel = grpc.insecure_channel(url, options=self.grpc_options)
         stub = schemas_pb2_grpc.RPCServiceStub(channel)
-        forward_request = {
-            "uuid": request.uuid,
-            "seq_len": request.seq_len,
-            "hidden_states": hidden_states
-        }
+        forward_request = {"uuid": request.uuid, "seq_len": request.seq_len, "hidden_states": hidden_states}
         response = stub.Forward(schemas_pb2.ForwardRequest(**forward_request))
         return response
-
 
     def Forward(self, request: schemas_pb2.ForwardRequest, context: grpc.ServicerContext):
         """

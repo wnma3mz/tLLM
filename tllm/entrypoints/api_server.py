@@ -22,14 +22,7 @@ openai_serving_chat: OpenAIServing = None
 layer_manager: LayerManager = None
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await engine.start()
-    yield
-    await engine.stop()
-
-
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 
 
 app.add_middleware(
@@ -144,11 +137,11 @@ def parse_args():
     return parser.parse_args()
 
 
-async def serve_http(app: FastAPI, **uvicorn_kwargs: Any):
+async def serve_http(app: FastAPI, loop: asyncio.AbstractEventLoop, **uvicorn_kwargs: Any):
     config = uvicorn.Config(app, **uvicorn_kwargs)
     server = uvicorn.Server(config)
 
-    loop = asyncio.get_running_loop()
+    asyncio.set_event_loop(loop)
     server_task = loop.create_task(server.serve())
 
     def signal_handler() -> None:
@@ -166,6 +159,7 @@ async def serve_http(app: FastAPI, **uvicorn_kwargs: Any):
         return dummy_shutdown()
     except asyncio.CancelledError:
         logger.info("Shutting down FastAPI HTTP server.")
+        await engine.stop()
         return server.shutdown()
 
 
@@ -191,8 +185,9 @@ async def run_server(args) -> None:
     total_layers = engine.generator.model.num_layers
     layer_manager = LayerManager(total_layers=total_layers, model_name=model_name)
 
+    loop = await engine.start()
     uvicorn_kwargs = {"host": "0.0.0.0", "port": args.port}
-    shutdown_task = await serve_http(app, **uvicorn_kwargs)
+    shutdown_task = await serve_http(app, loop, **uvicorn_kwargs)
     await shutdown_task
 
 

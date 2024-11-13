@@ -68,7 +68,7 @@ class RPCManager:
         response = self.stub_list[url_idx].Forward(request)
 
         if self.pending_requests:
-            response = asyncio.wait_for(result_future, timeout=100.)
+            response = asyncio.wait_for(result_future, timeout=100.0)
         if is_last:
             return deserialize_tensor(response.output), response.cost_time
         else:

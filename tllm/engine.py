@@ -98,13 +98,13 @@ class AsyncEngine:
 
     async def _generate(self):
         while True:
-            # try:
-            #     await self.queue_not_empty.wait()
-            # except Exception as e:
-            #     self.logger.debug("exception: " + str(e))
             sequence_data_list: List[SequenceRequestData] = await self.fetch_data()
             if len(sequence_data_list) == 0:
-                await asyncio.sleep(0.01)
+                try:
+                    await self.queue_not_empty.wait()
+                except Exception as e:
+                    self.logger.debug("exception: " + str(e))
+                    await asyncio.sleep(0.01)
                 continue
             self.logger.debug("fetch data")
             try:
@@ -124,6 +124,8 @@ class AsyncEngine:
                 self.logger.error(f"BaseException Error processing prefill_queue data: {str(e)}")
                 traceback.print_exc()
             finally:
+                if self.prefill_queue.empty():
+                    self.queue_not_empty.clear()
                 await asyncio.sleep(0)
 
     async def generate_stream(self, data: SequenceRequestData):
@@ -159,6 +161,7 @@ class AsyncEngine:
 
     async def generate(self, data: SequenceRequestData):
         self.prefill_queue.put_nowait(data)
+        self.queue_not_empty.set()
 
         try:
             async with data.condition:
@@ -178,9 +181,11 @@ class AsyncEngine:
             traceback.print_exc()
             raise asyncio.CancelledError("UnknownBaseException")
 
-    async def start(self):
+    async def start(self) -> asyncio.AbstractEventLoop:
         if self.processing_task is None:
-            self.processing_task = asyncio.get_running_loop().create_task(self._generate())
+            loop = asyncio.get_running_loop()
+            self.processing_task = loop.create_task(self._generate())
+            return loop
 
     async def stop(self):
         self.logger.info("Stopping processing sequence_data")

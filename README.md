@@ -93,7 +93,7 @@ python benchmarks/run_async_requests.py
         - [x] Continuous Batch
         - [x] Test Cases
         - [x] Client Disconnect and Abort
-        - [ ] await Event
+        - [x] await Event
     - [x] Communication
         - [x] Communication Time Benchmark
         - [ ] Async GRPC

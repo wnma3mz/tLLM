@@ -1,12 +1,12 @@
 # coding: utf-8
 import asyncio
+from concurrent import futures
 from typing import *
 from typing import Any, Dict
 
 import grpc
 
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
-from concurrent import futures
 
 
 class PendingRequests:
@@ -59,7 +59,7 @@ class MasterHandler(schemas_pb2_grpc.RPCServiceServicer):
 
     def Forward(self, request: schemas_pb2.ForwardRequest, context: grpc.ServicerContext):
         """处理从最后一个节点返回的结果"""
-        request_id = request.request_id
+        request_id = "-".join(x for x in request.uuid)
         self.logger.info(f"Received result from Service for trace_id: {request_id}")
 
         if self.pending_requests.complete_request(request_id, request):
