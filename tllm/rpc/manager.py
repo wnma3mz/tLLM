@@ -1,20 +1,22 @@
 # coding: utf-8
+import asyncio
 import time
 from typing import *
 
 import grpc
-import torch
 
 from tllm.commons.communicator import SingleNodeCommunicator
 from tllm.commons.convert import deserialize_tensor, serialize_tensor
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
-from tllm.rpc.model_client import ClientArgs, ModelClient
+from tllm.rpc.master_handler import PendingRequests
+from tllm.rpc.model_client import HandlerArgs, ModelClient
 from tllm.schemas import MIX_TENSOR, SeqInput
 
 
 class RPCManager:
-    def __init__(self, url_list: List[Optional[str]]):
+    def __init__(self, url_list: List[Optional[str]], pending_requests: Optional[PendingRequests] = None):
         self.stub_list: List[schemas_pb2_grpc.RPCServiceStub] = []
+        self.pending_requests = pending_requests
         self.grpc_options = [
             ("grpc.max_metadata_size", 32 * 1024 * 1024),
             ("grpc.max_receive_message_length", 32 * 1024 * 1024),
@@ -45,11 +47,11 @@ class RPCManager:
     def forward(
         self,
         url_idx: int,
-        hidden_states: torch.Tensor,
+        hidden_states: MIX_TENSOR,
         seq_input: SeqInput,
         is_first: bool = False,
         is_last: bool = False,
-    ) -> Tuple[Union[torch.Tensor, bytes], float]:
+    ) -> Tuple[Union[MIX_TENSOR, bytes], float]:
         if is_first:
             hidden_states = serialize_tensor(hidden_states)
         forward_request = {
@@ -58,7 +60,15 @@ class RPCManager:
             "hidden_states": hidden_states,
         }
         request = schemas_pb2.ForwardRequest(**forward_request)
+
+        # 发送完请求前，准备等待返回结果
+        if self.pending_requests:
+            result_future = self.pending_requests.add_request("-".join(x for x in seq_input.uuid_list))
+
         response = self.stub_list[url_idx].Forward(request)
+
+        if self.pending_requests:
+            response = asyncio.wait_for(result_future, timeout=100.)
         if is_last:
             return deserialize_tensor(response.output), response.cost_time
         else:
@@ -69,16 +79,16 @@ class RPCManager:
 
 
 class LocalRPCManager:
-    # 并不发生通信，仅加载模型
+    # 并不发生通信，直接调用模型
     def __init__(self, logger, model_path: str, num_hidden_layers: int):
-        client_args = ClientArgs(
+        handler_args = HandlerArgs(
             ip_addr="localhost",
             port=-1,
             start_idx=0,
             end_idx=num_hidden_layers,
             master_url="localhost",
         )
-        model_client = ModelClient(logger=logger, args=client_args)
+        model_client = ModelClient(logger=logger, args=handler_args)
         self.model = model_client.load_model(SingleNodeCommunicator(), model_path)
 
     def __len__(self):

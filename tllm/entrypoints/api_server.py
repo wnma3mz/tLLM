@@ -15,7 +15,7 @@ import uvicorn
 from tllm.entrypoints.layer_manager import LayerManager
 from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionResponse
 from tllm.entrypoints.server_chat import OpenAIServing
-from tllm.utils import init_engine, parse_url_list, setup_logger, setup_seed, start_client
+from tllm.utils import init_engine, parse_url_list, setup_logger, setup_seed, start_handler
 
 engine: None
 openai_serving_chat: OpenAIServing = None
@@ -138,7 +138,7 @@ def parse_args():
     parser.add_argument("--model_path", type=str, required=True)
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--config_path", type=str, default=None)
-    parser.add_argument("--need_start_client", action="store_true")
+    parser.add_argument("--need_start_handler", action="store_true")
     parser.add_argument("--is_local", action="store_true")
     parser.add_argument("--is_debug", action="store_true")
     return parser.parse_args()
@@ -176,8 +176,8 @@ async def run_server(args) -> None:
 
     logger = setup_logger(__name__, logging.DEBUG if args.is_debug else logging.INFO)
 
-    if args.need_start_client:
-        start_client(args.config_path, args.model_path, logger)
+    if args.need_start_handler:
+        start_handler(args.config_path, args.model_path, logger)
 
     logger.info("args: %s", args)
 

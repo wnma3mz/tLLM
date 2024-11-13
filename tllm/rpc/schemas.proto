@@ -8,20 +8,19 @@ message BFloat16Tensor {
     repeated int32 shape = 2;  // 形状信息
 }
 
-
-message ModelConfig {
-    string model_name = 1;
-    int32 pp_rank = 2;
-    int32 layer_idx_start = 3;
-    int32 layer_idx_end = 4;
-    string master_url = 5;
-    int32 next_pp_rank = 6;
-}
-
 message ForwardRequest {
     repeated string uuid = 1;
     repeated int32 seq_len = 2;
     BFloat16Tensor hidden_states = 3;
+    int32 pp_idx = 4;
+    int32 total_pp = 5;
+}
+
+message StatusRequest {
+    repeated string uuid = 1;
+    repeated int32 seq_len = 2;    
+    int32 pp_idx = 3;
+    float cost_time = 4;
 }
 
 message StatusResponse {
@@ -32,8 +31,6 @@ message StatusResponse {
 message ForwardResponse {
     string msg = 1;
     int32 status = 2;
-    BFloat16Tensor output = 3;
-    float cost_time = 4;
 }
 
 message HealthResponse {
@@ -41,17 +38,11 @@ message HealthResponse {
     int32 status = 2;
 }
 
-message InitModelFlagResponse {
-    bool msg = 1;
-    int32 status = 2;
-}
-
 message Empty {}
 
 
 service RPCService {
-    rpc InitModel (ModelConfig) returns (StatusResponse);
+    rpc Status (StatusRequest) returns (StatusResponse);
     rpc Forward (ForwardRequest) returns (ForwardResponse);
     rpc Health (Empty) returns (HealthResponse);
-    rpc InitModelFlag (Empty) returns (InitModelFlagResponse);
 }

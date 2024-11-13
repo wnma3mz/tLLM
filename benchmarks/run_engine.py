@@ -5,7 +5,7 @@ import os
 from tllm.engine import SequenceRequestData
 from tllm.entrypoints.protocol import random_uuid
 from tllm.generate.sampler_utils import SamplerUtils, SamplingParams
-from tllm.rpc.client import run
+from tllm.rpc.handler import run
 from tllm.utils import init_engine
 
 

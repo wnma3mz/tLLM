@@ -13,6 +13,7 @@ from tllm.engine import AsyncEngine
 from tllm.generate import LLMGenerator, TokenizerUtils
 from tllm.models.register import HAS_MLX, MODEL_REGISTER
 from tllm.rpc.manager import LocalRPCManager, RPCManager
+from tllm.rpc.master_handler import MasterHandler, PendingRequests
 from tllm.schemas import NodeConfig
 
 
@@ -76,8 +77,8 @@ def setup_logger(name, level=logging.INFO):
     return logger
 
 
-def start_client(config_path: str, model_path: str, logger) -> None:
-    # 启动 client
+def start_handler(config_path: str, model_path: str, logger) -> None:
+    # 启动 handler
     with open(config_path, "r") as f:
         config_list = json.load(f)
 
@@ -87,11 +88,11 @@ def start_client(config_path: str, model_path: str, logger) -> None:
         start_layer_idx, end_layer_idx = pp_config["layer_idx"]
         # TODO 启动远程服务
         if pp_config["tp_size"] > 1:
-            cmd = f"torchrun --nproc_per_node={pp_config['tp_size']} --master_port={pp_config['master_port']} tllm/rpc/client.py --start_layer_idx={start_layer_idx} --end_layer_idx={end_layer_idx} --model_path {model_path} --port {port} > grpc_{port}.log 2>&1 &"
+            cmd = f"torchrun --nproc_per_node={pp_config['tp_size']} --master_port={pp_config['master_port']} tllm/rpc/handler.py --start_layer_idx={start_layer_idx} --end_layer_idx={end_layer_idx} --model_path {model_path} --port {port} > grpc_{port}.log 2>&1 &"
         else:
-            cmd = f"python3 tllm/rpc/client.py --start_layer_idx={start_layer_idx} --end_layer_idx={end_layer_idx} --model_path {model_path} --port {port} > grpc_{port}.log 2>&1 &"  #
+            cmd = f"python3 tllm/rpc/handler.py --start_layer_idx={start_layer_idx} --end_layer_idx={end_layer_idx} --model_path {model_path} --port {port} > grpc_{port}.log 2>&1 &"  #
         # 异步启动
-        logger.info(f"begin start client {pp_config['pp_rank']}")
+        logger.info(f"begin start handler {pp_config['pp_rank']}")
         os.popen(cmd)
         # 监听是否启动成功
         while True:
@@ -100,7 +101,7 @@ def start_client(config_path: str, model_path: str, logger) -> None:
                     if "Starting gRPC server on port" in f.read():
                         break
             time.sleep(1)
-        logger.info(f"start client {pp_config['pp_rank']} success")
+        logger.info(f"start handler {pp_config['pp_rank']} success")
 
 
 def parse_url_list(config_path: str) -> List[str]:
@@ -110,7 +111,7 @@ def parse_url_list(config_path: str) -> List[str]:
 
 
 def init_engine(
-    model_path: str, is_local: str, logger, url_list: Optional[List[str]] = None
+    model_path: str, is_local: str, logger, url_list: Optional[List[str]] = None, master_handler_port: int = -1
 ) -> Tuple[AsyncEngine, TokenizerUtils]:
     if model_path.endswith(".gguf"):
         raise ValueError("GGUF model not supported")
@@ -136,6 +137,13 @@ def init_engine(
     if is_local:
         generator = LLMGenerator(LocalRPCManager(logger, model_path, config.num_hidden_layers), logger, model)
     else:
-        generator = LLMGenerator(RPCManager(url_list), logger, model)
+        if master_handler_port == -1:
+            pending_requests = None
+        else:
+            pending_requests = PendingRequests()
+            master_handler = MasterHandler(logger, pending_requests)
+            master_handler.start()
+
+        generator = LLMGenerator(RPCManager(url_list, pending_requests), logger, model)
     engine = AsyncEngine(logger, generator)
     return engine, tok

@@ -120,7 +120,7 @@ class AttentionData:
 
 
 class CacheManager:
-    # 管理每个 client 的 cache kv_cache
+    # 管理每个节点的 cache kv_cache
     # max_alive_time: 超过多久没有访问就删除，单位秒
     def __init__(self, max_alive_time=60):
         self.max_alive_time = max_alive_time

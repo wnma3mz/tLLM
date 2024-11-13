@@ -23,7 +23,7 @@ def get_unregistered_layer_idx(server_url: str) -> Tuple[int, int]:
 
 
 @dataclass
-class ClientArgs:
+class HandlerArgs:
     start_idx: int
     end_idx: int
     ip_addr: str
@@ -32,8 +32,8 @@ class ClientArgs:
 
 
 class ModelClient:
-    def __init__(self, logger, args: ClientArgs):
-        self.client_args = args
+    def __init__(self, logger, args: HandlerArgs):
+        self.handler_args = args
         self.client_id = f"client-{str(uuid.uuid4())[:8]}-pp{args.start_idx}-{args.end_idx}"
 
         self.server_url = args.master_url.replace("http://", "ws://").replace("https://", "wss://")
@@ -49,8 +49,8 @@ class ModelClient:
         config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
         config.comm = comm
 
-        config.decoder_start_layer_idx = self.client_args.start_idx
-        config.decoder_end_layer_idx = self.client_args.end_idx
+        config.decoder_start_layer_idx = self.handler_args.start_idx
+        config.decoder_end_layer_idx = self.handler_args.end_idx
 
         if model_path.endswith(".gguf"):
             arch = "MLXLlamaForCausalLM"
@@ -67,8 +67,8 @@ class ModelClient:
         s1 = time.time()
         # if model_path.endswith(".gguf"):
         #     weights, config, _ = load_gguf_weight(model_path)
-        #     config.decoder_start_layer_idx = self.client_args.start_idx
-        #     config.decoder_end_layer_idx = self.client_args.end_idx
+        #     config.decoder_start_layer_idx = self.handler_args.start_idx
+        #     config.decoder_end_layer_idx = self.handler_args.end_idx
         #     config.comm = SingleNodeCommunicator()
         model = MY_MODEL_CLASS.from_pretrained(config, model_path)
         self.logger.debug(f"[Rank: {config.comm.rank}] Cost time {time.time() - s1}")
@@ -91,10 +91,10 @@ class ModelClient:
                 json.dumps(
                     {
                         "type": "register_layers",
-                        "start_idx": self.client_args.start_idx,
-                        "end_idx": self.client_args.end_idx,
-                        "ip_addr": self.client_args.ip_addr,
-                        "port": self.client_args.port,
+                        "start_idx": self.handler_args.start_idx,
+                        "end_idx": self.handler_args.end_idx,
+                        "ip_addr": self.handler_args.ip_addr,
+                        "port": self.handler_args.port,
                     }
                 )
             )
