@@ -60,11 +60,12 @@ class AsyncEngine:
         self.sleep_time: float = 0.0
         self.logger = logger
         self.abort_queue: asyncio.Queue = asyncio.Queue()
+        self.queue_not_empty: asyncio.Event = asyncio.Event()  # 暂时无效，报错 async attached to a different loop
 
     async def fetch_data(self):
         aborting_request_ids = set()
         while not self.abort_queue.empty():
-            request_id = await self.abort_queue.get()
+            request_id = self.abort_queue.get_nowait()
             aborting_request_ids.add(request_id)
 
         async def aborting_filter(sequence_data) -> bool:
@@ -81,14 +82,14 @@ class AsyncEngine:
 
         # 优先从 decoding_queue 取数据
         while not self.decoding_queue.empty() and len(sequence_data_list) < self.limit_size:
-            sequence_data = await self.decoding_queue.get()
+            sequence_data = self.decoding_queue.get_nowait()
             if await aborting_filter(sequence_data):
                 continue
             sequence_data_list.append(sequence_data)
 
         # 从 prefill_queue 中取数据，直到达到限制
         while not self.prefill_queue.empty() and len(sequence_data_list) < self.limit_size:
-            sequence_data = await self.prefill_queue.get()
+            sequence_data = self.prefill_queue.get_nowait()
             if await aborting_filter(sequence_data):
                 continue
             sequence_data_list.append(sequence_data)
@@ -97,16 +98,21 @@ class AsyncEngine:
 
     async def _generate(self):
         while True:
+            # try:
+            #     await self.queue_not_empty.wait()
+            # except Exception as e:
+            #     self.logger.debug("exception: " + str(e))
             sequence_data_list: List[SequenceRequestData] = await self.fetch_data()
             if len(sequence_data_list) == 0:
-                await asyncio.sleep(self.sleep_time)
+                await asyncio.sleep(0.01)
                 continue
+            self.logger.debug("fetch data")
             try:
                 await self.generator.generate(sequence_data_list)
 
                 for sequence_data in sequence_data_list:
                     if not sequence_data.is_stop:
-                        await self.decoding_queue.put(sequence_data)
+                        self.decoding_queue.put_nowait(sequence_data)
                     async with sequence_data.condition:
                         sequence_data.condition.notify()
 
@@ -121,7 +127,8 @@ class AsyncEngine:
                 await asyncio.sleep(0)
 
     async def generate_stream(self, data: SequenceRequestData):
-        await self.prefill_queue.put(data)
+        self.prefill_queue.put_nowait(data)
+        self.queue_not_empty.set()
 
         try:
             async with data.condition:
@@ -151,7 +158,7 @@ class AsyncEngine:
             raise asyncio.CancelledError("UnknownBaseException")
 
     async def generate(self, data: SequenceRequestData):
-        await self.prefill_queue.put(data)
+        self.prefill_queue.put_nowait(data)
 
         try:
             async with data.condition:
@@ -173,7 +180,7 @@ class AsyncEngine:
 
     async def start(self):
         if self.processing_task is None:
-            self.processing_task = asyncio.create_task(self._generate())
+            self.processing_task = asyncio.get_running_loop().create_task(self._generate())
 
     async def stop(self):
         self.logger.info("Stopping processing sequence_data")
@@ -188,4 +195,4 @@ class AsyncEngine:
     async def abort(self, request_id: str):
         # 从 prefill_queue 和 decoding_queue 中移除 request_id
         self.logger.debug(f"abort: {request_id}")
-        await self.abort_queue.put(request_id)
+        self.abort_queue.put_nowait(request_id)

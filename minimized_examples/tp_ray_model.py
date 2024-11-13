@@ -316,7 +316,6 @@ class MyLlamaForCausalLM(nn.Module):
         position_ids = None
         cnt = 0
         while True:
-
             if past_key_values is None:
                 past_key_values = DynamicCache()
                 position_ids = torch.arange(seq_len, dtype=torch.long).unsqueeze(0)

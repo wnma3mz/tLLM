@@ -93,9 +93,11 @@ python benchmarks/run_async_requests.py
         - [x] Continuous Batch
         - [x] Test Cases
         - [x] Client Disconnect and Abort
+        - [ ] await Event
     - [x] Communication
         - [x] Communication Time Benchmark
         - [ ] Async GRPC
+        - [ ] Ring Communication
 - [ ] KV Cache
     - [x] Request/Sequence Cache
     - [x] Custom KV Cache Class

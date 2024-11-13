@@ -1,7 +1,9 @@
 import argparse
+import asyncio
 from contextlib import asynccontextmanager
 import logging
 import os
+import signal
 import time
 from typing import *
 
@@ -15,18 +17,20 @@ from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionRespo
 from tllm.entrypoints.server_chat import OpenAIServing
 from tllm.utils import init_engine, parse_url_list, setup_logger, setup_seed, start_client
 
+engine: None
+openai_serving_chat: OpenAIServing = None
+layer_manager: LayerManager = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 启动时开始处理队列
     await engine.start()
     yield
-    # 关闭时停止处理队列
     await engine.stop()
 
 
 app = FastAPI(lifespan=lifespan)
-openai_serving_chat: OpenAIServing
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -136,26 +140,62 @@ def parse_args():
     parser.add_argument("--config_path", type=str, default=None)
     parser.add_argument("--need_start_client", action="store_true")
     parser.add_argument("--is_local", action="store_true")
+    parser.add_argument("--is_debug", action="store_true")
     return parser.parse_args()
 
 
-if __name__ == "__main__":
-    setup_seed(42)
-    args = parse_args()
-    port = args.port
+async def serve_http(app: FastAPI, **uvicorn_kwargs: Any):
+    config = uvicorn.Config(app, **uvicorn_kwargs)
+    server = uvicorn.Server(config)
 
-    logger = setup_logger(__name__, logging.DEBUG)  # logging.INFO
+    loop = asyncio.get_running_loop()
+    server_task = loop.create_task(server.serve())
+
+    def signal_handler() -> None:
+        # prevents the uvicorn signal handler to exit early
+        server_task.cancel()
+
+    async def dummy_shutdown() -> None:
+        pass
+
+    loop.add_signal_handler(signal.SIGINT, signal_handler)
+    loop.add_signal_handler(signal.SIGTERM, signal_handler)
+
+    try:
+        await server_task
+        return dummy_shutdown()
+    except asyncio.CancelledError:
+        logger.info("Shutting down FastAPI HTTP server.")
+        return server.shutdown()
+
+
+async def run_server(args) -> None:
+    setup_seed(42)
+    global app
+    global logger, engine, layer_manager, openai_serving_chat
+
+    logger = setup_logger(__name__, logging.DEBUG if args.is_debug else logging.INFO)
+
+    if args.need_start_client:
+        start_client(args.config_path, args.model_path, logger)
+
+    logger.info("args: %s", args)
+
+    s1 = time.time()
     url_list = None if args.config_path is None else parse_url_list(args.config_path)
     engine, tok = init_engine(args.model_path, args.is_local, logger, url_list)
 
-    s1 = time.time()
-    if args.need_start_client:
-        start_client(logger, args.config_path, args.model_path, logger)
     logger.info(f"init cost time {time.time() - s1}")
     openai_serving_chat = OpenAIServing(engine, tok, args)
-
     model_name = openai_serving_chat.model_name
     total_layers = engine.generator.model.num_layers
     layer_manager = LayerManager(total_layers=total_layers, model_name=model_name)
 
-    uvicorn.run(app, host="0.0.0.0", port=port, reload=False)
+    uvicorn_kwargs = {"host": "0.0.0.0", "port": args.port}
+    shutdown_task = await serve_http(app, **uvicorn_kwargs)
+    await shutdown_task
+
+
+if __name__ == "__main__":
+    args = parse_args()
+    asyncio.run(run_server(args))

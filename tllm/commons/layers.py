@@ -177,7 +177,6 @@ class MergedLlamaSdpaAttention(nn.Module):
 
 
 class PlainLlamaSdpaAttention(LlamaSdpaAttention):
-
     @torch.no_grad()
     def forward(
         self,
