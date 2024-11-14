@@ -24,7 +24,7 @@ class RPCManager:
         ]
         for url in url_list:
             if url is not None:
-                channel = grpc.insecure_channel(url, options=self.grpc_options)
+                channel = grpc.aio.insecure_channel(url, options=self.grpc_options)
                 self.stub_list.append(schemas_pb2_grpc.RPCServiceStub(channel))
             else:
                 self.stub_list.append(None)
@@ -32,7 +32,7 @@ class RPCManager:
     def update_url(self, pp_idx: int, url: str) -> bool:
         if pp_idx >= len(self.stub_list):
             return False
-        self.stub_list[pp_idx] = schemas_pb2_grpc.RPCServiceStub(grpc.insecure_channel(url, options=self.grpc_options))
+        self.stub_list[pp_idx] = schemas_pb2_grpc.RPCServiceStub(grpc.aio.insecure_channel(url, options=self.grpc_options))
         return True
 
     def remove_url(self, pp_idx: int) -> bool:
@@ -44,7 +44,7 @@ class RPCManager:
     def is_full_connected(self) -> bool:
         return all([stub is not None for stub in self.stub_list])
 
-    def forward(
+    async def forward(
         self,
         url_idx: int,
         hidden_states: MIX_TENSOR,
@@ -65,7 +65,7 @@ class RPCManager:
         if self.pending_requests:
             result_future = self.pending_requests.add_request("-".join(x for x in seq_input.uuid_list))
 
-        response = self.stub_list[url_idx].Forward(request)
+        response = await self.stub_list[url_idx].Forward(request)
 
         if self.pending_requests:
             response = asyncio.wait_for(result_future, timeout=100.0)
@@ -94,7 +94,7 @@ class LocalRPCManager:
     def __len__(self):
         return 1
 
-    def forward(
+    async def forward(
         self,
         pp_idx: int,
         hidden_states: MIX_TENSOR,

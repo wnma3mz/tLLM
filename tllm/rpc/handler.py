@@ -16,7 +16,7 @@ from tllm.rpc.model_client import HandlerArgs, ModelClient
 from tllm.rpc.schemas_pb2 import BFloat16Tensor
 from tllm.schemas import SeqInput
 from tllm.utils import setup_logger
-
+import asyncio
 
 class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
     def __init__(self, comm: Communicator, model, rank: int, pp_rank: int, logger, ip_addr: str = "localhost"):
@@ -41,8 +41,8 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
 
                 _ = self.model.forward(hidden_states, seq_input=seq_input)
 
-    def start(self):
-        self.server = grpc.server(
+    async def start(self):
+        self.server = grpc.aio.server(
             futures.ThreadPoolExecutor(max_workers=10),
             options=[
                 ("grpc.max_metadata_size", 32 * 1024 * 1024),
@@ -54,18 +54,18 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
         schemas_pb2_grpc.add_RPCServiceServicer_to_server(self, self.server)
         self.server.add_insecure_port(f"[::]:{args.port}")
         self.logger.info(f"Starting gRPC server on port {args.port}")
-        self.server.start()
+        await self.server.start()
 
         try:
             # 保持服务器运行
-            self.server.wait_for_termination()
+            await self.server.wait_for_termination()
         except KeyboardInterrupt:
-            self.stop()
+            await self.stop()
 
-    def stop(self):
+    async def stop(self):
         if self.server:
             try:
-                self.server.stop(grace=5)
+                await self.server.stop(grace=5)
             except Exception as e:
                 pass
 
@@ -78,15 +78,15 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
     def _get_next_addr(self, pp_idx):
         return self.config[pp_idx + 1]["url"]
 
-    def send_next_node(self, request: schemas_pb2.ForwardRequest, hidden_states: BFloat16Tensor):
+    async def send_next_node(self, request: schemas_pb2.ForwardRequest, hidden_states: BFloat16Tensor):
         url = self._get_next_addr()  # request.pp_idx + 1, 需要判断是否是最后一个，返回 master 节点
-        channel = grpc.insecure_channel(url, options=self.grpc_options)
+        channel = grpc.aio.insecure_channel(url, options=self.grpc_options)
         stub = schemas_pb2_grpc.RPCServiceStub(channel)
         forward_request = {"uuid": request.uuid, "seq_len": request.seq_len, "hidden_states": hidden_states}
         response = stub.Forward(schemas_pb2.ForwardRequest(**forward_request))
         return response
 
-    def Forward(self, request: schemas_pb2.ForwardRequest, context: grpc.ServicerContext):
+    async def Forward(self, request: schemas_pb2.ForwardRequest, context: grpc.ServicerContext):
         """
         @param request: ForwardRequest
             hidden_states: bytes
@@ -135,7 +135,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def run(args):
+async def run(args):
     comm = SingleNodeCommunicator()
     if "WORLD_SIZE" in os.environ and int(os.environ["WORLD_SIZE"]) > 1:
         comm = Communicator(is_torchrun=True)
@@ -154,9 +154,9 @@ def run(args):
 
     rpc_servicer = RPCHandler(comm, model, comm.rank, args.pp_rank, logger, args.ip_addr)
     if comm.rank == 0:
-        rpc_servicer.start()
+        await rpc_servicer.start()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    run(args)
+    asyncio.run(run(args))

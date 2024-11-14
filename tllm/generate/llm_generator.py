@@ -70,7 +70,7 @@ class LLMGenerator:
         self.processor = getattr(model, "processor", None)
         self.mm_config = getattr(model, "mm_config", None)
 
-    def forward(self, inputs_embeds: MIX_TENSOR, seq_input: SeqInput) -> ForwardResult:
+    async def forward(self, inputs_embeds: MIX_TENSOR, seq_input: SeqInput) -> ForwardResult:
         hidden_states = inputs_embeds
         comm_cost_time_list, calc_cost_time_list = [], []
         for pp_idx in range(self.pp_size):
@@ -78,7 +78,7 @@ class LLMGenerator:
             is_last = pp_idx == self.pp_size - 1
             s1 = time.perf_counter()
             self.logger.debug(f"start pp idx: {pp_idx} hidden_states: {hidden_states.shape}")
-            hidden_states, pp_cost_time = self.server.forward(pp_idx, hidden_states, seq_input, is_first, is_last)
+            hidden_states, pp_cost_time = await self.server.forward(pp_idx, hidden_states, seq_input, is_first, is_last)
             self.logger.debug(f"finish pp idx: {pp_idx}")
             comm_cost_time_list.append(time.perf_counter() - s1 - pp_cost_time)
             calc_cost_time_list.append(pp_cost_time)
@@ -124,7 +124,7 @@ class LLMGenerator:
 
         seq_input = SeqInput(uuid_list=uuid_list, seq_len_list=seq_len_list)
         s0 = time.perf_counter()
-        forward_result = self.forward(input_embeds, seq_input)
+        forward_result = await self.forward(input_embeds, seq_input)
         self.logger.debug(f"decoder cost time: {time.perf_counter() - s0:.4f}s")
         s1 = time.perf_counter()
         seq_logits_list: List[MIX_TENSOR] = self.model.get_logits(forward_result.hidden_states, seq_len_list)
