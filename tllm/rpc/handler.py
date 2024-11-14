@@ -48,7 +48,7 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
             next_pp_url = config["client"][self.pp_rank + 1]["url"]
 
         self.manager = RPCManager(next_pp_url)
-        self.status_manager = RPCManager(config["master"]["url"]) # Maybe Comm by WebSocket?
+        self.status_manager = RPCManager(config["master"]["url"])  # Maybe Comm by WebSocket?
 
         if self.rank == 0:
             pass
@@ -109,8 +109,9 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
         self.logger.debug(f"serialize_tensor cost time: {time.perf_counter() - s1:.4f}")
         self.logger.debug("=" * 20)
 
-        await self.manager.rpc_forward(request.uuid, request.seq_len, output)
-        await self.status_manager.rpc_status(request.uuid, request.seq_len, self.pp_rank, cost_time)
+        asyncio.create_task(self.manager.rpc_forward(request.uuid, request.seq_len, output))
+        asyncio.create_task(self.status_manager.rpc_status(request.uuid, request.seq_len, self.pp_rank, cost_time))
+        await asyncio.sleep(0)
         return schemas_pb2.ForwardResponse(msg="Forward Completed", status=200)
 
     def Health(self, request, context):

@@ -14,7 +14,9 @@ from tllm.schemas import MIX_TENSOR, SeqInput
 
 
 class RPCManager:
-    def __init__(self, url: Optional[str], pending_requests: Optional[PendingRequests] = None, pp_size: Optional[int] = -1):
+    def __init__(
+        self, url: Optional[str], pending_requests: Optional[PendingRequests] = None, pp_size: Optional[int] = -1
+    ):
         self.pending_requests = pending_requests
         self.grpc_options = [
             ("grpc.max_metadata_size", 32 * 1024 * 1024),
@@ -43,9 +45,12 @@ class RPCManager:
     async def forward(self, hidden_states: MIX_TENSOR, seq_input: SeqInput) -> Tuple[MIX_TENSOR, List[float]]:
         hidden_states = serialize_tensor(hidden_states)
         # 发送完请求前，准备等待返回结果
-        forward_future, status_future = self.pending_requests.add_request("-".join(x for x in seq_input.uuid_list), self.pp_size)
-        await self.rpc_forward(seq_input.uuid_list, seq_input.seq_len_list, hidden_states)
-        output = await asyncio.wait_for(forward_future, timeout=100.0)  # 所有节点的处理时间加载一起不超过 100s
+        forward_future, status_future = self.pending_requests.add_request(
+            "-".join(x for x in seq_input.uuid_list), self.pp_size
+        )
+        asyncio.create_task(self.rpc_forward(seq_input.uuid_list, seq_input.seq_len_list, hidden_states))
+        await asyncio.sleep(0)
+        output = await asyncio.wait_for(forward_future, timeout=100.0)  # 所有节点的总处理时间不超过 100s
 
         return deserialize_tensor(output), await asyncio.wait_for(status_future, timeout=100.0)
 

@@ -178,7 +178,9 @@ async def run_server(args) -> None:
 
     s1 = time.time()
     url_list, master_handler_port = (None, -1) if args.config_path is None else parse_config(args.config_path)
-    engine, tok, master_handler = await init_engine(args.model_path, args.is_local, logger, url_list, master_handler_port)
+    engine, tok, master_handler = await init_engine(
+        args.model_path, args.is_local, logger, url_list, master_handler_port
+    )
 
     logger.info(f"init cost time {time.time() - s1}")
     openai_serving_chat = OpenAIServing(engine, tok, args)
