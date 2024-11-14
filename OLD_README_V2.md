@@ -111,6 +111,30 @@ graph TD
 
 
 
+#### PP 间通信
+
+```mermaid
+flowchart TB
+    subgraph Current["双向通信架构"]
+        direction TB
+        Client1[Client] -->|1. HTTP| A1[A]
+        A1 -->|2. gRPC| B1[B]
+        B1 -->|3. Response| A1
+        A1 -->|4. gRPC| C1[C]
+        C1 -->|5. Response| A1
+        A1 -->|6. HTTP Response| Client1
+    end
+
+    subgraph Desired["Ring通信架构"]
+        direction TB
+        Client2[Client] -->|1. HTTP| A2[A]
+        A2 -->|2. gRPC| B2[B]
+        B2 -->|3. gRPC| C2[C]
+        C2 -->|4. Response| A2
+        A2 -->|5. HTTP Response| Client2
+    end
+```
+
 ### Performance
 
 #### Pipeline Parallel (PP)
