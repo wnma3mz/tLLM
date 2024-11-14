@@ -111,27 +111,23 @@ graph TD
 
 
 
-#### PP 间通信
+#### 节点间通信
 
 ```mermaid
 flowchart TB
     subgraph Current["双向通信架构"]
         direction TB
-        Client1[Client] -->|HTTP| A1[A]
-        A1 -->|gRPC| B1[B]
-        B1 -->|Response| A1
-        A1 -->|gRPC| C1[C]
-        C1 -->|Response| A1
-        A1 -->|HTTP Response| Client1
+        A1[Master] -->|gRPC Request| B1[Client1]
+        B1[Clinet1] -->|gRPC Response| A1[Master]
+        A1[Master] -->|gRPC Request| C1[Client2]
+        C1[Client2] -->|gRPC Response| A1[Master]
     end
 
     subgraph Desired["Ring通信架构"]
         direction TB
-        Client2[Client] -->|HTTP| A2[A]
-        A2 -->|gRPC| B2[B]
-        B2 -->|gRPC| C2[C]
-        C2 -->|grpc| A2
-        A2 -->|HTTP Response| Client2
+        A[Master] -->|gRPC Request| B2[Client1]
+        B2[Client1] -->|gRPC Request| C2[Client2]
+        C2[Client2] -->|grpc Request| A[Master]
     end
 ```
 
