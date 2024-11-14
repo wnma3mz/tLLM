@@ -5,12 +5,5 @@
         "tp_size": 2,
         "master_port": 29501,
         "layer_idx": [0, 1]
-    },
-    {
-        "pp_rank": 1,
-        "url": "ujay.tail54f27.ts.net:25002",
-        "tp_size": 2,
-        "master_port": 29501,
-        "layer_idx": [0, 1]
     }
 ]

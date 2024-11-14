@@ -8,7 +8,7 @@ MASTER_URL=ws://localhost:8022
 MODE_SIZE=$1
 
 if [ $MODE_SIZE == "1" ]; then
-    MODEL_PATH=$BASE_PATH/Llama-3.2-1B-Instruct-bf16
+    MODEL_PATH=$BASE_PATH/Llama-3.2-1B-Instruct
     START_LAYER_IDX=0
     END_LAYER_IDX=16
 elif [ $MODE_SIZE == "3" ]; then
@@ -31,4 +31,4 @@ fi
 export OMP_NUM_THREADS=8;
 export PYTHONPATH="./":$PYTHONPATH;
 
-python3 tllm/rpc/client.py --port=$GRPC_PORT --start_layer_idx=$START_LAYER_IDX --end_layer_idx=$END_LAYER_IDX --model_path $MODEL_PATH --master_url $MASTER_URL 
+python3 tllm/rpc/handler.py --port=$GRPC_PORT --start_layer_idx=$START_LAYER_IDX --end_layer_idx=$END_LAYER_IDX --model_path $MODEL_PATH --master_url $MASTER_URL --is_debug

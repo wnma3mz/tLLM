@@ -56,11 +56,16 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
         self.logger.info(f"Starting gRPC server on port {args.port}")
         self.server.start()
 
+        try:
+            # 保持服务器运行
+            self.server.wait_for_termination()
+        except KeyboardInterrupt:
+            self.stop()
+
     def stop(self):
         if self.server:
             try:
                 self.server.stop(grace=5)
-                self.server.wait_for_termination()
             except Exception as e:
                 pass
 
@@ -137,8 +142,8 @@ def run(args):
     logger = setup_logger("handler_" + __name__, logging.DEBUG if args.is_debug else logging.INFO)
 
     handler_args = HandlerArgs(
-        start_layer_idx=args.start_layer_idx,
-        end_layer_idx=args.end_layer_idx,
+        start_idx=args.start_layer_idx,
+        end_idx=args.end_layer_idx,
         ip_addr=args.ip_addr,
         port=args.port,
         master_url=args.master_url,

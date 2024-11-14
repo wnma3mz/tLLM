@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import *
 from typing import List, Optional, Union
 
-import PIL
+from PIL import Image
 import numpy as np
 from pydantic import BaseModel
 
@@ -132,7 +132,7 @@ class SequenceRequestData:
     sampling_params: SamplingParams
     sampler: "SamplerUtils"  # TODO
 
-    multi_modal_inputs: Optional[Dict[str, List[PIL.Image.Image]]] = None
+    multi_modal_inputs: Optional[Dict[str, List[Image.Image]]] = None
     history_request_id: Optional[str] = None
     finish_reason_list: Optional[List[str]] = None
 
