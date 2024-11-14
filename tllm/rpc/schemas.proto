@@ -12,8 +12,6 @@ message ForwardRequest {
     repeated string uuid = 1;
     repeated int32 seq_len = 2;
     BFloat16Tensor hidden_states = 3;
-    int32 pp_idx = 4;
-    int32 total_pp = 5;
 }
 
 message StatusRequest {

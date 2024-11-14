@@ -1,5 +1,5 @@
 import time
-from typing import AsyncGenerator, Dict, List, Optional, Union
+from typing import AsyncGenerator, Dict, List, Optional
 
 import numpy as np
 import torch
@@ -64,28 +64,19 @@ def process_mm_input(
 class LLMGenerator:
     def __init__(self, server: RPCManager, logger, model):
         self.server = server
-        self.pp_size = len(server)
         self.logger = logger
         self.model = model
         self.processor = getattr(model, "processor", None)
         self.mm_config = getattr(model, "mm_config", None)
 
     async def forward(self, inputs_embeds: MIX_TENSOR, seq_input: SeqInput) -> ForwardResult:
-        hidden_states = inputs_embeds
-        comm_cost_time_list, calc_cost_time_list = [], []
-        for pp_idx in range(self.pp_size):
-            is_first = pp_idx == 0
-            is_last = pp_idx == self.pp_size - 1
-            s1 = time.perf_counter()
-            self.logger.debug(f"start pp idx: {pp_idx} hidden_states: {hidden_states.shape}")
-            hidden_states, pp_cost_time = await self.server.forward(pp_idx, hidden_states, seq_input, is_first, is_last)
-            self.logger.debug(f"finish pp idx: {pp_idx}")
-            comm_cost_time_list.append(time.perf_counter() - s1 - pp_cost_time)
-            calc_cost_time_list.append(pp_cost_time)
+        s1 = time.perf_counter()
+        hidden_states, calc_cost_time_list = await self.server.forward(inputs_embeds, seq_input)
+        comm_cost_time = time.perf_counter() - s1 - sum(calc_cost_time_list)
         return ForwardResult(
             hidden_states=hidden_states,
-            comm_cost_time_list=comm_cost_time_list,
-            calc_cost_time_list=calc_cost_time_list,
+            comm_cost_time=comm_cost_time,
+            calc_cost_time=sum(calc_cost_time_list),
         )
 
     @torch.no_grad()
@@ -156,10 +147,7 @@ class LLMGenerator:
                 sequence_request.decode_start_ts = time.perf_counter()
                 sequence_request.is_prefill = False
 
-        comm_cost_time_list = forward_result.comm_cost_time_list
-        comm_cost_time_str = ",".join([f"{x:.4f}" for x in comm_cost_time_list])
-        sum_comm = sum(comm_cost_time_list)
-        fraction = sum_comm / (sum_comm + sum(forward_result.calc_cost_time_list))
+        fraction = forward_result.comm_cost_time / (forward_result.comm_cost_time + forward_result.calc_cost_time)
         self.logger.debug(f"de tokenizer cost time: {time.perf_counter() - s1:.4f}s")
-        self.logger.debug(f"communication cost time: {comm_cost_time_str}s({fraction*100:.1f}%)")
+        self.logger.debug(f"communication cost time: {forward_result.comm_cost_time:.4f}s({fraction*100:.1f}%)")
         self.logger.debug("=" * 5)

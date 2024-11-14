@@ -14,7 +14,7 @@ import uvicorn
 from tllm.entrypoints.layer_manager import LayerManager
 from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionResponse
 from tllm.entrypoints.server_chat import OpenAIServing
-from tllm.utils import init_engine, parse_url_list, setup_logger, setup_seed, start_handler
+from tllm.utils import init_engine, parse_config, setup_logger, setup_seed, start_handler
 
 engine: None
 openai_serving_chat: OpenAIServing = None
@@ -136,7 +136,7 @@ def parse_args():
     return parser.parse_args()
 
 
-async def serve_http(app: FastAPI, loop: asyncio.AbstractEventLoop, **uvicorn_kwargs: Any):
+async def serve_http(app: FastAPI, loop: asyncio.AbstractEventLoop, master_handler, **uvicorn_kwargs: Any):
     config = uvicorn.Config(app, **uvicorn_kwargs)
     server = uvicorn.Server(config)
 
@@ -158,6 +158,8 @@ async def serve_http(app: FastAPI, loop: asyncio.AbstractEventLoop, **uvicorn_kw
         return dummy_shutdown()
     except asyncio.CancelledError:
         logger.info("Shutting down FastAPI HTTP server.")
+        if master_handler:
+            await master_handler.stop()
         await engine.stop()
         return server.shutdown()
 
@@ -175,8 +177,8 @@ async def run_server(args) -> None:
     logger.info("args: %s", args)
 
     s1 = time.time()
-    url_list = None if args.config_path is None else parse_url_list(args.config_path)
-    engine, tok = init_engine(args.model_path, args.is_local, logger, url_list)
+    url_list, master_handler_port = (None, -1) if args.config_path is None else parse_config(args.config_path)
+    engine, tok, master_handler = await init_engine(args.model_path, args.is_local, logger, url_list, master_handler_port)
 
     logger.info(f"init cost time {time.time() - s1}")
     openai_serving_chat = OpenAIServing(engine, tok, args)
@@ -186,7 +188,7 @@ async def run_server(args) -> None:
 
     loop = await engine.start()
     uvicorn_kwargs = {"host": "0.0.0.0", "port": args.port}
-    shutdown_task = await serve_http(app, loop, **uvicorn_kwargs)
+    shutdown_task = await serve_http(app, loop, master_handler, **uvicorn_kwargs)
     await shutdown_task
 
 

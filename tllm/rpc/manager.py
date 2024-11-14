@@ -14,68 +14,40 @@ from tllm.schemas import MIX_TENSOR, SeqInput
 
 
 class RPCManager:
-    def __init__(self, url_list: List[Optional[str]], pending_requests: Optional[PendingRequests] = None):
-        self.stub_list: List[schemas_pb2_grpc.RPCServiceStub] = []
+    def __init__(self, url: Optional[str], pending_requests: Optional[PendingRequests] = None, pp_size: Optional[int] = -1):
         self.pending_requests = pending_requests
         self.grpc_options = [
             ("grpc.max_metadata_size", 32 * 1024 * 1024),
-            ("grpc.max_receive_message_length", 32 * 1024 * 1024),
-            ("grpc.max_send_message_length", 32 * 1024 * 1024),
+            ("grpc.max_send_message_length", 128 * 1024 * 1024),
+            ("grpc.max_receive_message_length", 128 * 1024 * 1024),
         ]
-        for url in url_list:
-            if url is not None:
-                channel = grpc.aio.insecure_channel(url, options=self.grpc_options)
-                self.stub_list.append(schemas_pb2_grpc.RPCServiceStub(channel))
-            else:
-                self.stub_list.append(None)
-
-    def update_url(self, pp_idx: int, url: str) -> bool:
-        if pp_idx >= len(self.stub_list):
-            return False
-        self.stub_list[pp_idx] = schemas_pb2_grpc.RPCServiceStub(grpc.aio.insecure_channel(url, options=self.grpc_options))
-        return True
-
-    def remove_url(self, pp_idx: int) -> bool:
-        if pp_idx >= len(self.stub_list):
-            return False
-        self.stub_list[pp_idx] = None
-        return True
-
-    def is_full_connected(self) -> bool:
-        return all([stub is not None for stub in self.stub_list])
-
-    async def forward(
-        self,
-        url_idx: int,
-        hidden_states: MIX_TENSOR,
-        seq_input: SeqInput,
-        is_first: bool = False,
-        is_last: bool = False,
-    ) -> Tuple[Union[MIX_TENSOR, bytes], float]:
-        if is_first:
-            hidden_states = serialize_tensor(hidden_states)
-        forward_request = {
-            "uuid": seq_input.uuid_list,
-            "seq_len": seq_input.seq_len_list,
-            "hidden_states": hidden_states,
-        }
-        request = schemas_pb2.ForwardRequest(**forward_request)
-
-        # 发送完请求前，准备等待返回结果
-        if self.pending_requests:
-            result_future = self.pending_requests.add_request("-".join(x for x in seq_input.uuid_list))
-
-        response = await self.stub_list[url_idx].Forward(request)
-
-        if self.pending_requests:
-            response = asyncio.wait_for(result_future, timeout=100.0)
-        if is_last:
-            return deserialize_tensor(response.output), response.cost_time
+        self.pp_size = pp_size
+        if url is not None:
+            channel = grpc.aio.insecure_channel(url, options=self.grpc_options)
+            self.stub = schemas_pb2_grpc.RPCServiceStub(channel)
         else:
-            return response.output, response.cost_time
+            self.stub = None
 
-    def __len__(self):
-        return len(self.stub_list)
+    def update_url(self, url: str):
+        channel = grpc.aio.insecure_channel(url, options=self.grpc_options)
+        self.stub = schemas_pb2_grpc.RPCServiceStub(channel)
+
+    async def rpc_status(self, uuid, seq_len, pp_idx: int, cost_time: float):
+        status_request = {"uuid": uuid, "seq_len": seq_len, "pp_idx": pp_idx, "cost_time": cost_time}
+        self.stub.Status(schemas_pb2.StatusRequest(**status_request))
+
+    async def rpc_forward(self, uuid, seq_len, hidden_states: schemas_pb2.BFloat16Tensor):
+        forward_request = {"uuid": uuid, "seq_len": seq_len, "hidden_states": hidden_states}
+        self.stub.Forward(schemas_pb2.ForwardRequest(**forward_request))
+
+    async def forward(self, hidden_states: MIX_TENSOR, seq_input: SeqInput) -> Tuple[MIX_TENSOR, List[float]]:
+        hidden_states = serialize_tensor(hidden_states)
+        # 发送完请求前，准备等待返回结果
+        forward_future, status_future = self.pending_requests.add_request("-".join(x for x in seq_input.uuid_list), self.pp_size)
+        await self.rpc_forward(seq_input.uuid_list, seq_input.seq_len_list, hidden_states)
+        output = await asyncio.wait_for(forward_future, timeout=100.0)  # 所有节点的处理时间加载一起不超过 100s
+
+        return deserialize_tensor(output), await asyncio.wait_for(status_future, timeout=100.0)
 
 
 class LocalRPCManager:
@@ -91,23 +63,13 @@ class LocalRPCManager:
         model_client = ModelClient(logger=logger, args=handler_args)
         self.model = model_client.load_model(SingleNodeCommunicator(), model_path)
 
-    def __len__(self):
-        return 1
-
-    async def forward(
-        self,
-        pp_idx: int,
-        hidden_states: MIX_TENSOR,
-        seq_input: SeqInput,
-        is_first: bool,
-        is_last: bool,
-    ) -> Tuple[MIX_TENSOR, float]:
+    async def forward(self, hidden_states: MIX_TENSOR, seq_input: SeqInput) -> Tuple[MIX_TENSOR, List[float]]:
         s1 = time.perf_counter()
         output_hidden_states = self.model(hidden_states, seq_input)
-        return output_hidden_states, time.perf_counter() - s1
+        return output_hidden_states, [time.perf_counter() - s1]
 
 
 if __name__ == "__main__":
     # for test
-    server = RPCManager(["localhost:50051", "localhost:50052"])
+    server = RPCManager("localhost:50051")
     server.post_sync(0, "/forward", {"uuid": "123", "hidden_states": [[1.0, 2.0, 3.0]]})

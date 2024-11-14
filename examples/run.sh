@@ -24,7 +24,7 @@ export PYTHONPATH="./":$PYTHONPATH;
 export OMP_NUM_THREADS=8;
 
 
-python3 -m tllm.entrypoints.api_server --port 8022 --model_path $MODEL_PATH --config_path $CONFIG_PATH
+python3 -m tllm.entrypoints.api_server --port 8022 --model_path $MODEL_PATH --config_path $CONFIG_PATH --is_debug
 # python3 -m tllm.entrypoints.api_server --port 8000 --model_path $MODEL_PATH --config_path $CONFIG_PATH --need_start_client
 
 

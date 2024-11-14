@@ -120,8 +120,8 @@ class RequestOutput:
 @dataclass
 class ForwardResult:
     hidden_states: MIX_TENSOR
-    comm_cost_time_list: List[float]
-    calc_cost_time_list: List[float]
+    comm_cost_time: float
+    calc_cost_time: float
 
 
 @dataclass

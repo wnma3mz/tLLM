@@ -96,8 +96,9 @@ python benchmarks/run_async_requests.py
         - [x] await Event
     - [x] Communication
         - [x] Communication Time Benchmark
-        - [ ] Async GRPC
-        - [ ] Ring Communication
+        - [x] Async GRPC
+        - [x] Ring Communication
+    - [ ] Auto Find Node
 - [ ] KV Cache
     - [x] Request/Sequence Cache
     - [x] Custom KV Cache Class
@@ -110,22 +111,21 @@ python benchmarks/run_async_requests.py
 
 ### 网络要求估算
 
-- PP=8 ，那么通信要求需要$*8$
-- 70B 的 hidden_size 是 8192
-- 数据是 `bfloat16`，每个 token 的通信参数量为 $1*8192*2=16,384$
+- PP=8 ，那么通信要求需要 $\times 8$
+- 70B 的 hidden_size 是 $8192$
+- 数据是 `(b)float16`，每个 token 的通信参数量为 $1*8192*2=16,384$
 
 在 TPOT 阶段预期速度: 20 token/s -> 0.05s / token
 - 假设通信：计算比为 1:4，那么通信时间为 0.01s
     - 即每次通信要在 0.01/8s 完成，即 0.00125s-> 1.25ms
-    - 当前实现为双向通信，70B 的 hidden_size 是 8192，就有 $16,384*2=32,768$ bytes.
-    - 故要在 0.01/8s 完成，那么网络带宽至少要求 $32,768/0.01*8=26,214,400 bytes/s = 26 Mbps$。
-在 TTFT 阶段，即首 token 时间预期 3s，
+    - 70B 的 hidden_size 是 8192，就有 $16,384$ bytes.
+    - 故要在 0.01/8s 完成，那么网络带宽至少要求 $16,384/0.01*8=26,214,400 bytes/s = 13 Mbps$。
+在 TTFT 阶段，即首 token 时间预期 3s 内有响应，
 - 假设通信：计算比为 1:2，那么通信时间为 1s，即每次通信要在 1/8s 完成，即 0.125s -> 125ms
 - 假设输入 token 数为 1000，那么通信参数量为 $1000*16,384 = 16,384,000$ bytes
 - 1/8s 内完成，通信时间为 $16,384,000/1*8=131,072,000 比特/秒 = 131 Mbps$
 
 优化点：
-- ring 通信，加速一倍
 - 数据压缩一倍，加速一倍
 - 在 TTFT 阶段做 PP overlap，把输入 token 分块传输。
 

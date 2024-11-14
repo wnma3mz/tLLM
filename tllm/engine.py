@@ -106,7 +106,6 @@ class AsyncEngine:
                     self.logger.debug("exception: " + str(e))
                     await asyncio.sleep(0.01)
                 continue
-            self.logger.debug("fetch data")
             try:
                 await self.generator.generate(sequence_data_list)
 

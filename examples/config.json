@@ -1,9 +1,14 @@
-[
-    {
-        "pp_rank": 0,
-        "url": "localhost:25001",
-        "tp_size": 2,
-        "master_port": 29501,
-        "layer_idx": [0, 1]
+{
+    "client": [
+        {
+            "pp_rank": 0,
+            "url": "localhost:25001",
+            "tp_size": 2,
+            "master_port": 29501,
+            "layer_idx": [0, 1]
+        }
+    ],
+    "master": {
+        "url": "localhost:25111"
     }
-]
+}

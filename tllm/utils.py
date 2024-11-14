@@ -80,10 +80,10 @@ def setup_logger(name, level=logging.INFO):
 def start_handler(config_path: str, model_path: str, logger) -> None:
     # 启动 handler
     with open(config_path, "r") as f:
-        config_list = json.load(f)
+        config = json.load(f)
 
     os.system("rm -rf grpc_*.log")
-    for pp_config in config_list:
+    for pp_config in config["client"]:
         port = pp_config["url"].rsplit(":", 1)[-1]
         start_layer_idx, end_layer_idx = pp_config["layer_idx"]
         # TODO 启动远程服务
@@ -104,15 +104,15 @@ def start_handler(config_path: str, model_path: str, logger) -> None:
         logger.info(f"start handler {pp_config['pp_rank']} success")
 
 
-def parse_url_list(config_path: str) -> List[str]:
+def parse_config(config_path: str) -> Tuple[List[str], int]:
     with open(config_path, "r") as f:
-        config_list = json.load(f)
-    return [pp_config["url"] for pp_config in config_list]
+        config = json.load(f)
+    return [x["url"] for x in config["client"]], int(config["master"]["url"].rsplit(":", 1)[-1])
 
 
-def init_engine(
+async def init_engine(
     model_path: str, is_local: str, logger, url_list: Optional[List[str]] = None, master_handler_port: int = -1
-) -> Tuple[AsyncEngine, TokenizerUtils]:
+) -> Tuple[AsyncEngine, TokenizerUtils, MasterHandler]:
     if model_path.endswith(".gguf"):
         raise ValueError("GGUF model not supported")
         arch = "MLXLlamaForCausalLM"
@@ -136,14 +136,15 @@ def init_engine(
     model = MY_CausalLM_CLASS.from_pretrained(logger, config, model_path, state_dict)
     if is_local:
         generator = LLMGenerator(LocalRPCManager(logger, model_path, config.num_hidden_layers), logger, model)
+        master_handler = None
     else:
         if master_handler_port == -1:
             pending_requests = None
         else:
             pending_requests = PendingRequests()
             master_handler = MasterHandler(logger, pending_requests)
-            master_handler.start()
+            await master_handler.start(master_handler_port)
 
-        generator = LLMGenerator(RPCManager(url_list, pending_requests), logger, model)
+        generator = LLMGenerator(RPCManager(url_list[0], pending_requests, len(url_list)), logger, model)
     engine = AsyncEngine(logger, generator)
-    return engine, tok
+    return engine, tok, master_handler

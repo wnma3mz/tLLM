@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 from concurrent import futures
 import json
 import logging
@@ -12,11 +13,12 @@ import torch
 from tllm.commons.communicator import Communicator, SingleNodeCommunicator
 from tllm.commons.convert import deserialize_tensor, serialize_tensor
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
+from tllm.rpc.manager import RPCManager
 from tllm.rpc.model_client import HandlerArgs, ModelClient
 from tllm.rpc.schemas_pb2 import BFloat16Tensor
 from tllm.schemas import SeqInput
 from tllm.utils import setup_logger
-import asyncio
+
 
 class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
     def __init__(self, comm: Communicator, model, rank: int, pp_rank: int, logger, ip_addr: str = "localhost"):
@@ -30,6 +32,24 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
         uuid_shape_list = [None, None]
         self.server = None
         self.logger = logger
+        self.grpc_options = [
+            ("grpc.max_metadata_size", 32 * 1024 * 1024),
+            ("grpc.max_send_message_length", 128 * 1024 * 1024),
+            ("grpc.max_receive_message_length", 128 * 1024 * 1024),
+        ]
+
+        # 在 load 模型的时候已经知道 PP IDX 和 总的 PP
+        with open("./examples/config.json", "r") as f:
+            config = json.load(f)
+        self.pp_size = len(config["client"])
+        if self.pp_rank == self.pp_size - 1:
+            next_pp_url = config["master"]["url"]
+        else:
+            next_pp_url = config["client"][self.pp_rank + 1]["url"]
+
+        self.manager = RPCManager(next_pp_url)
+        self.status_manager = RPCManager(config["master"]["url"]) # Maybe Comm by WebSocket?
+
         if self.rank == 0:
             pass
         else:
@@ -42,14 +62,7 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
                 _ = self.model.forward(hidden_states, seq_input=seq_input)
 
     async def start(self):
-        self.server = grpc.aio.server(
-            futures.ThreadPoolExecutor(max_workers=10),
-            options=[
-                ("grpc.max_metadata_size", 32 * 1024 * 1024),
-                ("grpc.max_send_message_length", 128 * 1024 * 1024),
-                ("grpc.max_receive_message_length", 128 * 1024 * 1024),
-            ],
-        )
+        self.server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=10), options=self.grpc_options)
 
         schemas_pb2_grpc.add_RPCServiceServicer_to_server(self, self.server)
         self.server.add_insecure_port(f"[::]:{args.port}")
@@ -69,24 +82,9 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
             except Exception as e:
                 pass
 
-    @property
-    def config(self):
-        with open("./examples/config.json", "r") as f:
-            config_data = json.load(f)
-        return config_data
-
-    def _get_next_addr(self, pp_idx):
-        return self.config[pp_idx + 1]["url"]
-
-    async def send_next_node(self, request: schemas_pb2.ForwardRequest, hidden_states: BFloat16Tensor):
-        url = self._get_next_addr()  # request.pp_idx + 1, 需要判断是否是最后一个，返回 master 节点
-        channel = grpc.aio.insecure_channel(url, options=self.grpc_options)
-        stub = schemas_pb2_grpc.RPCServiceStub(channel)
-        forward_request = {"uuid": request.uuid, "seq_len": request.seq_len, "hidden_states": hidden_states}
-        response = stub.Forward(schemas_pb2.ForwardRequest(**forward_request))
-        return response
-
-    async def Forward(self, request: schemas_pb2.ForwardRequest, context: grpc.ServicerContext):
+    async def Forward(
+        self, request: schemas_pb2.ForwardRequest, context: grpc.ServicerContext
+    ) -> schemas_pb2.ForwardResponse:
         """
         @param request: ForwardRequest
             hidden_states: bytes
@@ -110,12 +108,10 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
         output = serialize_tensor(output_hidden_states)
         self.logger.debug(f"serialize_tensor cost time: {time.perf_counter() - s1:.4f}")
         self.logger.debug("=" * 20)
-        return schemas_pb2.ForwardResponse(
-            msg="Forward pass completed",
-            status=200,
-            output=output,
-            cost_time=cost_time,
-        )
+
+        await self.manager.rpc_forward(request.uuid, request.seq_len, output)
+        await self.status_manager.rpc_status(request.uuid, request.seq_len, self.pp_rank, cost_time)
+        return schemas_pb2.ForwardResponse(msg="Forward Completed", status=200)
 
     def Health(self, request, context):
         return schemas_pb2.HealthResponse(msg="Healthy", status=200)

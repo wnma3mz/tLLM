@@ -6,8 +6,10 @@ import grpc
 
 from tllm.rpc import schemas_pb2 as tllm_dot_rpc_dot_schemas__pb2
 
-GRPC_GENERATED_VERSION = "1.66.2"
+GRPC_GENERATED_VERSION = "1.64.1"
 GRPC_VERSION = grpc.__version__
+EXPECTED_ERROR_RELEASE = "1.65.0"
+SCHEDULED_RELEASE_DATE = "June 25, 2024"
 _version_not_supported = False
 
 try:
@@ -18,12 +20,15 @@ except ImportError:
     _version_not_supported = True
 
 if _version_not_supported:
-    raise RuntimeError(
+    warnings.warn(
         f"The grpc package installed is at version {GRPC_VERSION},"
         + f" but the generated code in tllm/rpc/schemas_pb2_grpc.py depends on"
         + f" grpcio>={GRPC_GENERATED_VERSION}."
         + f" Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}"
         + f" or downgrade your generated code using grpcio-tools<={GRPC_VERSION}."
+        + f" This warning will become an error in {EXPECTED_ERROR_RELEASE},"
+        + f" scheduled for release on {SCHEDULED_RELEASE_DATE}.",
+        RuntimeWarning,
     )
 
 
@@ -36,9 +41,9 @@ class RPCServiceStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.InitModel = channel.unary_unary(
-            "/schemas.RPCService/InitModel",
-            request_serializer=tllm_dot_rpc_dot_schemas__pb2.ModelConfig.SerializeToString,
+        self.Status = channel.unary_unary(
+            "/schemas.RPCService/Status",
+            request_serializer=tllm_dot_rpc_dot_schemas__pb2.StatusRequest.SerializeToString,
             response_deserializer=tllm_dot_rpc_dot_schemas__pb2.StatusResponse.FromString,
             _registered_method=True,
         )
@@ -54,18 +59,12 @@ class RPCServiceStub(object):
             response_deserializer=tllm_dot_rpc_dot_schemas__pb2.HealthResponse.FromString,
             _registered_method=True,
         )
-        self.InitModelFlag = channel.unary_unary(
-            "/schemas.RPCService/InitModelFlag",
-            request_serializer=tllm_dot_rpc_dot_schemas__pb2.Empty.SerializeToString,
-            response_deserializer=tllm_dot_rpc_dot_schemas__pb2.InitModelFlagResponse.FromString,
-            _registered_method=True,
-        )
 
 
 class RPCServiceServicer(object):
     """Missing associated documentation comment in .proto file."""
 
-    def InitModel(self, request, context):
+    def Status(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
@@ -83,18 +82,12 @@ class RPCServiceServicer(object):
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
-    def InitModelFlag(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details("Method not implemented!")
-        raise NotImplementedError("Method not implemented!")
-
 
 def add_RPCServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
-        "InitModel": grpc.unary_unary_rpc_method_handler(
-            servicer.InitModel,
-            request_deserializer=tllm_dot_rpc_dot_schemas__pb2.ModelConfig.FromString,
+        "Status": grpc.unary_unary_rpc_method_handler(
+            servicer.Status,
+            request_deserializer=tllm_dot_rpc_dot_schemas__pb2.StatusRequest.FromString,
             response_serializer=tllm_dot_rpc_dot_schemas__pb2.StatusResponse.SerializeToString,
         ),
         "Forward": grpc.unary_unary_rpc_method_handler(
@@ -107,11 +100,6 @@ def add_RPCServiceServicer_to_server(servicer, server):
             request_deserializer=tllm_dot_rpc_dot_schemas__pb2.Empty.FromString,
             response_serializer=tllm_dot_rpc_dot_schemas__pb2.HealthResponse.SerializeToString,
         ),
-        "InitModelFlag": grpc.unary_unary_rpc_method_handler(
-            servicer.InitModelFlag,
-            request_deserializer=tllm_dot_rpc_dot_schemas__pb2.Empty.FromString,
-            response_serializer=tllm_dot_rpc_dot_schemas__pb2.InitModelFlagResponse.SerializeToString,
-        ),
     }
     generic_handler = grpc.method_handlers_generic_handler("schemas.RPCService", rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
@@ -123,7 +111,7 @@ class RPCService(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
-    def InitModel(
+    def Status(
         request,
         target,
         options=(),
@@ -138,8 +126,8 @@ class RPCService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            "/schemas.RPCService/InitModel",
-            tllm_dot_rpc_dot_schemas__pb2.ModelConfig.SerializeToString,
+            "/schemas.RPCService/Status",
+            tllm_dot_rpc_dot_schemas__pb2.StatusRequest.SerializeToString,
             tllm_dot_rpc_dot_schemas__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
@@ -201,36 +189,6 @@ class RPCService(object):
             "/schemas.RPCService/Health",
             tllm_dot_rpc_dot_schemas__pb2.Empty.SerializeToString,
             tllm_dot_rpc_dot_schemas__pb2.HealthResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True,
-        )
-
-    @staticmethod
-    def InitModelFlag(
-        request,
-        target,
-        options=(),
-        channel_credentials=None,
-        call_credentials=None,
-        insecure=False,
-        compression=None,
-        wait_for_ready=None,
-        timeout=None,
-        metadata=None,
-    ):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            "/schemas.RPCService/InitModelFlag",
-            tllm_dot_rpc_dot_schemas__pb2.Empty.SerializeToString,
-            tllm_dot_rpc_dot_schemas__pb2.InitModelFlagResponse.FromString,
             options,
             channel_credentials,
             insecure,
