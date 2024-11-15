@@ -1,0 +1,16 @@
+aiohttp
+fastapi
+numpy
+requests
+tabulate
+tqdm
+typing_extensions
+uvicorn
+websockets
+xformers # --index-url https://download.pytorch.org/whl/cu121
+gradio==5.4.0
+grpcio==1.66.2
+lz4==4.3.3
+protobuf==5.28.3
+pydantic==2.9.2
+transformers==4.46.0
