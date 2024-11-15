@@ -104,6 +104,9 @@ class LlamaModel(nn.Module):
         state_dict = model.read_weight_from_model_path(state_dict, is_merge)
         model.load_state_dict(state_dict)
         del state_dict
+
+        model.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        model.to(model.device)
         model.eval()
         return model
 
@@ -187,6 +190,7 @@ class LlamaModel(nn.Module):
         attention_data = build_forward_cache(seq_input, self.cache_manager, self.num_decoder_layers)
         hidden_states = hidden_states.to(self.device)
         position_embeddings = self.rotary_emb(hidden_states, attention_data.position_ids.to(self.device))
+        attention_data.attn_mask = attention_data.attn_mask.to(self.device)
         hidden_states = self.model(
             hidden_states, position_embeddings=position_embeddings, attention_data=attention_data
         )
@@ -199,10 +203,6 @@ class LlamaModel(nn.Module):
     @property
     def dtype(self):
         return next(self.parameters()).dtype
-
-    @property
-    def device(self):
-        return next(self.parameters()).device
 
 
 class TLlamaForCausalLM(nn.Module):
@@ -239,12 +239,15 @@ class TLlamaForCausalLM(nn.Module):
 
         model.load_state_dict(state_dict)
         model.to(model.dtype)
+
+        model.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        model.to(model.device)
         model.eval()
         return model
 
     @torch.no_grad()
     def get_input_embeddings(self, x: np.ndarray) -> torch.Tensor:
-        return self.embed_tokens(torch.tensor(x))
+        return self.embed_tokens(torch.tensor(x, device=self.device))
 
     @torch.no_grad()
     def get_logits(self, hidden_states: torch.Tensor, seq_len_list: List[int]) -> List[torch.Tensor]:
