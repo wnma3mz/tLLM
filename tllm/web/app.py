@@ -1,6 +1,7 @@
+import argparse
 import json
 import time
-from typing import *
+from typing import Any, Dict, Generator, List, Optional, Tuple
 
 import gradio as gr
 import requests
@@ -23,11 +24,55 @@ def process_response_chunk(chunk: bytes) -> Optional[Dict]:
         return None
 
 
+class MessageProcessor:
+    def _format_chat_history(self, img_path, history: List[List[str]], system_prompt: str) -> List[Dict[str, str]]:
+        """将聊天历史转换为OpenAI格式"""
+        formatted_history = []
+
+        if system_prompt and len(system_prompt.strip()) > 0:
+            formatted_history.append({"role": "system", "content": system_prompt})
+
+        for message in history:
+            user_input, assistant_response = message
+            if img_path is None:
+                formatted_history.append({"role": "user", "content": user_input})
+            else:
+                mm_content = [
+                    {"type": "text", "text": user_input},
+                    {"type": "image_url", "image_url": {"url": img_path}},
+                ]
+                formatted_history.append({"role": "user", "content": mm_content})
+            if assistant_response is not None:
+                formatted_history.append({"role": "assistant", "content": assistant_response})
+
+        return formatted_history
+
+    def prepare_request_data(
+        self,
+        img_path: str,
+        history: List[List[str]],
+        system_prompt: str,
+        temperature: float,
+        top_p: float,
+        top_k: int,
+        max_tokens: int,
+    ) -> Dict[str, Any]:
+        return {
+            "messages": self._format_chat_history(img_path, history, system_prompt),
+            "model": "test",
+            "stream": True,
+            "temperature": temperature,
+            "top_p": top_p,
+            "top_k": top_k,
+            "max_tokens": max_tokens,
+        }
+
+
 class ChatInterface:
-    def __init__(self, chat_url: str):
+    def __init__(self):
         self.should_stop = False
         self.config = GenerationConfig()
-        self.config.chat_url = chat_url
+        self.message_processor = MessageProcessor()
         self.metric_text = "Tokens Generated: {token_nums}\nSpeed: {speed:.2f} tokens/second"
 
     def _create_chat_column(self) -> Tuple[gr.Chatbot, gr.Textbox, gr.Button, gr.Button, gr.Button]:
@@ -63,62 +108,15 @@ class ChatInterface:
             gr.Slider(minimum=1, maximum=100, value=self.config.top_k, step=1, label="Top K"),
             gr.Slider(minimum=1, maximum=8192, value=self.config.max_tokens, step=64, label="Max Tokens"),
         ]
-
         return components
 
-    def _setup_config_updates(self, components: List[gr.components.Component]) -> None:
-        """设置配置更新的回调"""
-
-        def update_config(url, sys_prompt, temp, tp, tk, max_tok):
-            self.config.chat_url = url
-            self.config.system_prompt = sys_prompt
-            self.config.temperature = 1.0
-            self.config.top_p = 1.0
-            self.config.top_k = -1
-            self.config.max_tokens = max_tok
-
-        for component in components:
-            component.change(update_config, inputs=components)
-
-    def _format_chat_history(self, img_path, history: List[List[str]]) -> List[Dict[str, str]]:
-        """将聊天历史转换为OpenAI格式"""
-        formatted_history = []
-
-        if self.config.system_prompt and len(self.config.system_prompt.strip()) > 0:
-            formatted_history.append({"role": "system", "content": self.config.system_prompt})
-
-        for message in history:
-            user_input, assistant_response = message
-            if img_path is None:
-                formatted_history.append({"role": "user", "content": user_input})
-            else:
-                mm_content = [
-                    {"type": "text", "text": user_input},
-                    {"type": "image_url", "image_url": {"url": img_path}},
-                ]
-                formatted_history.append({"role": "user", "content": mm_content})
-            if assistant_response is not None:
-                formatted_history.append({"role": "assistant", "content": assistant_response})
-
-        return formatted_history
-
-    def _prepare_request_data(self, img_path: str, history: List[List[str]]) -> Dict[str, Any]:
-        """准备请求数据"""
-        return {
-            "messages": self._format_chat_history(img_path, history),
-            "model": "tt",
-            "stream": True,
-            "temperature": self.config.temperature,
-            "top_p": self.config.top_p,
-            "top_k": self.config.top_k,
-            "max_tokens": self.config.max_tokens,
-        }
-
-    def _handle_bot_response(self, img_path: str, history: List[List[str]]) -> Generator:
-        """处理机器人的响应"""
+    def _handle_bot_response(
+        self, img_path: str, history: List[List[str]], *config: Tuple[str, str, float, float, int, int]
+    ) -> Generator:
         self.should_stop = False
-        data = self._prepare_request_data(img_path, history)
-        response = requests.post(self.config.chat_url, json=data, stream=True)
+        data = self.message_processor.prepare_request_data(img_path, history, *config[1:])
+        chat_url = config[0]
+        response = requests.post(chat_url, json=data, stream=True)
 
         tokens_generated = 0
         start_time = time.time()
@@ -145,15 +143,12 @@ class ChatInterface:
                     yield history, self.metric_text.format(token_nums=tokens_generated, speed=tokens_per_second)
 
     def _handle_user_input(self, user_message: str, history: List[List[str]]) -> Tuple[gr.update, List[List[str]]]:
-        """处理用户输入"""
         return gr.update(value="", interactive=True), history + [[user_message, None]]
 
     def _handle_stop_generation(self) -> None:
-        """处理停止生成"""
         self.should_stop = True
 
     def _handle_clear_history(self) -> Tuple[List[List[str]], str]:
-        """处理清空历史"""
         self.should_stop = False
         return [], ""
 
@@ -168,14 +163,12 @@ class ChatInterface:
                     config_components = self._create_config_column()
                     metrics = gr.Markdown(value=self.metric_text.format(token_nums=0, speed=0))
 
-            self._setup_config_updates(config_components)
-
             submit_btn.click(self._handle_user_input, inputs=[msg, chatbot], outputs=[msg, chatbot], queue=False).then(
-                self._handle_bot_response, inputs=[img, chatbot], outputs=[chatbot, metrics]
+                self._handle_bot_response, inputs=[img, chatbot, *config_components], outputs=[chatbot, metrics]
             )
 
             msg.submit(self._handle_user_input, inputs=[msg, chatbot], outputs=[msg, chatbot], queue=False).then(
-                self._handle_bot_response, inputs=[img, chatbot], outputs=[chatbot, metrics]
+                self._handle_bot_response, inputs=[img, chatbot, *config_components], outputs=[chatbot, metrics]
             )
 
             stop_btn.click(self._handle_stop_generation, queue=False)
@@ -186,10 +179,8 @@ class ChatInterface:
 
 
 def parse_args():
-    import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--chat_url", type=str, default="localhost:8000")
     parser.add_argument("--port", type=int, default=7860)
 
     return parser.parse_args()
@@ -197,7 +188,7 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-    chat_interface = ChatInterface(args.chat_url)
+    chat_interface = ChatInterface()
     demo = chat_interface.create_interface()
     demo.queue()
     demo.launch(server_name="0.0.0.0", server_port=args.port, show_api=False, prevent_thread_lock=False, share=False)
