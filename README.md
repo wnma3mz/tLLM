@@ -9,6 +9,7 @@
 2. install dependencies
 
 - for mlx:   `pip install -r requirements-mlx.txt`
+- for nvidia: `pip install -r requirements-cuda.txt`
 - for intel: `pip install -r requirements.txt`
 
 3. run server 
@@ -38,6 +39,7 @@
     ```
 
 4. testing
+
 ```python
 python benchmarks/run_async_requests.py
 ```

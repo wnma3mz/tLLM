@@ -13,6 +13,21 @@ from transformers.models.llama.modeling_llama import (
 
 from tllm.models.cache import AttentionData, RequestsCache
 
+try:
+    from xformers.components.attention.core import scaled_dot_product_attention as xformers_attention
+
+    HAS_XFORMERS = True
+
+    def self_attn_func(query_states, key_states, value_states, attn_mask):
+        return xformers_attention(query_states, key_states, value_states, att_mask=attn_mask)
+
+except:
+    HAS_XFORMERS = False
+    torch_attention = torch.nn.functional.scaled_dot_product_attention
+
+    def self_attn_func(query_states, key_states, value_states, attn_mask):
+        return torch_attention(query_states, key_states, value_states, attn_mask=attn_mask)
+
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
@@ -165,10 +180,8 @@ class MergedLlamaSdpaAttention(nn.Module):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        # TODO: speed up the following line
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
-            query_states, key_states, value_states, attn_mask=attention_data.attn_mask
-        )
+        attn_output = self_attn_func(query_states, key_states, value_states, att_mask=attention_data.attn_mask)
+
         attn_output = attn_output.transpose(0, 1).contiguous()
         attn_output = attn_output.reshape(q_len, -1)
 
@@ -209,10 +222,8 @@ class PlainLlamaSdpaAttention(LlamaSdpaAttention):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        # TODO: speed up the following line
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
-            query_states, key_states, value_states, attn_mask=attention_data.attn_mask
-        )
+        attn_output = self_attn_func(query_states, key_states, value_states, att_mask=attention_data.attn_mask)
+
         attn_output = attn_output.transpose(0, 1).contiguous()
         attn_output = attn_output.reshape(q_len, -1)
 
