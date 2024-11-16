@@ -25,6 +25,8 @@ def find_continuous_path(clients: Dict[str, Dict[str, Union[str, int]]], end_idx
         # 更新当前层为下一个起始层
         current_layer = current_item["end_idx"]
 
+        if end_idx == current_layer:
+            return path
     return None
 
 
@@ -32,26 +34,30 @@ def get_url(data: Dict[str, Union[str, int]]) -> str:
     return f"{data['ip_addr']}:{data['port']}"
 
 
-class LayerManager:
-    def __init__(self, total_layers: int, model_name: str):
+class WebsocketManager:
+    def __init__(self, total_layers: int, model_name: str, master_url: str):
         self.total_layers = total_layers
         self.model_name = model_name
         self.clients: Dict[str, Union[str, int]] = {}  # client_id -> {client_id, start_layer_idx, end_layer_idx}
         self.monitor_websockets: Set[WebSocket] = set()  # 监控页面的websocket连接
         self.layer_counts = [0 for _ in range(self.total_layers)]
+        self.ws_clients: Dict[str, WebSocket] = {}  # client_id -> WebSocket
+        self.master_url = master_url
+        self.url_list = None
+        self.client_id_list = None
 
-    def get_pp_url_list(self) -> Optional[List[str]]:
+    def update_pp_url_list(self):
         client_id_list = find_continuous_path(self.clients, self.total_layers)
         if client_id_list is not None:
             # 有序的client_id列表
-            url_list = []
-            for idx, client_id in enumerate(client_id_list):
-                url_list.append(get_url(self.clients[client_id]))
-                self.clients["pp_idx"] = idx
-            return url_list
-        return None
+            self.url_list = [get_url(self.clients[client_id]) for client_id in client_id_list]
+            self.client_id_list = client_id_list
+        else:
+            self.url_list = None
+            self.client_id_list = None
 
-    def register_client(self, client_id: str, data: Dict):
+    def register_client(self, client_id: str, data: Dict, websocket: WebSocket):
+        self.ws_clients[client_id] = websocket
         self.clients[client_id] = {"client_id": client_id}
         self.clients[client_id].update(data)
 
@@ -61,10 +67,10 @@ class LayerManager:
     def unregister_client(self, client_id: str) -> int:
         if client_id not in self.clients:
             return
+        self.ws_clients.pop(client_id)
         data = self.clients.pop(client_id)
         for idx in range(data["start_idx"], data["end_idx"]):
             self.layer_counts[idx] -= 1
-        return data.get("pp_idx", -1)
 
     def get_layer_statistics(self) -> Dict[int, int]:
         return {idx: value for idx, value in enumerate(self.layer_counts)}

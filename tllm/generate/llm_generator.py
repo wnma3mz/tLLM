@@ -62,8 +62,8 @@ def process_mm_input(
 
 
 class LLMGenerator:
-    def __init__(self, server: RPCManager, logger, model, tok: "TokenizerUtils") -> None:
-        self.server = server
+    def __init__(self, manager: RPCManager, logger, model, tok: "TokenizerUtils") -> None:
+        self.manager = manager
         self.logger = logger
         self.model = model
         self.tok = tok
@@ -72,7 +72,7 @@ class LLMGenerator:
 
     async def forward(self, inputs_embeds: MIX_TENSOR, seq_input: SeqInput) -> ForwardResult:
         s1 = time.perf_counter()
-        hidden_states, calc_cost_time_list = await self.server.forward(inputs_embeds, seq_input)
+        hidden_states, calc_cost_time_list = await self.manager.forward(inputs_embeds, seq_input)
         comm_cost_time = time.perf_counter() - s1 - sum(calc_cost_time_list)
         return ForwardResult(
             hidden_states=hidden_states,

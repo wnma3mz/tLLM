@@ -77,41 +77,8 @@ def setup_logger(name, level=logging.INFO):
     return logger
 
 
-def start_handler(config_path: str, model_path: str, logger) -> None:
-    # 启动 handler
-    with open(config_path, "r") as f:
-        config = json.load(f)
-
-    os.system("rm -rf grpc_*.log")
-    for pp_config in config["client"]:
-        port = pp_config["url"].rsplit(":", 1)[-1]
-        start_layer_idx, end_layer_idx = pp_config["layer_idx"]
-        # TODO 启动远程服务
-        if pp_config["tp_size"] > 1:
-            cmd = f"torchrun --nproc_per_node={pp_config['tp_size']} --master_port={pp_config['master_port']} tllm/rpc/handler.py --start_layer_idx={start_layer_idx} --end_layer_idx={end_layer_idx} --model_path {model_path} --port {port} > grpc_{port}.log 2>&1 &"
-        else:
-            cmd = f"python3 tllm/rpc/handler.py --start_layer_idx={start_layer_idx} --end_layer_idx={end_layer_idx} --model_path {model_path} --port {port} > grpc_{port}.log 2>&1 &"  #
-        # 异步启动
-        logger.info(f"begin start handler {pp_config['pp_rank']}")
-        os.popen(cmd)
-        # 监听是否启动成功
-        while True:
-            if os.path.exists(f"grpc_{port}.log"):
-                with open(f"grpc_{port}.log", "r") as f:
-                    if "Starting gRPC server on port" in f.read():
-                        break
-            time.sleep(1)
-        logger.info(f"start handler {pp_config['pp_rank']} success")
-
-
-def parse_config(config_path: str) -> Tuple[List[str], int]:
-    with open(config_path, "r") as f:
-        config = json.load(f)
-    return [x["url"] for x in config["client"]], int(config["master"]["url"].rsplit(":", 1)[-1])
-
-
 async def init_engine(
-    model_path: str, is_local: str, logger, url_list: Optional[List[str]] = None, master_handler_port: int = -1
+    model_path: str, is_local: str, logger, master_handler_port: int
 ) -> Tuple[AsyncEngine, TokenizerUtils, MasterHandler]:
     if model_path.endswith(".gguf"):
         raise ValueError("GGUF model not supported")
@@ -138,13 +105,10 @@ async def init_engine(
         generator = LLMGenerator(LocalRPCManager(logger, model_path, config.num_hidden_layers), logger, model, tok)
         master_handler = None
     else:
-        if master_handler_port == -1:
-            pending_requests = None
-        else:
-            pending_requests = PendingRequests()
-            master_handler = MasterHandler(logger, pending_requests)
-            await master_handler.start(master_handler_port)
+        pending_requests = PendingRequests()
+        master_handler = MasterHandler(logger, pending_requests)
+        await master_handler.start(master_handler_port)
 
-        generator = LLMGenerator(RPCManager(url_list[0], pending_requests, len(url_list)), logger, model, tok)
+        generator = LLMGenerator(RPCManager(pending_requests), logger, model, tok)
     engine = AsyncEngine(logger, generator)
     return engine, tok, master_handler

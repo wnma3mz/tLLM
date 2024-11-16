@@ -11,14 +11,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 import uvicorn
 
-from tllm.entrypoints.layer_manager import LayerManager
 from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionResponse
 from tllm.entrypoints.server_chat import OpenAIServing
-from tllm.utils import init_engine, parse_config, setup_logger, setup_seed, start_handler
+from tllm.entrypoints.websocket_manager import WebsocketManager
+from tllm.utils import init_engine, setup_logger, setup_seed
 
 engine: None
 openai_serving_chat: OpenAIServing = None
-layer_manager: LayerManager = None
+ws_manager: WebsocketManager = None
 
 
 app = FastAPI()
@@ -44,6 +44,8 @@ async def get_index():
 
 @app.post("/v1/chat/completions")
 async def create_chat_completion(request: ChatCompletionRequest, raw_request: Request) -> ChatCompletionResponse:
+    if ws_manager.url_list is None:
+        raise ValueError("No available Full Node to process the request")
     try:
         generator = await openai_serving_chat.create_chat_completion(request, raw_request)
         if request.stream:
@@ -85,19 +87,36 @@ async def show_version():
 
 @app.get("/unregister_layer_idx")
 async def get_unregister_layer_idx() -> Dict[str, List[int]]:
-    return JSONResponse(content={"data": layer_manager.unregister_layer_idx()})
+    return JSONResponse(content={"data": ws_manager.unregister_layer_idx()})
 
 
 @app.websocket("/ws/monitor")
 async def monitor_websocket(websocket: WebSocket):
     await websocket.accept()
-    layer_manager.monitor_websockets.add(websocket)
+    ws_manager.monitor_websockets.add(websocket)
     try:
-        await websocket.send_json(layer_manager.get_state())
+        await websocket.send_json(ws_manager.get_state())
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
-        layer_manager.monitor_websockets.remove(websocket)
+        ws_manager.monitor_websockets.remove(websocket)
+
+
+async def update_state():
+    # 当 url_list 不为空时，表示可以处理服务
+    # - master 端更新 url
+    # - 发送给所有 pp，告知转发的 url 是什么（forward url）
+    if ws_manager.url_list is not None:
+        openai_serving_chat.engine.generator.manager.update_url(ws_manager.url_list[0], len(ws_manager.url_list))
+        for i, client_id in enumerate(ws_manager.client_id_list):
+            if i == len(ws_manager.client_id_list) - 1:
+                url = ws_manager.master_url
+            else:
+                url = ws_manager.url_list[i + 1]
+            message = {"type": "forward_url", "forward_url": url, "pp_rank": i, "master_url": ws_manager.master_url}
+            await ws_manager.ws_clients[client_id].send_json(message)
+    else:
+        return None
 
 
 @app.websocket("/ws/client/{client_id}")
@@ -108,29 +127,28 @@ async def client_websocket(websocket: WebSocket, client_id: str):
         while True:
             data = await websocket.receive_json()
             if data["type"] == "register_layers":
-                layer_manager.register_client(client_id, data)
+                ws_manager.register_client(client_id, data, websocket)
 
-                await layer_manager.broadcast_state()
+                await ws_manager.broadcast_state()
                 # 根据 layer idx 自动算 pp idx
-                url_list = layer_manager.get_pp_url_list()
-                if url_list is not None:
-                    for pp_idx, url in enumerate(url_list):
-                        openai_serving_chat.engine.model.server.update_url(pp_idx, url)
+                ws_manager.update_pp_url_list()
+                await update_state()
+
     except WebSocketDisconnect:
         # 如果断开连接，删除client
-        pp_idx = layer_manager.unregister_client(client_id)
-        # 删除
-        if pp_idx != -1:
-            openai_serving_chat.engine.model.server.remove_url(pp_idx)
-        await layer_manager.broadcast_state()
+        ws_manager.unregister_client(client_id)
+        ws_manager.update_pp_url_list()
+        await update_state()
+        await ws_manager.broadcast_state()
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--master_url", type=str, required=True)
+    parser.add_argument("--master_handler_port", type=int, required=True)
     parser.add_argument("--model_path", type=str, required=True)
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--config_path", type=str, default=None)
-    parser.add_argument("--need_start_handler", action="store_true")
     parser.add_argument("--is_local", action="store_true")
     parser.add_argument("--is_debug", action="store_true")
     return parser.parse_args()
@@ -167,26 +185,20 @@ async def serve_http(app: FastAPI, loop: asyncio.AbstractEventLoop, master_handl
 async def run_server(args) -> None:
     setup_seed(42)
     global app
-    global logger, engine, layer_manager, openai_serving_chat
+    global logger, engine, ws_manager, openai_serving_chat
 
     logger = setup_logger(__name__, logging.DEBUG if args.is_debug else logging.INFO)
-
-    if args.need_start_handler:
-        start_handler(args.config_path, args.model_path, logger)
 
     logger.info("args: %s", args)
 
     s1 = time.time()
-    url_list, master_handler_port = (None, -1) if args.config_path is None else parse_config(args.config_path)
-    engine, tok, master_handler = await init_engine(
-        args.model_path, args.is_local, logger, url_list, master_handler_port
-    )
+    engine, tok, master_handler = await init_engine(args.model_path, args.is_local, logger, args.master_handler_port)
 
     logger.info(f"init cost time {time.time() - s1}")
     openai_serving_chat = OpenAIServing(engine, tok, args)
     model_name = openai_serving_chat.model_name
     total_layers = engine.generator.model.num_layers
-    layer_manager = LayerManager(total_layers=total_layers, model_name=model_name)
+    ws_manager = WebsocketManager(total_layers, model_name, args.master_url)
 
     loop = await engine.start()
     uvicorn_kwargs = {"host": "0.0.0.0", "port": args.port}

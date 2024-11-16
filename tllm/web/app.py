@@ -179,7 +179,6 @@ class ChatInterface:
 
 
 def parse_args():
-
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=7860)
 

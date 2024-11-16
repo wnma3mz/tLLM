@@ -13,18 +13,35 @@ import torch
 from tllm.commons.communicator import Communicator, SingleNodeCommunicator
 from tllm.commons.convert import deserialize_tensor, serialize_tensor
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
-from tllm.rpc.manager import RPCManager
-from tllm.rpc.model_client import HandlerArgs, ModelClient
+from tllm.rpc.websocket_client import HandlerArgs, WebSocketClient
 from tllm.schemas import SeqInput
 from tllm.utils import setup_logger
 
 
+class RPCManager:
+    def __init__(self, url: str, grpc_options: List[Tuple[str, int]]):
+        self.grpc_options = grpc_options
+        channel = grpc.aio.insecure_channel(url, options=self.grpc_options)
+        self.stub = schemas_pb2_grpc.RPCServiceStub(channel)
+
+    def update_url(self, url: str):
+        channel = grpc.aio.insecure_channel(url, options=self.grpc_options)
+        self.stub = schemas_pb2_grpc.RPCServiceStub(channel)
+
+    async def rpc_status(self, uuid, seq_len, pp_idx: int, cost_time: float):
+        status_request = {"uuid": uuid, "seq_len": seq_len, "pp_idx": pp_idx, "cost_time": cost_time}
+        self.stub.Status(schemas_pb2.StatusRequest(**status_request))
+
+    async def rpc_forward(self, uuid, seq_len, hidden_states: schemas_pb2.BFloat16Tensor):
+        forward_request = {"uuid": uuid, "seq_len": seq_len, "hidden_states": hidden_states}
+        self.stub.Forward(schemas_pb2.ForwardRequest(**forward_request))
+
+
 class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
-    def __init__(self, comm: Communicator, model, rank: int, pp_rank: int, logger, ip_addr: str = "localhost"):
+    def __init__(self, comm: Communicator, model, ws_client: WebSocketClient, logger, ip_addr: str = "localhost"):
         self.comm = comm
         self.model = model
-        self.rank = rank
-        self.pp_rank = pp_rank
+        self.rank = comm.rank
         self.init_model_flag = False
         self.ip_addr = ip_addr
         self.prefix_log_str = f"IP: [{self.ip_addr}]"
@@ -37,17 +54,21 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
             ("grpc.max_receive_message_length", 128 * 1024 * 1024),
         ]
 
-        # 在 load 模型的时候已经知道 PP IDX 和 总的 PP
-        with open("./examples/config.json", "r") as f:
-            config = json.load(f)
-        self.pp_size = len(config["client"])
-        if self.pp_rank == self.pp_size - 1:
-            next_pp_url = config["master"]["url"]
-        else:
-            next_pp_url = config["client"][self.pp_rank + 1]["url"]
+        forward_url, master_url = None, None
+        while forward_url is None:
+            # TODO 设置为事件通知
+            # 如果发生变化，需要感知到
+            message = ws_client.get_data()
+            if message:
+                self.pp_rank = message["pp_rank"]
+                forward_url = message["forward_url"]
+                master_url = message["master_url"]
+            time.sleep(3)
+        self.logger.info(f"[Master]: {master_url}")
+        self.logger.info(f"[Forward]: {forward_url}")
 
-        self.manager = RPCManager(next_pp_url)
-        self.status_manager = RPCManager(config["master"]["url"])  # Maybe Comm by WebSocket?
+        self.status_manager = RPCManager(master_url, self.grpc_options)
+        self.forward_manager = RPCManager(forward_url, self.grpc_options)
 
         if self.rank == 0:
             pass
@@ -100,7 +121,7 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
         self.logger.debug(f"serialize_tensor cost time: {time.perf_counter() - s1:.4f}")
         self.logger.debug("=" * 20)
 
-        await self.manager.rpc_forward(request.uuid, request.seq_len, output)
+        await self.forward_manager.rpc_forward(request.uuid, request.seq_len, output)
         await self.status_manager.rpc_status(request.uuid, request.seq_len, self.pp_rank, cost_time)
 
     async def Forward(
@@ -148,11 +169,11 @@ async def run(args):
         port=args.port,
         master_url=args.master_url,
     )
-    model_client = ModelClient(logger=logger, args=handler_args)
-    model_client.start()
-    model = model_client.load_model(comm, args.model_path)
+    ws_client = WebSocketClient(logger=logger, args=handler_args)
+    ws_client.start()
+    model = ws_client.load_model(comm, args.model_path)
 
-    rpc_servicer = RPCHandler(comm, model, comm.rank, args.pp_rank, logger, args.ip_addr)
+    rpc_servicer = RPCHandler(comm, model, ws_client, logger, args.ip_addr)
     if comm.rank == 0:
         await rpc_servicer.start()
 

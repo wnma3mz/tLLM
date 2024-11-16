@@ -31,7 +31,7 @@
     - edit `examples/run.sh`
 
     ```bash
-    # in one terminal
+    # first in one terminal
     bash examples/run.sh 1
 
     # in another terminal
@@ -101,6 +101,10 @@ python benchmarks/run_async_requests.py
         - [x] Async GRPC
         - [x] Ring Communication
     - [ ] Auto Find Node
+        - [x] WebSocket Communication
+        - [ ] Client Retry Connect
+        - [ ] Client auto update url 
+        - [ ] Master Exit
 - [ ] KV Cache
     - [x] Request/Sequence Cache
     - [x] Custom KV Cache Class

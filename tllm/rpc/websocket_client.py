@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import json
 import threading
 import time
-from typing import Tuple
+from typing import Callable, Optional, Tuple
 import uuid
 
 import requests
@@ -31,8 +31,8 @@ class HandlerArgs:
     master_url: str
 
 
-class ModelClient:
-    def __init__(self, logger, args: HandlerArgs):
+class WebSocketClient:
+    def __init__(self, logger, args: HandlerArgs, fetch_interval: float = 100):
         self.handler_args = args
         self.client_id = f"client-{str(uuid.uuid4())[:8]}-pp{args.start_idx}-{args.end_idx}"
 
@@ -44,6 +44,10 @@ class ModelClient:
         self._loop = None
         self._thread = None
         self._executor = ThreadPoolExecutor(max_workers=1)
+
+        self._latest_data = None
+        self._data_lock = threading.Lock()
+        self.fetch_interval = fetch_interval
 
     def load_model(self, comm: SingleNodeCommunicator, model_path: str):
         config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
@@ -81,6 +85,26 @@ class ModelClient:
         self._loop = loop
         return loop
 
+    def process_message(self, message: str):
+        """服务器端轮询发送数据，处理接收到的消息"""
+        try:
+            data = json.loads(message)
+            if data["type"] == "forward_url":
+                # 获取最新的 forward url
+                with self._data_lock:
+                    self._latest_data = data
+            else:
+                self.logger.info(f"Received message: {data}")
+
+        except json.JSONDecodeError:
+            self.logger.error(f"Failed to parse message: {message}")
+        except Exception as e:
+            self.logger.error(f"Error processing message: {e}")
+
+    def get_data(self):
+        with self._data_lock:
+            return self._latest_data
+
     async def connect(self, cnt: int):
         try:
             self.websocket = await websockets.connect(f"{self.server_url}/ws/client/{self.client_id}")
@@ -109,6 +133,7 @@ class ModelClient:
     async def _run_async(self):
         try_cnt = 0
         while not await self.connect(try_cnt):
+            self.logger.debug(f"try cnt: {try_cnt}")
             await asyncio.sleep(1)
             try_cnt += 1
             continue
@@ -119,6 +144,7 @@ class ModelClient:
                     # 接收服务器消息
                     message = await self.websocket.recv()
                     self.logger.info(f"Received update: {message}")
+                    self.process_message(message)
                 except websockets.exceptions.ConnectionClosed:
                     self.logger.info("Connection closed by server")
                     break

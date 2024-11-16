@@ -9,34 +9,24 @@ from tllm.commons.communicator import SingleNodeCommunicator
 from tllm.commons.convert import deserialize_tensor, serialize_tensor
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.rpc.master_handler import PendingRequests
-from tllm.rpc.model_client import HandlerArgs, ModelClient
+from tllm.rpc.websocket_client import HandlerArgs, WebSocketClient
 from tllm.schemas import MIX_TENSOR, SeqInput
 
 
 class RPCManager:
-    def __init__(
-        self, url: Optional[str], pending_requests: Optional[PendingRequests] = None, pp_size: Optional[int] = -1
-    ):
+    def __init__(self, pending_requests: PendingRequests):
         self.pending_requests = pending_requests
         self.grpc_options = [
             ("grpc.max_metadata_size", 32 * 1024 * 1024),
             ("grpc.max_send_message_length", 128 * 1024 * 1024),
             ("grpc.max_receive_message_length", 128 * 1024 * 1024),
         ]
-        self.pp_size = pp_size
-        if url is not None:
-            channel = grpc.aio.insecure_channel(url, options=self.grpc_options)
-            self.stub = schemas_pb2_grpc.RPCServiceStub(channel)
-        else:
-            self.stub = None
+        self.stub = None
 
-    def update_url(self, url: str):
+    def update_url(self, url: str, pp_size: int):
         channel = grpc.aio.insecure_channel(url, options=self.grpc_options)
         self.stub = schemas_pb2_grpc.RPCServiceStub(channel)
-
-    async def rpc_status(self, uuid, seq_len, pp_idx: int, cost_time: float):
-        status_request = {"uuid": uuid, "seq_len": seq_len, "pp_idx": pp_idx, "cost_time": cost_time}
-        self.stub.Status(schemas_pb2.StatusRequest(**status_request))
+        self.pp_size = pp_size
 
     async def rpc_forward(self, uuid, seq_len, hidden_states: schemas_pb2.BFloat16Tensor):
         forward_request = {"uuid": uuid, "seq_len": seq_len, "hidden_states": hidden_states}
@@ -65,8 +55,8 @@ class LocalRPCManager:
             end_idx=num_hidden_layers,
             master_url="localhost",
         )
-        model_client = ModelClient(logger=logger, args=handler_args)
-        self.model = model_client.load_model(SingleNodeCommunicator(), model_path)
+        ws_client = WebSocketClient(logger=logger, args=handler_args)
+        self.model = ws_client.load_model(SingleNodeCommunicator(), model_path)
 
     async def forward(self, hidden_states: MIX_TENSOR, seq_input: SeqInput) -> Tuple[MIX_TENSOR, List[float]]:
         s1 = time.perf_counter()
