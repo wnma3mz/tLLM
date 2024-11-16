@@ -2,6 +2,7 @@ from typing import Dict, List, Tuple
 
 from safetensors import safe_open
 import torch
+import torch.nn as nn
 
 
 def greedy_decode(logits: torch.Tensor) -> List[int]:
@@ -42,3 +43,14 @@ def read_from_safetensors(file_path: str, key_list: List[str]) -> Dict[str, torc
                 if key.startswith(prefix_key):
                     tensors[key] = f.get_tensor(key)
     return tensors
+
+
+class EmptyLayer(nn.Module):
+    @torch.no_grad()
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        attention_data,
+    ) -> torch.Tensor:
+        return hidden_states

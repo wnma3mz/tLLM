@@ -41,11 +41,12 @@ elif [ $MODE_SIZE == "3" ]; then
     fi
 elif [ $MODE_SIZE == "8" ]; then
     MODEL_PATH=$BASE_PATH/Meta-Llama-3-8B-Instruct
+    MODEL_PATH=/Users/jianghulu/.cache/huggingface/hub/models--mlx-community--Meta-Llama-3.1-8B-Instruct-bf16/snapshots/f8311090f9ee47782b6f094984a20c856eb841d6
     if [ $PP_IDX == "0" ]; then
         START_LAYER_IDX=0
-        END_LAYER_IDX=16
+        END_LAYER_IDX=20
     elif [ $PP_IDX == "1" ]; then
-        START_LAYER_IDX=16
+        START_LAYER_IDX=13
         END_LAYER_IDX=32
     else
         echo "Invalid pp size"
@@ -66,4 +67,4 @@ export PYTHONPATH="./":$PYTHONPATH;
 # elif [ $PP_IDX == "1" ]; then
 #     torchrun --nproc_per_node=$TP --master_port=$(($MASTER_PORT+1)) tllm/rpc/handler.py --port=$(($GRPC_PORT+1)) --start_layer_idx=$START_LAYER_IDX --end_layer_idx=$END_LAYER_IDX --model_path $MODEL_PATH --master_url $MASTER_URL
 # fi
-python3 tllm/rpc/handler.py --port=$(($GRPC_PORT+1)) --start_layer_idx=$START_LAYER_IDX --end_layer_idx=$END_LAYER_IDX --model_path $MODEL_PATH --master_url $MASTER_URL --is_debug
+python3 tllm/rpc/handler.py --port=$GRPC_PORT --start_layer_idx=$START_LAYER_IDX --end_layer_idx=$END_LAYER_IDX --model_path $MODEL_PATH --master_url $MASTER_URL --is_debug

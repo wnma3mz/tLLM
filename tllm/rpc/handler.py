@@ -15,7 +15,6 @@ from tllm.commons.convert import deserialize_tensor, serialize_tensor
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.rpc.manager import RPCManager
 from tllm.rpc.model_client import HandlerArgs, ModelClient
-from tllm.rpc.schemas_pb2 import BFloat16Tensor
 from tllm.schemas import SeqInput
 from tllm.utils import setup_logger
 
@@ -82,15 +81,7 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
             except Exception as e:
                 pass
 
-    async def Forward(
-        self, request: schemas_pb2.ForwardRequest, context: grpc.ServicerContext
-    ) -> schemas_pb2.ForwardResponse:
-        """
-        @param request: ForwardRequest
-            hidden_states: bytes
-            uuid: str
-            seq_len: int
-        """
+    async def forward_func(self, request: schemas_pb2.ForwardRequest):
         s1 = time.perf_counter()
         hidden_states = deserialize_tensor(request.hidden_states)
 
@@ -109,8 +100,20 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
         self.logger.debug(f"serialize_tensor cost time: {time.perf_counter() - s1:.4f}")
         self.logger.debug("=" * 20)
 
-        asyncio.create_task(self.manager.rpc_forward(request.uuid, request.seq_len, output))
-        asyncio.create_task(self.status_manager.rpc_status(request.uuid, request.seq_len, self.pp_rank, cost_time))
+        await self.manager.rpc_forward(request.uuid, request.seq_len, output)
+        await self.status_manager.rpc_status(request.uuid, request.seq_len, self.pp_rank, cost_time)
+
+    async def Forward(
+        self, request: schemas_pb2.ForwardRequest, context: grpc.ServicerContext
+    ) -> schemas_pb2.ForwardResponse:
+        """
+        @param request: ForwardRequest
+            hidden_states: bytes
+            uuid: str
+            seq_len: int
+        """
+        asyncio.create_task(self.forward_func(request))
+
         await asyncio.sleep(0)
         return schemas_pb2.ForwardResponse(msg="Forward Completed", status=200)
 

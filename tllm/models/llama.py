@@ -11,7 +11,7 @@ from transformers.models.llama.modeling_llama import LlamaForCausalLM, LlamaRMSN
 from tllm.commons.attn import get_attention_implementation
 from tllm.commons.layers import LlamaDecoderLayer
 from tllm.models.cache import AttentionData, CacheManager, RequestsCache
-from tllm.models.torch_helper import build_mask, read_from_safetensors
+from tllm.models.torch_helper import build_mask, read_from_safetensors, EmptyLayer
 from tllm.models.utils import get_weight_path
 from tllm.schemas import SeqInput
 
@@ -59,7 +59,7 @@ class Decoder(nn.Module):
         super().__init__()
         config.offset = start_layer_idx
         self.layers = nn.ModuleList(
-            [LlamaDecoderLayer(config, layer_idx, is_merge) for layer_idx in range(start_layer_idx, end_layer_idx)]
+            [EmptyLayer()] * start_layer_idx + [LlamaDecoderLayer(config, layer_idx, is_merge) for layer_idx in range(start_layer_idx, end_layer_idx)]
         )
 
     @torch.no_grad()
@@ -139,6 +139,12 @@ class LlamaModel(nn.Module):
         gate_up_list = ["gate_proj", "up_proj"]
 
         prefix_key_list = ["model.embed_tokens.", "model.norm.", "lm_head."]
+        prefix_key_list += [
+            f"model.layers.{i}."
+            for i in range(self.config.num_hidden_layers)
+            if not (self.config.decoder_start_layer_idx <= i < self.config.decoder_end_layer_idx)
+        ]
+
         key_list = list(weights.keys())
         for key in key_list:
             for prefix_key in prefix_key_list:
