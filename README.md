@@ -102,8 +102,8 @@ python benchmarks/run_async_requests.py
         - [x] Ring Communication
     - [ ] Auto Find Node
         - [x] WebSocket Communication
-        - [ ] Client Retry Connect
-        - [ ] Client auto update url 
+        - [x] Client Retry Connect
+        - [x] Client auto update url 
         - [ ] Master Exit
 - [ ] KV Cache
     - [x] Request/Sequence Cache

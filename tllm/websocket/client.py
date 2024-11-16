@@ -3,8 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import json
 import threading
-import time
-from typing import Tuple
+from typing import Dict, Optional, Tuple
 import uuid
 
 import requests
@@ -31,30 +30,17 @@ class HandlerArgs:
     master_url: str
 
 
-class WebSocketClient:
-    def __init__(self, logger, args: HandlerArgs, fetch_interval: float = 100):
-        self.handler_args = args
-        self.client_id = f"client-{str(uuid.uuid4())[:8]}-pp{args.start_idx}-{args.end_idx}"
-
-        self.server_url = args.master_url.replace("http://", "ws://").replace("https://", "wss://")
-
-        self.logger = logger
-        self.websocket = None
-        self.running = False
-        self._loop = None
-        self._thread = None
-        self._executor = ThreadPoolExecutor(max_workers=1)
-
-        self._latest_data = None
-        self._data_lock = threading.Lock()
-        self.fetch_interval = fetch_interval
+class ModelManager:
+    def __init__(self, start_idx: int, end_idx: int):
+        self.start_idx = start_idx
+        self.end_idx = end_idx
 
     def load_model(self, comm: SingleNodeCommunicator, model_path: str):
         config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
         config.comm = comm
 
-        config.decoder_start_layer_idx = self.handler_args.start_idx
-        config.decoder_end_layer_idx = self.handler_args.end_idx
+        config.decoder_start_layer_idx = self.start_idx
+        config.decoder_end_layer_idx = self.end_idx
 
         if model_path.endswith(".gguf"):
             arch = "MLXLlamaForCausalLM"
@@ -68,16 +54,34 @@ class WebSocketClient:
 
         _, MY_MODEL_CLASS = MODEL_REGISTER[arch]
 
-        s1 = time.time()
         # if model_path.endswith(".gguf"):
         #     weights, config, _ = load_gguf_weight(model_path)
-        #     config.decoder_start_layer_idx = self.handler_args.start_idx
-        #     config.decoder_end_layer_idx = self.handler_args.end_idx
+        #     config.decoder_start_layer_idx = self.start_idx
+        #     config.decoder_end_layer_idx = self.end_idx
         #     config.comm = SingleNodeCommunicator()
         model = MY_MODEL_CLASS.from_pretrained(config, model_path)
-        self.logger.debug(f"[Rank: {config.comm.rank}] Cost time {time.time() - s1}")
-
         return model
+
+
+class WebSocketClient:
+    def __init__(self, logger, args: HandlerArgs, fetch_interval: float = 100):
+        self.handler_args = args
+        self.client_id = f"{str(uuid.uuid4())[:8]}-pp{args.start_idx}-{args.end_idx}"
+
+        self.server_url = args.master_url
+
+        self.logger = logger
+        self.websocket = None
+        self.running = False
+        self._loop = None
+        self._thread = None
+        self._executor = ThreadPoolExecutor(max_workers=1)
+
+        self._latest_data = None
+        self._data_lock = threading.Lock()
+        self.config_updated = asyncio.Event()
+        self.update_callbacks = []
+        self.fetch_interval = fetch_interval
 
     def _create_event_loop(self):
         loop = asyncio.new_event_loop()
@@ -85,14 +89,21 @@ class WebSocketClient:
         self._loop = loop
         return loop
 
-    def process_message(self, message: str):
+    def add_update_callback(self, callback):
+        """添加配置更新回调函数"""
+        self.update_callbacks.append(callback)
+
+    async def process_message(self, message: str):
         """服务器端轮询发送数据，处理接收到的消息"""
         try:
             data = json.loads(message)
             if data["type"] == "forward_url":
                 # 获取最新的 forward url
                 with self._data_lock:
-                    self._latest_data = data
+                    if data != self._latest_data:
+                        self._latest_data = data
+                        for callback in self.update_callbacks:
+                            await callback(data["master_url"], data["forward_url"], data["pp_rank"])
             else:
                 self.logger.info(f"Received message: {data}")
 
@@ -101,16 +112,18 @@ class WebSocketClient:
         except Exception as e:
             self.logger.error(f"Error processing message: {e}")
 
-    def get_data(self):
+    def get_config(self) -> Tuple[Optional[str], Optional[str], Optional[int]]:
         with self._data_lock:
-            return self._latest_data
+            if self._latest_data:
+                return self._latest_data["master_url"], self._latest_data["forward_url"], self._latest_data["pp_rank"]
+        return None, None, None
 
-    async def connect(self, cnt: int):
+    async def connect(self):
         try:
             self.websocket = await websockets.connect(f"{self.server_url}/ws/client/{self.client_id}")
             self.logger.info(f"Connected to server with client_id: {self.client_id}")
 
-            # 注册层信息
+            # 注册客户端
             await self.websocket.send(
                 json.dumps(
                     {
@@ -126,17 +139,30 @@ class WebSocketClient:
             self.running = True
             return True
         except Exception as e:
-            if cnt == 0:
-                self.logger.info(f"Connection failed: {e}")
+            self.logger.info(f"Connection failed: {e}")
             return False
 
-    async def _run_async(self):
+    async def reconnect(self):
+        """处理重连逻辑"""
         try_cnt = 0
-        while not await self.connect(try_cnt):
-            self.logger.debug(f"try cnt: {try_cnt}")
-            await asyncio.sleep(1)
+        while self.running:
+            self.logger.info(f"Attempting to reconnect... (attempt {try_cnt + 1})")
+            if await self.connect():
+                return True
+
+            # 指数退避策略
+            wait_time = min(1 * (try_cnt + 1), 30)  # 最大等待30秒
+            self.logger.debug(f"Reconnection failed, waiting {wait_time} seconds before next attempt")
+            await asyncio.sleep(wait_time)
             try_cnt += 1
-            continue
+        return False
+
+    async def _run_async(self):
+        self.running = True
+
+        # 首次连接
+        if not await self.reconnect():
+            return
 
         try:
             while self.running:
@@ -144,10 +170,11 @@ class WebSocketClient:
                     # 接收服务器消息
                     message = await self.websocket.recv()
                     self.logger.info(f"Received update: {message}")
-                    self.process_message(message)
+                    await self.process_message(message)
                 except websockets.exceptions.ConnectionClosed:
                     self.logger.info("Connection closed by server")
-                    break
+                    if not await self.reconnect():
+                        break
                 except Exception as e:
                     self.logger.info(f"Error receiving message: {e}")
                     break

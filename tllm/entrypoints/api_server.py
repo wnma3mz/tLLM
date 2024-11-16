@@ -186,7 +186,7 @@ async def run_server(args) -> None:
     global app
     global logger, engine, ws_manager, openai_serving_chat
 
-    logger = setup_logger(__name__, logging.DEBUG if args.is_debug else logging.INFO)
+    logger = setup_logger("master", logging.DEBUG if args.is_debug else logging.INFO)
 
     logger.info("args: %s", args)
 

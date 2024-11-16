@@ -10,7 +10,7 @@ from tllm.commons.convert import deserialize_tensor, serialize_tensor
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.rpc.master_handler import PendingRequests
 from tllm.schemas import MIX_TENSOR, SeqInput
-from tllm.websocket.client import HandlerArgs, WebSocketClient
+from tllm.websocket.client import HandlerArgs, ModelManager
 
 
 class RPCManager:
@@ -55,8 +55,8 @@ class LocalRPCManager:
             end_idx=num_hidden_layers,
             master_url="localhost",
         )
-        ws_client = WebSocketClient(logger=logger, args=handler_args)
-        self.model = ws_client.load_model(SingleNodeCommunicator(), model_path)
+        model_manager = ModelManager(handler_args.start_idx, handler_args.end_idx)
+        self.model = model_manager.load_model(SingleNodeCommunicator(), model_path)
 
     async def forward(self, hidden_states: MIX_TENSOR, seq_input: SeqInput) -> Tuple[MIX_TENSOR, List[float]]:
         s1 = time.perf_counter()

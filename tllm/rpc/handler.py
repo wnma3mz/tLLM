@@ -15,26 +15,25 @@ from tllm.commons.convert import deserialize_tensor, serialize_tensor
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.schemas import SeqInput
 from tllm.utils import setup_logger
-from tllm.websocket.client import HandlerArgs, WebSocketClient
+from tllm.websocket.client import HandlerArgs, ModelManager, WebSocketClient
 
 
 class RPCManager:
-    def __init__(self, url: str, grpc_options: List[Tuple[str, int]]):
+    def __init__(self, grpc_options: List[Tuple[str, int]]):
         self.grpc_options = grpc_options
-        channel = grpc.aio.insecure_channel(url, options=self.grpc_options)
-        self.stub = schemas_pb2_grpc.RPCServiceStub(channel)
 
-    def update_url(self, url: str):
-        channel = grpc.aio.insecure_channel(url, options=self.grpc_options)
-        self.stub = schemas_pb2_grpc.RPCServiceStub(channel)
+    def update_url(self, master_url: str, forward_url: str, pp_idx: int):
+        master_channel = grpc.aio.insecure_channel(master_url, options=self.grpc_options)
+        forward_channel = grpc.aio.insecure_channel(forward_url, options=self.grpc_options)
+        self.master_stub = schemas_pb2_grpc.RPCServiceStub(master_channel)
+        self.forward_stub = schemas_pb2_grpc.RPCServiceStub(forward_channel)
+        self.pp_idx = pp_idx
 
-    async def rpc_status(self, uuid, seq_len, pp_idx: int, cost_time: float):
-        status_request = {"uuid": uuid, "seq_len": seq_len, "pp_idx": pp_idx, "cost_time": cost_time}
-        self.stub.Status(schemas_pb2.StatusRequest(**status_request))
-
-    async def rpc_forward(self, uuid, seq_len, hidden_states: schemas_pb2.BFloat16Tensor):
+    async def rpc_func(self, uuid, seq_len, hidden_states: schemas_pb2.BFloat16Tensor, cost_time: float):
         forward_request = {"uuid": uuid, "seq_len": seq_len, "hidden_states": hidden_states}
-        self.stub.Forward(schemas_pb2.ForwardRequest(**forward_request))
+        status_request = {"uuid": uuid, "seq_len": seq_len, "pp_idx": self.pp_idx, "cost_time": cost_time}
+        self.master_stub.Status(schemas_pb2.StatusRequest(**status_request))
+        self.forward_stub.Forward(schemas_pb2.ForwardRequest(**forward_request))
 
 
 class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
@@ -48,30 +47,27 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
         uuid_shape_list = [None, None]
         self.server = None
         self.logger = logger
+
         self.grpc_options = [
             ("grpc.max_metadata_size", 32 * 1024 * 1024),
             ("grpc.max_send_message_length", 128 * 1024 * 1024),
             ("grpc.max_receive_message_length", 128 * 1024 * 1024),
         ]
 
-        forward_url, master_url = None, None
-        while forward_url is None:
-            # TODO 设置为事件通知
-            # 如果发生变化，需要感知到
-            message = ws_client.get_data()
-            if message:
-                self.pp_rank = message["pp_rank"]
-                forward_url = message["forward_url"]
-                master_url = message["master_url"]
-            time.sleep(3)
-        self.logger.info(f"[Master]: {master_url}")
-        self.logger.info(f"[Forward]: {forward_url}")
-
-        self.status_manager = RPCManager(master_url, self.grpc_options)
-        self.forward_manager = RPCManager(forward_url, self.grpc_options)
-
         if self.rank == 0:
-            pass
+            self.manager = RPCManager(self.grpc_options)
+
+            master_url, forward_url, pp_rank = ws_client.get_config()
+            if master_url is not None:
+                self.logger.info(f"Init [Master]: {master_url}; [Forward]: {forward_url} [PP Rank]: {pp_rank}")
+                self.manager.update_url(master_url, forward_url, pp_rank)
+
+            async def on_config_update(master_url: str, forward_url: str, pp_rank: int):
+                self.logger.info(f"Update [Master]: {master_url}; [Forward]: {forward_url} [PP Rank]: {pp_rank}")
+                self.manager.update_url(master_url, forward_url, pp_rank)
+
+            ws_client.add_update_callback(on_config_update)
+
         else:
             while self.comm.world_size > 1:
                 self.comm.broadcast_object(uuid_shape_list)
@@ -121,8 +117,7 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
         self.logger.debug(f"serialize_tensor cost time: {time.perf_counter() - s1:.4f}")
         self.logger.debug("=" * 20)
 
-        await self.forward_manager.rpc_forward(request.uuid, request.seq_len, output)
-        await self.status_manager.rpc_status(request.uuid, request.seq_len, self.pp_rank, cost_time)
+        await self.manager.rpc_func(request.uuid, request.seq_len, output, cost_time)
 
     async def Forward(
         self, request: schemas_pb2.ForwardRequest, context: grpc.ServicerContext
@@ -149,7 +144,6 @@ def parse_args():
     parser.add_argument("--master_url", type=str, default="ws://localhost:8000")
     parser.add_argument("--start_layer_idx", type=int, default=0, help="start layer idx")
     parser.add_argument("--end_layer_idx", type=int, default=11, help="end layer idx")
-    parser.add_argument("--pp_rank", type=int, default=0, help="pp rank")
     parser.add_argument("--model_path", type=str, required=True, help="model path")
     parser.add_argument("--is_debug", action="store_true")
     parser.add_argument("--ip_addr", type=str, default="localhost", help="提供给 server 连接的 ip")
@@ -160,7 +154,8 @@ async def run(args):
     comm = SingleNodeCommunicator()
     if "WORLD_SIZE" in os.environ and int(os.environ["WORLD_SIZE"]) > 1:
         comm = Communicator(is_torchrun=True)
-    logger = setup_logger("handler_" + __name__, logging.DEBUG if args.is_debug else logging.INFO)
+    logger_name = f"handler_pp{args.start_layer_idx}-{args.end_layer_idx}"
+    logger = setup_logger(logger_name, logging.DEBUG if args.is_debug else logging.INFO)
 
     handler_args = HandlerArgs(
         start_idx=args.start_layer_idx,
@@ -169,9 +164,11 @@ async def run(args):
         port=args.port,
         master_url=args.master_url,
     )
+
     ws_client = WebSocketClient(logger=logger, args=handler_args)
     ws_client.start()
-    model = ws_client.load_model(comm, args.model_path)
+    model_manager = ModelManager(handler_args.start_idx, handler_args.end_idx)
+    model = model_manager.load_model(comm, args.model_path)
 
     rpc_servicer = RPCHandler(comm, model, ws_client, logger, args.ip_addr)
     if comm.rank == 0:
