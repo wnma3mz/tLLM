@@ -86,6 +86,8 @@ class TLlamaRotaryEmbedding(LlamaRotaryEmbedding):
 class LlamaModel(nn.Module):
     def __init__(self, config, is_merge: bool = True):
         super().__init__()
+        self.dtype = torch.bfloat16
+        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.cache_manager = CacheManager()
@@ -105,8 +107,7 @@ class LlamaModel(nn.Module):
         model.load_state_dict(state_dict)
         del state_dict
 
-        model.device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        model.to(model.device)
+        model.to(model.dtype).to(model.device)
         model.eval()
         return model
 
@@ -200,19 +201,16 @@ class LlamaModel(nn.Module):
             self.cache_manager.check_alive()
         return hidden_states
 
-    @property
-    def dtype(self):
-        return next(self.parameters()).dtype
-
 
 class TLlamaForCausalLM(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.vocab_size = config.vocab_size
         self.dtype = torch.bfloat16
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size).to(self.dtype)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False).to(self.dtype)
-        self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps).to(self.dtype)
+        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        self.vocab_size = config.vocab_size
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @classmethod
     def from_pretrained(cls, logger, config, model_path: str, state_dict: Optional[Any] = None):
@@ -238,10 +236,7 @@ class TLlamaForCausalLM(nn.Module):
                     state_dict[key.replace("embed_tokens.", "lm_head.")] = state_dict[key]
 
         model.load_state_dict(state_dict)
-        model.to(model.dtype)
-
-        model.device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        model.to(model.device)
+        model.to(model.dtype).to(model.device)
         model.eval()
         return model
 
