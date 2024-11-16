@@ -54,7 +54,7 @@ python benchmarks/run_async_requests.py
     - [x] Tensor Parallel by torch.dist
     - [x] Sequence KV Cache
     - [x] Performance Testing
-    - [ ] Support Flash Attention
+    - [x] Support Flash Attention with vLLM
 - [x] Decoding Strategy
     - [x] Top-K Sampling
     - [x] Top-P Sampling

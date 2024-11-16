@@ -7,7 +7,7 @@ tqdm
 typing_extensions
 uvicorn
 websockets
-xformers # --index-url https://download.pytorch.org/whl/cu121
+vllm
 gradio==5.4.0
 grpcio==1.66.2
 lz4==4.3.3

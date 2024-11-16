@@ -1,4 +1,5 @@
 from typing import *
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -11,19 +12,11 @@ from transformers.models.llama.modeling_llama import (
     apply_rotary_pos_emb,
 )
 
+from tllm.commons.attn import get_attention_implementation
 from tllm.models.cache import AttentionData, RequestsCache
 
-try:
-    from xformers.components.attention.core import scaled_dot_product_attention as xformers_attention
-
-    def self_attn_func(query_states, key_states, value_states, attn_mask):
-        return xformers_attention(query_states, key_states, value_states, att_mask=attn_mask)
-
-except:
-    torch_attention = torch.nn.functional.scaled_dot_product_attention
-
-    def self_attn_func(query_states, key_states, value_states, attn_mask):
-        return torch_attention(query_states, key_states, value_states, attn_mask=attn_mask)
+# Get the best available attention implementation
+self_attn_func, attention_type = get_attention_implementation()
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:

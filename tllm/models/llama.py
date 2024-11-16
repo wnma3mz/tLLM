@@ -1,3 +1,4 @@
+import itertools
 import os
 import re
 from typing import *
@@ -7,16 +8,19 @@ import torch
 import torch.nn as nn
 from transformers.models.llama.modeling_llama import LlamaForCausalLM, LlamaRMSNorm, LlamaRotaryEmbedding
 
+from tllm.commons.attn import get_attention_implementation
 from tllm.commons.layers import LlamaDecoderLayer
 from tllm.models.cache import AttentionData, CacheManager, RequestsCache
 from tllm.models.torch_helper import build_mask, read_from_safetensors
 from tllm.models.utils import get_weight_path
 from tllm.schemas import SeqInput
 
+_, attention_type = get_attention_implementation()
+
 
 def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_layers: int) -> AttentionData:
     request_cache = RequestsCache(num_layers)
-    position_ids_list, actual_seq_len_list = [], []
+    position_ids_list, q_len_list, k_len_list = [], [], []
     for uuid, q_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
         if uuid in cache_manager.cache_dict:
             # kv_cache 是整个历史的 kv_cache
@@ -24,16 +28,27 @@ def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_la
             # TODO: 当 q_len > 1 时，表示只需要使用前 q_len 的 kv_cache，后面的 kv_cache 需要重新计算
             layer_cache_list, cache_seq_len = cache_manager.get(uuid)
             position_ids = torch.tensor([cache_seq_len], dtype=torch.long)
-            actual_seq_len_list.append([q_len, cache_seq_len + q_len])  # q_len 是需要新计算 kv_cache 的长度
+            k_len_list.append(cache_seq_len + q_len)
         else:
             layer_cache_list = None
             position_ids = torch.arange(q_len, dtype=torch.long)
-            actual_seq_len_list.append([q_len, q_len])
+            k_len_list.append(q_len)
+        q_len_list.append(q_len)
         request_cache.add(uuid, q_len, layer_cache_list)
         position_ids_list.append(position_ids)
+
+    if attention_type == "flash_attention":
+        attn_mask = {
+            "cu_seqlens_q": torch.tensor([0] + list(itertools.accumulate(q_len_list)), dtype=torch.int32),
+            "cu_seqlens_k": torch.tensor([0] + list(itertools.accumulate(k_len_list)), dtype=torch.int32),
+            "max_seqlen_q": max(q_len_list),
+            "max_seqlen_k": max(k_len_list),
+        }
+    else:
+        attn_mask = build_mask(q_len_list, k_len_list)
     return AttentionData(
         request_cache=request_cache,
-        attn_mask=build_mask(actual_seq_len_list),
+        attn_mask=attn_mask,
         uuid_list=seq_input.uuid_list,
         position_ids=torch.cat(position_ids_list, dim=-1),
     )
@@ -191,7 +206,13 @@ class LlamaModel(nn.Module):
         attention_data = build_forward_cache(seq_input, self.cache_manager, self.num_decoder_layers)
         hidden_states = hidden_states.to(self.device)
         position_embeddings = self.rotary_emb(hidden_states, attention_data.position_ids.to(self.device))
-        attention_data.attn_mask = attention_data.attn_mask.to(self.device)
+        if attention_type != "flash_attention":
+            attention_data.attn_mask = {
+                k: v.to(self.device) if isinstance(v, torch.Tensor) else v for k, v in attention_data.attn_mask.items()
+            }
+        else:
+            attention_data.attn_mask = attention_data.attn_mask.to(self.device)
+
         hidden_states = self.model(
             hidden_states, position_embeddings=position_embeddings, attention_data=attention_data
         )

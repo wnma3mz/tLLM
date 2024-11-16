@@ -9,23 +9,21 @@ def greedy_decode(logits: torch.Tensor) -> List[int]:
     return torch.argmax(logits, dim=-1).tolist()
 
 
-def build_mask(seq_len_list: List[Tuple[int, int]]) -> torch.Tensor:
+def build_mask(q_len_list: List[int], k_len_list: List[int]) -> torch.Tensor:
     """
     构造多个请求的 casual mask
-    @param se   q_len_list: 每个请求的 seq_len
+    @param
+        q_len_list: 每个请求的 seq_len
+        k_len_list: 每个请求的 seq_len
 
     @return: 一个 mask，形状为 total_length x total_length，其中 total_length 是所有请求的 seq_len 之和
     """
     mask_list = [
         torch.ones(L, S, dtype=torch.bool).tril(diagonal=0) if L > 1 else torch.ones((L, S), dtype=torch.bool)
-        for (L, S) in seq_len_list
+        for (L, S) in zip(q_len_list, k_len_list)
     ]
-    total_L, total_S = 0, 0
-    for L, S in seq_len_list:
-        total_L += L
-        total_S += S
 
-    combined_mask = torch.zeros((total_L, total_S), dtype=torch.bool)
+    combined_mask = torch.zeros((sum(q_len_list), sum(k_len_list)), dtype=torch.bool)
 
     l_index, r_index = 0, 0
     for mask in mask_list:

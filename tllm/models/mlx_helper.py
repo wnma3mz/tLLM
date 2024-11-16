@@ -1,5 +1,5 @@
 import math
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 import mlx.core as mx
 import mlx.nn as nn
@@ -14,13 +14,13 @@ def greedy_decode(logits: mx.array) -> List[int]:
     return x.tolist()  # TODO: first requests is too slow
 
 
-def build_mlx_mask(seq_len_list: List[Tuple[int, int]], total_L: int, total_S: int) -> mx.array:
+def build_mlx_mask(q_len_list: List[int], k_len_list: List[int]) -> mx.array:
     mask_list = [
         mx.tril(mx.ones((L, S), dtype=mx.bool_), k=0) if L > 1 else mx.ones((L, S), dtype=mx.bool_)
-        for (L, S) in seq_len_list
+        for (L, S) in zip(q_len_list, k_len_list)
     ]
 
-    combined_mask = mx.zeros((total_L, total_S), dtype=mx.bool_)
+    combined_mask = mx.zeros((sum(q_len_list), sum(k_len_list)), dtype=mx.bool_)
 
     l_index, r_index = 0, 0
     for mask in mask_list:
@@ -34,23 +34,19 @@ def build_mlx_mask(seq_len_list: List[Tuple[int, int]], total_L: int, total_S: i
 
 def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_layers: int) -> AttentionData:
     request_cache = RequestsCache(num_layers)
-    actual_seq_len_list = []
-    L, S = 0, 0
+    q_len_list, k_len_list = [], []
     for uuid, q_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
         if uuid in cache_manager.cache_dict:
             layer_cache_list, cache_seq_len = cache_manager.get(uuid)
-            actual_seq_len_list.append([q_len, cache_seq_len + q_len])
-            L += q_len
-            S += cache_seq_len + q_len
+            k_len_list.append(cache_seq_len + q_len)
         else:
             layer_cache_list = None
-            actual_seq_len_list.append([q_len, q_len])
-            L += q_len
-            S += q_len
+            k_len_list.append(q_len)
+        q_len_list.append(q_len)
         request_cache.add(uuid, q_len, layer_cache_list)
     return AttentionData(
         request_cache=request_cache,
-        attn_mask=build_mlx_mask(actual_seq_len_list, L, S),
+        attn_mask=build_mlx_mask(q_len_list, k_len_list),
         uuid_list=seq_input.uuid_list,
     )
 
