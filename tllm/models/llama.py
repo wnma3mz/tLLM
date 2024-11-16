@@ -206,7 +206,7 @@ class LlamaModel(nn.Module):
         attention_data = build_forward_cache(seq_input, self.cache_manager, self.num_decoder_layers)
         hidden_states = hidden_states.to(self.device)
         position_embeddings = self.rotary_emb(hidden_states, attention_data.position_ids.to(self.device))
-        if attention_type != "flash_attention":
+        if attention_type == "flash_attention":
             attention_data.attn_mask = {
                 k: v.to(self.device) if isinstance(v, torch.Tensor) else v for k, v in attention_data.attn_mask.items()
             }
