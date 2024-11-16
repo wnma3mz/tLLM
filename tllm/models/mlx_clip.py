@@ -8,13 +8,9 @@ from typing import *
 
 import mlx.core as mx
 import mlx.nn as nn
-from mlx_lm.models.llama import ModelArgs
-import numpy as np
-from transformers import AutoConfig
 
 from tllm.commons.mlx_layers import VisionEmbeddings
 from tllm.models.mlx_llama import Decoder
-from tllm.models.utils import load_master_weight
 
 
 @dataclass

@@ -135,7 +135,7 @@ async def init_engine(
 
     model = MY_CausalLM_CLASS.from_pretrained(logger, config, model_path, state_dict)
     if is_local:
-        generator = LLMGenerator(LocalRPCManager(logger, model_path, config.num_hidden_layers), logger, model)
+        generator = LLMGenerator(LocalRPCManager(logger, model_path, config.num_hidden_layers), logger, model, tok)
         master_handler = None
     else:
         if master_handler_port == -1:
@@ -145,6 +145,6 @@ async def init_engine(
             master_handler = MasterHandler(logger, pending_requests)
             await master_handler.start(master_handler_port)
 
-        generator = LLMGenerator(RPCManager(url_list[0], pending_requests, len(url_list)), logger, model)
+        generator = LLMGenerator(RPCManager(url_list[0], pending_requests, len(url_list)), logger, model, tok)
     engine = AsyncEngine(logger, generator)
     return engine, tok, master_handler

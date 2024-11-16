@@ -62,10 +62,11 @@ def process_mm_input(
 
 
 class LLMGenerator:
-    def __init__(self, server: RPCManager, logger, model):
+    def __init__(self, server: RPCManager, logger, model, tok: "TokenizerUtils") -> None:
         self.server = server
         self.logger = logger
         self.model = model
+        self.tok = tok
         self.processor = getattr(model, "processor", None)
         self.mm_config = getattr(model, "mm_config", None)
 
@@ -126,8 +127,8 @@ class LLMGenerator:
         s1 = time.perf_counter()
         # 根据 seq 拆开，之后直接在 sampler 中处理
         for seq_logits, sequence_request in zip(seq_logits_list, sequence_request_list):
-            generate_ids = sampling_func(seq_logits)  # TODO: sequence_request.sampling_params
-            generate_texts = sequence_request.sampler.decode(generate_ids)
+            generate_ids: List[int] = sampling_func(seq_logits)  # TODO: sequence_request.sampling_params
+            generate_texts = [self.tok.decode([x]) for x in generate_ids]
             sequence_request.output_ids.append(generate_ids[0])
 
             end = is_generate_end(

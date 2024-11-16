@@ -1,3 +1,4 @@
+import os
 import re
 from typing import *
 
@@ -8,8 +9,8 @@ from transformers.models.llama.modeling_llama import LlamaForCausalLM, LlamaRMSN
 
 from tllm.commons.layers import LlamaDecoderLayer
 from tllm.models.cache import AttentionData, CacheManager, RequestsCache
-from tllm.models.torch_helper import build_mask
-from tllm.models.utils import load_master_weight
+from tllm.models.torch_helper import build_mask, read_from_safetensors
+from tllm.models.utils import get_weight_path
 from tllm.schemas import SeqInput
 
 
@@ -226,7 +227,12 @@ class TLlamaForCausalLM(nn.Module):
             else:
                 cls.eos_token_ids.add(config.eos_token_id)
 
-        state_dict = load_master_weight(model_path)
+        file_set, prefix_key_list = get_weight_path(model_path)
+        state_dict = {}
+        for file in file_set:
+            weight_path = os.path.join(model_path, file)
+            state_dict.update(read_from_safetensors(weight_path, prefix_key_list))
+
         state_dict = {k.split("model.")[-1]: v for k, v in state_dict.items()}
         has_key_list = list(state_dict.keys())
         if "lm_head.weight" not in state_dict:

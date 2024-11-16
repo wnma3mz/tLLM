@@ -20,7 +20,7 @@ from tllm.entrypoints.protocol import (
     UsageInfo,
     random_uuid,
 )
-from tllm.generate import MessageProcessor, SamplerUtils, TokenizerUtils
+from tllm.generate import MessageProcessor, TokenizerUtils
 from tllm.schemas import RequestOutput
 
 
@@ -55,7 +55,6 @@ class OpenAIServing:
             q_len=q_len,
             sampling_params=request.to_sampling_params(self.message_processor.tok.tokenizer),
             input_ids=input_ids,
-            sampler=SamplerUtils(method, self.message_processor.tok),
             multi_modal_inputs=mm_input_dict,
         )
         result_generator = self.engine.generate_stream(sequence_data)

@@ -10,7 +10,6 @@ from transformers import AutoConfig, AutoProcessor
 
 from tllm.commons.mlx_layers import PatchEmbed, PatchMerger, VisionMlp, VisionRotaryEmbedding, VisionSdpaAttention
 from tllm.models.mlx_llama import quantization_func
-from tllm.models.utils import load_master_weight
 
 
 class Qwen2VLVisionBlock(nn.Module):

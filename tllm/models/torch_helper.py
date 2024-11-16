@@ -1,5 +1,6 @@
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
+from safetensors import safe_open
 import torch
 
 
@@ -33,3 +34,13 @@ def build_mask(seq_len_list: List[Tuple[int, int]]) -> torch.Tensor:
         r_index += mask.size(1)
 
     return combined_mask
+
+
+def read_from_safetensors(file_path: str, key_list: List[str]) -> Dict[str, torch.Tensor]:
+    tensors = {}
+    with safe_open(file_path, framework="pt", device="cpu") as f:
+        for key in f.keys():
+            for prefix_key in key_list:
+                if key.startswith(prefix_key):
+                    tensors[key] = f.get_tensor(key)
+    return tensors

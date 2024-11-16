@@ -12,8 +12,8 @@ from transformers import AutoConfig
 
 from tllm.commons.mlx_layers import TransformerBlock
 from tllm.models.cache import AttentionData, CacheManager
-from tllm.models.mlx_helper import build_forward_cache, empty_func, quantization_func
-from tllm.models.utils import load_master_weight
+from tllm.models.mlx_helper import build_forward_cache, empty_func, quantization_func, read_from_safetensors
+from tllm.models.utils import get_weight_path
 from tllm.schemas import SeqInput
 
 
@@ -171,7 +171,12 @@ class MLXLlamaForCausalLM(nn.Module):
                 cls.eos_token_ids.add(config.eos_token_id)
 
         if state_dict is None:
-            state_dict = load_master_weight(model_path)
+            file_set, prefix_key_list = get_weight_path(model_path)
+            state_dict = {}
+            for file in file_set:
+                weight_path = os.path.join(model_path, file)
+                state_dict.update(read_from_safetensors(weight_path, prefix_key_list))
+
         new_state_dict = {}
         for k, v in state_dict.items():
             if k.startswith("model.") and not k.startswith("model.layers."):

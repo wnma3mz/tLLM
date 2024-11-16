@@ -130,7 +130,6 @@ class SequenceRequestData:
     request_id: str
     input_ids: List[int]
     sampling_params: SamplingParams
-    sampler: "SamplerUtils"  # TODO
 
     multi_modal_inputs: Optional[Dict[str, List[Image.Image]]] = None
     history_request_id: Optional[str] = None

@@ -1,5 +1,5 @@
 import math
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 import mlx.core as mx
 import mlx.nn as nn
@@ -77,3 +77,13 @@ def quantization_func(config, model, state_dict):
 def empty_func(h, mask, cache):
     # TODO
     return h
+
+
+def read_from_safetensors(file_path: str, key_list: List[str]) -> Dict[str, "mx.array"]:
+    tensors = {}
+    weights = mx.load(file_path)
+    for key in weights.keys():
+        for prefix_key in key_list:
+            if key.startswith(prefix_key):
+                tensors[key] = weights[key]
+    return tensors
