@@ -97,11 +97,10 @@ class LlamaModel(nn.Module):
         self.rotary_emb = TLlamaRotaryEmbedding(config=config)
 
     @classmethod
-    def from_pretrained(cls, config, model_path: str, state_dict: Optional[Any] = None):
-        is_merge = True
+    def from_pretrained(cls, config, model_path: str, state_dict: Optional[Any] = None, is_merge: bool = True):
         model = cls(config, is_merge)
         state_dict = LlamaForCausalLM.from_pretrained(
-            model_path, trust_remote_code=True, device_map="cpu", torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
+            model_path, trust_remote_code=True, device_map="cpu", torch_dtype=model.dtype, low_cpu_mem_usage=True
         ).state_dict()
         state_dict = model.read_weight_from_model_path(state_dict, is_merge)
         model.load_state_dict(state_dict)

@@ -60,8 +60,9 @@ class MLXLlamaModel(nn.Module):
         return next(self.parameters()).dtype
 
     @classmethod
-    def from_pretrained(cls, config: AutoConfig, model_path: str, state_dict: Optional[Any] = None):
-        is_merge = True
+    def from_pretrained(
+        cls, config: AutoConfig, model_path: str, state_dict: Optional[Any] = None, is_merge: bool = True
+    ):
         if getattr(config, "quantization", None) is not None or state_dict is not None:
             is_merge = False
         model = cls(config, is_merge)

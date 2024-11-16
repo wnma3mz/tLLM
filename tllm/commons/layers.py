@@ -177,7 +177,7 @@ class MergedLlamaSdpaAttention(nn.Module):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        attn_output = self_attn_func(query_states, key_states, value_states, att_mask=attention_data.attn_mask)
+        attn_output = self_attn_func(query_states, key_states, value_states, attn_mask=attention_data.attn_mask)
 
         attn_output = attn_output.transpose(0, 1).contiguous()
         attn_output = attn_output.reshape(q_len, -1)
@@ -219,7 +219,7 @@ class PlainLlamaSdpaAttention(LlamaSdpaAttention):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        attn_output = self_attn_func(query_states, key_states, value_states, att_mask=attention_data.attn_mask)
+        attn_output = self_attn_func(query_states, key_states, value_states, attn_mask=attention_data.attn_mask)
 
         attn_output = attn_output.transpose(0, 1).contiguous()
         attn_output = attn_output.reshape(q_len, -1)
