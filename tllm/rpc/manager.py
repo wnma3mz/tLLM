@@ -9,8 +9,8 @@ from tllm.commons.communicator import SingleNodeCommunicator
 from tllm.commons.convert import deserialize_tensor, serialize_tensor
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.rpc.master_handler import PendingRequests
-from tllm.rpc.websocket_client import HandlerArgs, WebSocketClient
 from tllm.schemas import MIX_TENSOR, SeqInput
+from tllm.websocket.client import HandlerArgs, WebSocketClient
 
 
 class RPCManager:

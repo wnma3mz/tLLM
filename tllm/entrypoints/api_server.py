@@ -13,8 +13,8 @@ import uvicorn
 
 from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionResponse
 from tllm.entrypoints.server_chat import OpenAIServing
-from tllm.entrypoints.websocket_manager import WebsocketManager
 from tllm.utils import init_engine, setup_logger, setup_seed
+from tllm.websocket.manager import WebsocketManager
 
 engine: None
 openai_serving_chat: OpenAIServing = None
@@ -148,7 +148,6 @@ def parse_args():
     parser.add_argument("--master_handler_port", type=int, required=True)
     parser.add_argument("--model_path", type=str, required=True)
     parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--config_path", type=str, default=None)
     parser.add_argument("--is_local", action="store_true")
     parser.add_argument("--is_debug", action="store_true")
     return parser.parse_args()

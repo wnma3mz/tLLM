@@ -13,9 +13,9 @@ import torch
 from tllm.commons.communicator import Communicator, SingleNodeCommunicator
 from tllm.commons.convert import deserialize_tensor, serialize_tensor
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
-from tllm.rpc.websocket_client import HandlerArgs, WebSocketClient
 from tllm.schemas import SeqInput
 from tllm.utils import setup_logger
+from tllm.websocket.client import HandlerArgs, WebSocketClient
 
 
 class RPCManager:

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import json
 import threading
 import time
-from typing import Callable, Optional, Tuple
+from typing import Tuple
 import uuid
 
 import requests
