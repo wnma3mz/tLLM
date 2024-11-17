@@ -32,19 +32,28 @@ async def main():
             "role": "user",
             "content": [
                 {"type": "text", "text": "这张图片里面有什么？"},
+                {"type": "image_url", "image_url": {"file_path": "asserts/image-2.png"}},
+            ],
+        }
+    ]
+    messages2 = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "What is shown in this image?"},
                 {"type": "image_url", "image_url": {"file_path": "asserts/image-1.png"}},
             ],
         }
     ]
-    # messages_list = [messages1]
-    # print("异步并发请求结果")
-    # s1 = time.time()
-    # await asyncio.gather(*[requests_func(messages) for messages in messages_list])
-    # print(f"time cost: {time.time() - s1:.4f} s")
-
     print("单独请求结果")
     s1 = time.time()
     await requests_func(messages1)
+    print(f"time cost: {time.time() - s1:.4f} s")
+
+    messages_list = [messages1, messages2]
+    print("异步并发请求结果")
+    s1 = time.time()
+    await asyncio.gather(*[requests_func(messages) for messages in messages_list])
     print(f"time cost: {time.time() - s1:.4f} s")
 
 

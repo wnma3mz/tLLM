@@ -14,10 +14,25 @@ from tllm.schemas import MIX_TENSOR, ForwardResult, SeqInput, SequenceRequestDat
 def merge_mm_input(mm_input_list: List[Dict[str, List[np.ndarray]]]) -> Optional[Dict[str, List[MIX_TENSOR]]]:
     if all([x is None for x in mm_input_list]) or all([len(x) == 0 for x in mm_input_list]):
         return None
-    # TODO: merge multi request
+    pixel_values_list, image_grid_thw_list, pixel_values_videos_list, video_grid_thw_list = [], [], [], []
+    for x in mm_input_list:
+        if "image" in x:
+            pixel_values_list.append(x["image"]["pixel_values"])
+            image_grid_thw_list.append(x["image"]["image_grid_thw"])
+        if "video" in x:
+            pixel_values_videos_list.append(x["video"]["pixel_values_videos"])
+            video_grid_thw_list.append(x["video"]["video_grid_thw"])
+
+    pixel_values = np.concatenate(pixel_values_list, axis=0) if pixel_values_list else None
+    pixel_values_videos = np.concatenate(pixel_values_videos_list, axis=0) if pixel_values_videos_list else None
+    image_grid_thw = np.concatenate(image_grid_thw_list, axis=0) if image_grid_thw_list else None
+    video_grid_thw = np.concatenate(video_grid_thw_list, axis=0) if video_grid_thw_list else None
+
     return {
-        "pixel_values": mm_input_list[0]["image"]["pixel_values"],
-        "image_grid_thw": mm_input_list[0]["image"]["image_grid_thw"],
+        "pixel_values": pixel_values,
+        "image_grid_thw": image_grid_thw,
+        "pixel_values_videos": pixel_values_videos,
+        "video_grid_thw": video_grid_thw,
     }
 
 
@@ -34,6 +49,7 @@ def process_mm_input(
     vision_start_id = kwargs["vision_start_id"]
     vision_end_id = kwargs["vision_end_id"]
 
+    response_dict = {}
     if images:
         image_inputs = image_processor(images=images, videos=None)
         image_grid_thw = image_inputs["image_grid_thw"]
@@ -45,7 +61,7 @@ def process_mm_input(
             repeat_times = x.prod() // merge_length
             image_input_ids += [vision_start_id] + [image_token_id] * repeat_times + [vision_end_id]
         seq_request.input_ids = image_input_ids + seq_request.input_ids
-        return {"image": image_inputs}
+        response_dict.update({"image": image_inputs})
     if videos:
         video_inputs = image_processor(images=None, videos=videos)
         video_grid_thw = video_inputs["image_grid_thw"]
@@ -57,8 +73,8 @@ def process_mm_input(
             repeat_times = x.prod() // merge_length
             image_input_ids += [vision_start_id] + [video_end_id] * repeat_times + [vision_end_id]
         seq_request.input_ids = image_input_ids + seq_request.input_ids
-        return {"video": video_inputs}
-    return {}
+        response_dict.update({"video": video_inputs})
+    return response_dict
 
 
 class LLMGenerator:
@@ -121,7 +137,6 @@ class LLMGenerator:
         s1 = time.perf_counter()
         seq_logits: List[MIX_TENSOR] = self.model.get_logits(forward_result.hidden_states, seq_len_list)
         self.logger.debug(f"logits cost time: {time.perf_counter() - s1:.4f}s")
-        s1 = time.perf_counter()
         assert seq_logits.shape[0] == len(sequence_request_list)
 
         s1 = time.perf_counter()
