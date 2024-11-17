@@ -119,17 +119,21 @@ class LLMGenerator:
         forward_result = await self.forward(input_embeds, seq_input)
         self.logger.debug(f"decoder cost time: {time.perf_counter() - s0:.4f}s")
         s1 = time.perf_counter()
-        seq_logits_list: List[MIX_TENSOR] = self.model.get_logits(forward_result.hidden_states, seq_len_list)
+        seq_logits: List[MIX_TENSOR] = self.model.get_logits(forward_result.hidden_states, seq_len_list)
         self.logger.debug(f"logits cost time: {time.perf_counter() - s1:.4f}s")
         s1 = time.perf_counter()
-        assert len(seq_logits_list) == len(sequence_request_list)
+        assert seq_logits.shape[0] == len(sequence_request_list)
 
         s1 = time.perf_counter()
-        # 根据 seq 拆开，之后直接在 sampler 中处理
-        for seq_logits, sequence_request in zip(seq_logits_list, sequence_request_list):
-            generate_ids: List[int] = sampling_func(seq_logits)  # TODO: sequence_request.sampling_params
-            generate_texts = [self.tok.decode([x]) for x in generate_ids]
-            sequence_request.output_ids.append(generate_ids[0])
+        # TODO batch decode by group
+        # TODO: sequence_request.sampling_params
+        seq_generate_ids: List[int] = sampling_func(seq_logits)
+        seq_generate_texts = self.tok.decode(seq_generate_ids)
+
+        for generate_id, generate_text, sequence_request in zip(
+            seq_generate_ids, seq_generate_texts, sequence_request_list
+        ):
+            sequence_request.output_ids.append(generate_id)
 
             end = is_generate_end(
                 sequence_request.output_ids,
@@ -140,8 +144,8 @@ class LLMGenerator:
                 sequence_request.finish_reason_list = [end.finish_reason]
                 sequence_request.is_stop = True
             else:
-                sequence_request.generate_text = generate_texts[0]
-                sequence_request.output_text += generate_texts[0]  # 不添加 end text
+                sequence_request.generate_text = generate_text
+                sequence_request.output_text += generate_text  # 不添加 end text
 
             if sequence_request.is_prefill:
                 sequence_request.ttft_cost_time = time.perf_counter() - s0

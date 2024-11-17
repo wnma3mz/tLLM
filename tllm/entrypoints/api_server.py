@@ -44,7 +44,7 @@ async def get_index():
 
 @app.post("/v1/chat/completions")
 async def create_chat_completion(request: ChatCompletionRequest, raw_request: Request) -> ChatCompletionResponse:
-    if ws_manager.url_list is None:
+    if ws_manager.url_list is None and not is_local:
         raise ValueError("No available Full Node to process the request")
     try:
         generator = await openai_serving_chat.create_chat_completion(request, raw_request)
@@ -185,6 +185,8 @@ async def run_server(args) -> None:
     setup_seed(42)
     global app
     global logger, engine, ws_manager, openai_serving_chat
+    global is_local
+    is_local = args.is_local
 
     logger = setup_logger("master", logging.DEBUG if args.is_debug else logging.INFO)
 

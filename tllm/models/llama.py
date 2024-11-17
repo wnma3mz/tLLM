@@ -278,7 +278,7 @@ class TLlamaForCausalLM(nn.Module):
         return self.embed_tokens(torch.tensor(x, device=self.device))
 
     @torch.no_grad()
-    def get_logits(self, hidden_states: torch.Tensor, seq_len_list: List[int]) -> List[torch.Tensor]:
+    def get_logits(self, hidden_states: torch.Tensor, seq_len_list: List[int]) -> torch.Tensor:
         # 只取最后一个 token 的 hidden_states
         seq_hidden_states = torch.split(hidden_states, [seq_len for seq_len in seq_len_list], dim=0)
         hidden_states = torch.cat([x[-1:, :] for x in seq_hidden_states], dim=0)
@@ -286,4 +286,4 @@ class TLlamaForCausalLM(nn.Module):
         # seq_len x hidden_size
         logits = self.lm_head(self.norm(hidden_states))
         # seq_len -> seq_len1 + seq_len2
-        return torch.chunk(logits, len(seq_len_list), dim=0)
+        return logits

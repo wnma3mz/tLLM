@@ -12,8 +12,7 @@ class TokenizerResult:
 
 class TokenizerUtils:
     def __init__(self, tok_path: str):
-        self.tokenizer = AutoTokenizer.from_pretrained(tok_path, trust_remote_code=True, use_fast=False)
-        self.buffer = []
+        self.tokenizer = AutoTokenizer.from_pretrained(tok_path, trust_remote_code=True, use_fast=True)
 
     def preprocess(
         self, text: str = None, messages: List[Dict[str, str]] = None, add_generation_prompt: bool = True
@@ -36,20 +35,5 @@ class TokenizerUtils:
             input_ids.pop(0)
         return TokenizerResult(input_ids=input_ids, input_str=text)
 
-    def decode(self, input_ids: List[int]) -> str:
-        if not input_ids:
-            return ""
-
-        # 将新token添加到buffer
-        self.buffer.extend(input_ids)
-
-        if len(self.buffer) == len(input_ids):
-            # 第一次解码,解码所有tokens
-            decoded = self.tokenizer.decode(self.buffer)
-        else:
-            # 增量解码,只解码新的tokens
-            prev_text = self.tokenizer.decode(self.buffer[: -len(input_ids)])
-            new_text = self.tokenizer.decode(self.buffer)
-            decoded = new_text[len(prev_text) :]
-
-        return decoded
+    def decode(self, token_ids: List[int]) -> List[str]:
+        return self.tokenizer.batch_decode(token_ids)

@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import json
 import threading
-from typing import Dict, Optional, Tuple
+from typing import Optional, Tuple
 import uuid
 
 import requests
@@ -120,7 +120,9 @@ class WebSocketClient:
 
     async def connect(self):
         try:
-            self.websocket = await websockets.connect(f"{self.server_url}/ws/client/{self.client_id}")
+            self.websocket = await websockets.connect(
+                f"{self.server_url}/ws/client/{self.client_id}", ping_interval=20, ping_timeout=10  # 启用心跳检测
+            )
             self.logger.info(f"Connected to server with client_id: {self.client_id}")
 
             # 注册客户端
