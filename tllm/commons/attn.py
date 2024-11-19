@@ -47,6 +47,7 @@ def get_attention_implementation():
             return xformers_attn, "xformers"
 
         except ImportError:
+            import torch.nn.functional as F
 
             def torch_attn(
                 query_states: torch.Tensor,
