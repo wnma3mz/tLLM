@@ -30,6 +30,7 @@ class Decoder(nn.Module):
     def __call__(self, h: mx.array, mask, cache: AttentionData) -> mx.array:
         for layer in self.layers:
             h = layer(h, mask, cache=cache)
+        mx.eval(h) # just for debug test
         return h
 
 

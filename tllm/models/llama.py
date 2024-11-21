@@ -63,7 +63,6 @@ class Decoder(nn.Module):
             + [LlamaDecoderLayer(config, layer_idx, is_merge) for layer_idx in range(start_layer_idx, end_layer_idx)]
         )
 
-    @torch.no_grad()
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -76,7 +75,6 @@ class Decoder(nn.Module):
 
 
 class TLlamaRotaryEmbedding(LlamaRotaryEmbedding):
-    @torch.no_grad()
     def forward(self, x, position_ids):
         if "dynamic" in self.rope_type:
             self._dynamic_frequency_update(position_ids, device=x.device)
@@ -199,7 +197,7 @@ class LlamaModel(nn.Module):
 
         return weights
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def forward(self, hidden_states: torch.Tensor, seq_input: SeqInput) -> torch.Tensor:
         """
         @param hidden_states: bs x seq_len x hidden_size
@@ -273,11 +271,11 @@ class TLlamaForCausalLM(nn.Module):
         model.eval()
         return model
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def get_input_embeddings(self, x: np.ndarray) -> torch.Tensor:
         return self.embed_tokens(torch.tensor(x, device=self.device))
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def get_logits(self, hidden_states: torch.Tensor, seq_len_list: List[int]) -> torch.Tensor:
         # 只取最后一个 token 的 hidden_states
         seq_hidden_states = torch.split(hidden_states, [seq_len for seq_len in seq_len_list], dim=0)

@@ -46,7 +46,7 @@ class MergeParallelLayer(BaseParallelLayer):
         self.dup_layer = dup_layer
         self.layer = nn.Linear(row_size, col_size * self.dup_layer // self.world_size, bias=False)
 
-    @torch.no_grad()
+    
     def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
         node_output = self.layer(x)
         return torch.chunk(node_output, self.dup_layer, dim=-1)
@@ -64,7 +64,7 @@ class QKVParallelLayer(BaseParallelLayer):
         self.col_size_list = [x // self.world_size for x in col_size_list]
         self.layer = nn.Linear(row_size, col_size // self.world_size, bias=False)
 
-    @torch.no_grad()
+    
     def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
         node_output = self.layer(x)
         return torch.split(node_output, self.col_size_list, dim=-1)
@@ -77,7 +77,7 @@ class RowParallelLayer(BaseParallelLayer):
         self.row_size, self.col_size = row_size, col_size
         self.layer = nn.Linear(row_size // self.world_size, col_size, bias=False)
 
-    @torch.no_grad()
+    
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.layer(x)
 
@@ -97,7 +97,7 @@ class MergedLlamaMLP(nn.Module):
         self.gate_up_proj = MergeParallelLayer(self.hidden_size, self.intermediate_size, 2, self.world_size, self.rank)
         self.down_proj = RowParallelLayer(self.intermediate_size, self.hidden_size, self.world_size, self.rank)
 
-    @torch.no_grad()
+    
     def forward(self, x):
         # x: [seq_len, hidden_size]
         gate_out, up_out = self.gate_up_proj(x)
@@ -142,7 +142,7 @@ class MergedLlamaSdpaAttention(nn.Module):
         )
         self.o_proj = RowParallelLayer(self.num_heads * self.head_dim, self.hidden_size, self.world_size, self.rank)
 
-    @torch.no_grad()
+    
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -180,7 +180,7 @@ class MergedLlamaSdpaAttention(nn.Module):
 
 
 class PlainLlamaSdpaAttention(LlamaSdpaAttention):
-    @torch.no_grad()
+    
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -236,7 +236,7 @@ class LlamaDecoderLayer(nn.Module):
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @torch.no_grad()
+    
     def forward(
         self,
         hidden_states: torch.Tensor,

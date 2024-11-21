@@ -10,8 +10,8 @@ from tllm.schemas import SeqInput
 
 def greedy_decode(logits: mx.array) -> List[int]:
     # logits shape: [seq_len, vocab_size]
-    x = mx.argmax(logits, axis=-1)
-    return x.tolist()  # TODO: first requests is too slow
+    out = mx.argmax(logits, axis=-1)
+    return out.tolist()  # TODO: first requests is too slow
 
 
 def build_mlx_mask(q_len_list: List[int], k_len_list: List[int]) -> mx.array:

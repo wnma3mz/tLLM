@@ -44,7 +44,6 @@ class RPCManager:
 
         return deserialize_tensor(output), await asyncio.wait_for(status_future, timeout=100.0)
 
-
 class LocalRPCManager:
     # 并不发生通信，直接调用模型
     def __init__(self, logger, model_path: str, num_hidden_layers: int):
