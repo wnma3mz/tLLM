@@ -273,9 +273,9 @@ class LlamaDecoderLayer(nn.Module):
         if is_merge:
             self.mlp = MergedLlamaMLP(config)
             if seq_dim == 0:
-                self.self_attn = MergedLlamaSdpaAttention(config=config, layer_idx=layer_idx)
-            else:
                 self.self_attn = MergedLlamaFlashAttention(config=config, layer_idx=layer_idx)
+            else:
+                self.self_attn = MergedLlamaSdpaAttention(config=config, layer_idx=layer_idx)
         else:
             self.mlp = LlamaMLP(config)
             self.self_attn = PlainLlamaSdpaAttention(config=config, layer_idx=layer_idx)

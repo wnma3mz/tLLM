@@ -35,12 +35,12 @@ class KVCache:
         return 0 if self.key_states is None else self.key_states.shape[seq_dim]
 
     def update(self, key_states: MIX_TENSOR, value_states: MIX_TENSOR) -> KV_CACHE_TYPE:
-        if self.key_states is not None:
-            key_states = cat_func([self.key_states, key_states])
-            value_states = cat_func([self.value_states, value_states])
-        self.key_states, self.value_states = key_states, value_states
-        return key_states, value_states
-
+        if self.key_states is None:
+            self.key_states, self.value_states = key_states, value_states
+        else:
+            self.key_states = cat_func([self.key_states, key_states])
+            self.value_states = cat_func([self.value_states, value_states])
+        return self.key_states, self.value_states
 
 class RequestsCache:
     def __init__(self, num_layers: int) -> None:
