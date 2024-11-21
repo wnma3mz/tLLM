@@ -1,9 +1,9 @@
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Union, Tuple, Callable
 
 import torch
 
 
-def get_attention_implementation():
+def get_attention_implementation() -> Tuple[Callable, str, int]:
     """
     Get the best available attention implementation.
     Returns a tuple of (attention_func, implementation_name)
@@ -26,7 +26,7 @@ def get_attention_implementation():
                 causal=True,
             )
 
-        return flash_attention, "flash_attention"
+        return flash_attention, "flash_attention", 0
 
     except ImportError:
         try:
@@ -40,7 +40,7 @@ def get_attention_implementation():
                 return fmha.memory_efficient_attention(q.unsqueeze(0), k.unsqueeze(0), v.unsqueeze(0), attn_bias=attn_mask)[0]
                 # return xformers_attention(q, k, v, att_mask=attn_mask)
 
-            return xformers_attn, "xformers"
+            return xformers_attn, "xformers", 0
 
         except ImportError:
             import torch.nn.functional as F
@@ -51,4 +51,4 @@ def get_attention_implementation():
                 """PyTorch native attention implementation"""
                 return F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask)
 
-            return torch_attn, "torch"
+            return torch_attn, "torch", -1

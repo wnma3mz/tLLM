@@ -17,8 +17,7 @@ if HAS_MLX:
     cat_func = lambda tensors: mx.concat(tensors, axis=seq_dim)
     split_func = lambda tensor, indices: mx.split(tensor, indices, axis=seq_dim)
 else:
-    _, attention_type = get_attention_implementation()
-    seq_dim = 0 if attention_type == "flash_attention" else -2
+    _, attention_type, seq_dim = get_attention_implementation()
     cat_func = lambda tensors: torch.cat(tensors, dim=seq_dim)
     split_func = lambda tensor, indices: torch.split(tensor, indices, dim=seq_dim)
 

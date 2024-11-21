@@ -15,7 +15,7 @@ from tllm.models.torch_helper import EmptyLayer, build_mask, read_from_safetenso
 from tllm.models.utils import get_weight_path
 from tllm.schemas import SeqInput
 
-_, attention_type = get_attention_implementation()
+_, attention_type, _ = get_attention_implementation()
 
 if attention_type == "xformers":
     from xformers.ops import fmha

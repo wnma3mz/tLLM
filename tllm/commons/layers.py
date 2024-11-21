@@ -16,9 +16,9 @@ from tllm.commons.attn import get_attention_implementation
 from tllm.commons.cache import AttentionData, RequestsCache
 
 # Get the best available attention implementation
-self_attn_func, attention_type = get_attention_implementation()
+self_attn_func, attention_type, seq_dim = get_attention_implementation()
 
-if attention_type == "flash_attention":
+if seq_dim == 0:
 
     def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
         """
@@ -29,7 +29,8 @@ if attention_type == "flash_attention":
         if n_rep == 1:
             return hidden_states
         hidden_states = hidden_states[:, :, None, :].expand(slen, num_key_value_heads, n_rep, head_dim)
-        return hidden_states.reshape(slen, num_key_value_heads * n_rep, slen, head_dim)
+        return hidden_states.reshape(slen, num_key_value_heads * n_rep, head_dim)
+
 else:
 
     def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -59,7 +60,6 @@ class MergeParallelLayer(BaseParallelLayer):
         self.dup_layer = dup_layer
         self.layer = nn.Linear(row_size, col_size * self.dup_layer // self.world_size, bias=False)
 
-    
     def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
         node_output = self.layer(x)
         return torch.chunk(node_output, self.dup_layer, dim=-1)
@@ -77,7 +77,6 @@ class QKVParallelLayer(BaseParallelLayer):
         self.col_size_list = [x // self.world_size for x in col_size_list]
         self.layer = nn.Linear(row_size, col_size // self.world_size, bias=False)
 
-    
     def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
         node_output = self.layer(x)
         return torch.split(node_output, self.col_size_list, dim=-1)
@@ -90,7 +89,6 @@ class RowParallelLayer(BaseParallelLayer):
         self.row_size, self.col_size = row_size, col_size
         self.layer = nn.Linear(row_size // self.world_size, col_size, bias=False)
 
-    
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.layer(x)
 
@@ -110,7 +108,6 @@ class MergedLlamaMLP(nn.Module):
         self.gate_up_proj = MergeParallelLayer(self.hidden_size, self.intermediate_size, 2, self.world_size, self.rank)
         self.down_proj = RowParallelLayer(self.intermediate_size, self.hidden_size, self.world_size, self.rank)
 
-    
     def forward(self, x):
         # x: [seq_len, hidden_size]
         gate_out, up_out = self.gate_up_proj(x)
@@ -155,7 +152,6 @@ class MergedLlamaSdpaAttention(nn.Module):
         )
         self.o_proj = RowParallelLayer(self.num_heads * self.head_dim, self.hidden_size, self.world_size, self.rank)
 
-    
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -190,6 +186,7 @@ class MergedLlamaSdpaAttention(nn.Module):
 
         attn_output = self.comm.all_reduce(self.o_proj(attn_output))
         return attn_output, None
+
 
 class MergedLlamaFlashAttention(MergedLlamaSdpaAttention):
     def forward(
@@ -226,8 +223,8 @@ class MergedLlamaFlashAttention(MergedLlamaSdpaAttention):
         attn_output = self.comm.all_reduce(self.o_proj(attn_output))
         return attn_output, None
 
+
 class PlainLlamaSdpaAttention(LlamaSdpaAttention):
-    
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -275,7 +272,7 @@ class LlamaDecoderLayer(nn.Module):
 
         if is_merge:
             self.mlp = MergedLlamaMLP(config)
-            if attention_type != "flash_attention":
+            if seq_dim == 0:
                 self.self_attn = MergedLlamaSdpaAttention(config=config, layer_idx=layer_idx)
             else:
                 self.self_attn = MergedLlamaFlashAttention(config=config, layer_idx=layer_idx)
@@ -285,7 +282,6 @@ class LlamaDecoderLayer(nn.Module):
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    
     def forward(
         self,
         hidden_states: torch.Tensor,
