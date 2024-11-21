@@ -17,6 +17,8 @@ from tllm.schemas import SeqInput
 
 _, attention_type = get_attention_implementation()
 
+if attention_type == "xformers":
+    from xformers.ops import fmha
 
 def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_layers: int) -> AttentionData:
     request_cache = RequestsCache(num_layers)
@@ -44,6 +46,8 @@ def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_la
             "max_seqlen_q": max(q_len_list),
             "max_seqlen_k": max(k_len_list),
         }
+    elif attention_type == "xformers":
+        attn_mask = fmha.BlockDiagonalMask.from_seqlens(q_seqlen=q_len_list, kv_seqlen=k_len_list)
     else:
         attn_mask = build_mask(q_len_list, k_len_list)
     return AttentionData(

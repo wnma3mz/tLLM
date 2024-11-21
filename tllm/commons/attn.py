@@ -31,12 +31,14 @@ def get_attention_implementation():
     except ImportError:
         try:
             from xformers.components.attention.core import scaled_dot_product_attention as xformers_attention
+            from xformers.ops import fmha
 
             def xformers_attn(
                 q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, attn_mask: Optional[torch.Tensor]
             ) -> torch.Tensor:
                 """XFormers attention implementation"""
-                return xformers_attention(q, k, v, att_mask=attn_mask)
+                return fmha.memory_efficient_attention(q.unsqueeze(0), k.unsqueeze(0), v.unsqueeze(0), attn_bias=attn_mask)[0]
+                # return xformers_attention(q, k, v, att_mask=attn_mask)
 
             return xformers_attn, "xformers"
 

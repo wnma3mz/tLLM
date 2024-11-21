@@ -221,7 +221,6 @@ class MergedLlamaFlashAttention(MergedLlamaSdpaAttention):
 
         attn_output = self_attn_func(query_states, key_states, value_states, attn_mask=attention_data.attn_mask)
 
-        attn_output = attn_output.transpose(0, 1).contiguous()
         attn_output = attn_output.reshape(q_len, -1)
 
         attn_output = self.comm.all_reduce(self.o_proj(attn_output))
@@ -276,10 +275,10 @@ class LlamaDecoderLayer(nn.Module):
 
         if is_merge:
             self.mlp = MergedLlamaMLP(config)
-            if attention_type == "flash_attention":
-                self.self_attn = MergedLlamaFlashAttention(config=config, layer_idx=layer_idx)
-            else:
+            if attention_type != "flash_attention":
                 self.self_attn = MergedLlamaSdpaAttention(config=config, layer_idx=layer_idx)
+            else:
+                self.self_attn = MergedLlamaFlashAttention(config=config, layer_idx=layer_idx)
         else:
             self.mlp = LlamaMLP(config)
             self.self_attn = PlainLlamaSdpaAttention(config=config, layer_idx=layer_idx)
