@@ -269,7 +269,7 @@ class MergedAttention(nn.Module):
         mask: mx.array,
         cache: AttentionData,
     ) -> mx.array:
-        L, D = x.shape
+        L, _ = x.shape
         queries, keys, values = self.qkv_proj(x)
 
         # Prepare the queries, keys and values for the attention computation
@@ -280,7 +280,7 @@ class MergedAttention(nn.Module):
         # must has cache, and split by uuid
         request_cache: RequestsCache = cache.request_cache
         queries = cat_func(self._rope(queries, request_cache, cache.uuid_list))
-        keys = self._rope(keys, request_cache, cache.uuid_list)
+        keys = cat_func(self._rope(keys, request_cache, cache.uuid_list))
 
         keys, values = request_cache.update(keys, values, cache.uuid_list, self.layer_idx - self.offset)
 

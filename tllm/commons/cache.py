@@ -19,7 +19,7 @@ if HAS_MLX:
 else:
     _, attention_type, seq_dim = get_attention_implementation()
     cat_func = lambda tensors: torch.cat(tensors, dim=seq_dim)
-    split_func = lambda tensor, indices: torch.split(tensor, indices, dim=seq_dim)
+    split_func = lambda x: x
 
 
 KV_CACHE_TYPE = Tuple[MIX_TENSOR, MIX_TENSOR]
@@ -33,14 +33,6 @@ class KVCache:
 
     def __len__(self) -> int:
         return 0 if self.key_states is None else self.key_states.shape[seq_dim]
-
-    def update(self, key_states: MIX_TENSOR, value_states: MIX_TENSOR) -> KV_CACHE_TYPE:
-        if self.key_states is None:
-            self.key_states, self.value_states = key_states, value_states
-        else:
-            self.key_states = cat_func([self.key_states, key_states])
-            self.value_states = cat_func([self.value_states, value_states])
-        return self.key_states, self.value_states
 
 class RequestsCache:
     def __init__(self, num_layers: int) -> None:
@@ -87,21 +79,26 @@ class RequestsCache:
         uuid_list: List[str],
         layer_idx: int,
     ) -> KV_CACHE_TYPE:
-        if HAS_MLX:
-            seq_key_states = key_states  # 已经在外部 split 过了
-            seq_value_states = split_func(value_states, self.get_index_list(uuid_list))
-        else:
-            seq_key_states = split_func(key_states, self.get_seq_len_list(uuid_list))
-            seq_value_states = split_func(value_states, self.get_seq_len_list(uuid_list))
-
-        key_states_list, value_states_list = [], []
-        for uuid, key_state, value_state in zip(uuid_list, seq_key_states, seq_value_states):
+        # TODO Need Optimization
+        key_lst, value_lst = [], []
+        start = 0
+        for uuid in uuid_list:
             kv_cache: KVCache = self.get_layer_idx_kv_cache(uuid, layer_idx)
-            key, value = kv_cache.update(key_state, value_state)
-            key_states_list.append(key)
-            value_states_list.append(value)
-
-        return cat_func(key_states_list), cat_func(value_states_list)
+            interval = self.get_seq_len(uuid)
+            end = start + interval
+            if seq_dim == -2:
+                cur_key_states, cur_value_states = key_states[:, start:end], value_states[:, start:end]
+            else:
+                cur_key_states, cur_value_states = key_states[start:end], value_states[start:end]
+            if kv_cache.key_states is None:
+                kv_cache.key_states, kv_cache.value_states = cur_key_states, cur_value_states
+            else:
+                kv_cache.key_states = cat_func([kv_cache.key_states, cur_key_states])
+                kv_cache.value_states = cat_func([kv_cache.value_states, cur_value_states])
+            key_lst.append(kv_cache.key_states)
+            value_lst.append(kv_cache.value_states)
+            start += interval
+        return cat_func(key_lst), cat_func(value_lst)
 
 
 class AttentionData:
