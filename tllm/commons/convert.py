@@ -98,7 +98,7 @@ def list_to_protobuf(data: List):
 def serialize_tensor(tensor: MIX_TENSOR) -> BFloat16Tensor:
     # TODO: support bfloat16
     tensor_proto = BFloat16Tensor()
-    # bsz x seq_len x hidden_size
+    # seq_len x hidden_size
     tensor_proto.shape.extend(tensor.shape)
     if isinstance(tensor, torch.Tensor):
         tensor_bytes = tensor.to(torch.float16).detach().numpy().tobytes()

@@ -9,8 +9,8 @@ import torch.nn as nn
 from transformers.models.llama.modeling_llama import LlamaForCausalLM, LlamaRMSNorm, LlamaRotaryEmbedding
 
 from tllm.commons.attn import get_attention_implementation
-from tllm.commons.layers import LlamaDecoderLayer
 from tllm.commons.cache import AttentionData, CacheManager, RequestsCache
+from tllm.commons.layers import LlamaDecoderLayer
 from tllm.models.torch_helper import EmptyLayer, build_mask, read_from_safetensors
 from tllm.models.utils import get_weight_path
 from tllm.schemas import SeqInput
@@ -100,6 +100,12 @@ class TLlamaRotaryEmbedding(LlamaRotaryEmbedding):
         sin = sin * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+def get_last_hidden_states(hidden_states: torch.Tensor, seq_len_list: List[int]) -> torch.Tensor:
+    # 只取最后一个 token 的 hidden_states
+    seq_hidden_states = torch.split(hidden_states, [seq_len for seq_len in seq_len_list], dim=0)
+    return torch.cat([x[-1:, :] for x in seq_hidden_states], dim=0)
 
 
 class LlamaModel(nn.Module):
@@ -226,9 +232,13 @@ class LlamaModel(nn.Module):
             hidden_states, position_embeddings=position_embeddings, attention_data=attention_data
         )
 
+        if self.config.decoder_end_layer_idx == self.config.num_hidden_layers:
+            hidden_states = get_last_hidden_states(hidden_states, seq_input.seq_len_list)
+
         for uuid, seq_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
             self.cache_manager.set(uuid, attention_data.get_kv_cache_list(uuid), attention_data.get_cache_seq_len(uuid))
             self.cache_manager.check_alive()
+
         return hidden_states
 
 
@@ -280,12 +290,8 @@ class TLlamaForCausalLM(nn.Module):
         return self.embed_tokens(torch.tensor(x, device=self.device))
 
     @torch.inference_mode()
-    def get_logits(self, hidden_states: torch.Tensor, seq_len_list: List[int]) -> torch.Tensor:
-        # 只取最后一个 token 的 hidden_states
-        seq_hidden_states = torch.split(hidden_states, [seq_len for seq_len in seq_len_list], dim=0)
-        hidden_states = torch.cat([x[-1:, :] for x in seq_hidden_states], dim=0)
+    def get_logits(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = hidden_states.to(self.dtype).to(self.norm.weight.device)
-        # seq_len x hidden_size
+        # (seq_len1+seq_len2) x hidden_size
         logits = self.lm_head(self.norm(hidden_states))
-        # seq_len -> seq_len1 + seq_len2
         return logits

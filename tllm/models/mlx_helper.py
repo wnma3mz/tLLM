@@ -1,3 +1,4 @@
+import itertools
 import math
 from typing import Dict, List
 
@@ -83,3 +84,10 @@ def read_from_safetensors(file_path: str, key_list: List[str]) -> Dict[str, "mx.
             if key.startswith(prefix_key):
                 tensors[key] = weights[key]
     return tensors
+
+
+def get_last_hidden_states(hidden_states: mx.array, seq_len_list: List[int]) -> mx.array:
+    index_list = list(itertools.accumulate(seq_len_list[:-1]))
+    seq_hidden_states = mx.split(hidden_states, index_list, axis=0)
+    hidden_states = mx.concat([x[-1:, :] for x in seq_hidden_states], axis=0)
+    return hidden_states

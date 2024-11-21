@@ -135,7 +135,7 @@ class LLMGenerator:
         forward_result = await self.forward(input_embeds, seq_input)
         self.logger.debug(f"decoder cost time: {time.perf_counter() - s0:.4f}s")
         s1 = time.perf_counter()
-        seq_logits: List[MIX_TENSOR] = self.model.get_logits(forward_result.hidden_states, seq_len_list)
+        seq_logits: List[MIX_TENSOR] = self.model.get_logits(forward_result.hidden_states)
         self.logger.debug(f"logits cost time: {time.perf_counter() - s1:.4f}s")
         assert seq_logits.shape[0] == len(sequence_request_list)
 

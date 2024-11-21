@@ -6,7 +6,7 @@ import mlx.core as mx
 import mlx.nn as nn
 from mlx_lm.models.llama import MLP, Attention, ModelArgs, TransformerBlock, initialize_rope
 
-from tllm.commons.cache import AttentionData, RequestsCache, cat_func, split_func
+from tllm.commons.cache import AttentionData, RequestsCache, cat_func
 
 
 class BaseParallelLayer(nn.Module):

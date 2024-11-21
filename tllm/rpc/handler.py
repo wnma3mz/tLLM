@@ -17,6 +17,7 @@ from tllm.schemas import SeqInput
 from tllm.utils import setup_logger
 from tllm.websocket.client import HandlerArgs, ModelManager, WebSocketClient
 
+
 class RPCManager:
     def __init__(self, grpc_options: List[Tuple[str, int]]):
         self.grpc_options = grpc_options

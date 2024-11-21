@@ -11,7 +11,7 @@ import numpy as np
 from transformers import AutoConfig
 
 from tllm.commons.cache import CacheManager
-from tllm.models.mlx_helper import read_from_safetensors
+from tllm.models.mlx_helper import get_last_hidden_states, read_from_safetensors
 from tllm.models.mlx_llama import Decoder, build_forward_cache, quantization_func
 from tllm.models.utils import get_weight_path
 from tllm.schemas import SeqInput
@@ -41,6 +41,9 @@ class MLXQwen2Model(nn.Module):
         for uuid, seq_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
             self.cache_manager.set(uuid, attention_data.get_kv_cache_list(uuid), attention_data.get_cache_seq_len(uuid))
             self.cache_manager.check_alive()
+
+        if self.config.decoder_end_layer_idx == self.config.num_hidden_layers:
+            output = get_last_hidden_states(output, seq_input.seq_len_list)
         return output
 
     @property
@@ -198,10 +201,7 @@ class MLXQwen2ForCausalLM(nn.Module):
     def get_input_embeddings(self, x: np.ndarray) -> mx.array:
         return self.embed_tokens(mx.array(x))
 
-    def get_logits(self, hidden_states: mx.array, seq_len_list: List[int]) -> mx.array:
+    def get_logits(self, hidden_states: mx.array) -> mx.array:
         # 只取最后一个 token 的 hidden_states
-        index_list = list(itertools.accumulate(seq_len_list[:-1]))
-        seq_hidden_states = mx.split(hidden_states, index_list, axis=0)
-        hidden_states = mx.concat([x[-1:, :] for x in seq_hidden_states], axis=0).astype(self.dtype)
         logits = self.lm_head(self.norm(hidden_states))
         return logits

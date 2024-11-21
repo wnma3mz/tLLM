@@ -11,14 +11,14 @@ if HAS_MLX:
 
 
 def top_k_sampling(logits: torch.Tensor, k: int = 10) -> torch.Tensor:
-    # logits: [bsz, vocab_size]
+    # logits: [seq_len, vocab_size]
     filtered_logits, top_indices = torch.topk(logits, k, dim=-1)
     probs = torch.zeros_like(logits).scatter_(-1, top_indices, F.softmax(filtered_logits, dim=-1))
     return probs
 
 
 def top_p_sampling(logits: torch.Tensor, p: float = 0.9) -> torch.Tensor:
-    # logits: [bsz, vocab_size]
+    # logits: [seq_len, vocab_size]
     # TODO: fix
     sorted_logits, sorted_indices = torch.sort(logits, descending=True, dim=-1)
     cumulative_probs = torch.cumsum(sorted_logits, dim=-1)
