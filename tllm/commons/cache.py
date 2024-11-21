@@ -1,25 +1,21 @@
-import itertools
+# coding: utf-8
 import time
 from typing import *
 
 import torch
 
 from tllm import HAS_MLX
-from tllm.schemas import MIX_TENSOR
-
 from tllm.commons.attn import get_attention_implementation
-
+from tllm.schemas import MIX_TENSOR
 
 if HAS_MLX:
     import mlx.core as mx
 
     seq_dim = -2
     cat_func = lambda tensors: mx.concat(tensors, axis=seq_dim)
-    split_func = lambda tensor, indices: mx.split(tensor, indices, axis=seq_dim)
 else:
     _, attention_type, seq_dim = get_attention_implementation()
     cat_func = lambda tensors: torch.cat(tensors, dim=seq_dim)
-    split_func = lambda x: x
 
 
 KV_CACHE_TYPE = Tuple[MIX_TENSOR, MIX_TENSOR]
@@ -34,18 +30,11 @@ class KVCache:
     def __len__(self) -> int:
         return 0 if self.key_states is None else self.key_states.shape[seq_dim]
 
+
 class RequestsCache:
     def __init__(self, num_layers: int) -> None:
         self.cache_dict: Dict[str : Dict[str, Union[List[KVCache], int]]] = {}
         self.num_layers = num_layers
-
-    def get_seq_len_list(self, uuid_list: List[str]) -> List[int]:
-        # 获取每个 uuid 请求的 seq_len，用于 split key_states/value_states
-        return [self.get_seq_len(uuid) for uuid in uuid_list]
-
-    def get_index_list(self, uuid_list: List[str]) -> List[int]:
-        # 获取每个 uuid 请求的 seq_len，用于 split key_states/value_states。for MLX framework
-        return list(itertools.accumulate(self.get_seq_len_list(uuid_list)[:-1]))
 
     def add(self, uuid: str, seq_len: int, layer_cache_list: Optional[List[KVCache]] = None):
         # 保存每个 uuid 请求所有层的 cache
@@ -97,7 +86,7 @@ class RequestsCache:
                 kv_cache.value_states = cat_func([kv_cache.value_states, cur_value_states])
             key_lst.append(kv_cache.key_states)
             value_lst.append(kv_cache.value_states)
-            start += interval
+            start = end
         return cat_func(key_lst), cat_func(value_lst)
 
 

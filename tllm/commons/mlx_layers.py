@@ -259,9 +259,15 @@ class MergedAttention(nn.Module):
         self.offset = offset
 
     def _rope(self, xs: mx.array, request_cache: RequestsCache, uuid_list: List[str]) -> List[mx.array]:
-        index_list = request_cache.get_index_list(uuid_list)
         offset_list = request_cache.get_offset_list(uuid_list, self.layer_idx - self.offset)
-        return [self.rope(x, offset) for x, offset in zip(split_func(xs, index_list), offset_list)]
+        x_list = []
+        start = 0
+        for uuid, offset in zip(uuid_list, offset_list):
+            end = start + request_cache.get_seq_len(uuid)
+            xs_ = xs[:, start:end]
+            x_list.append(self.rope(xs_, offset))
+            start = end
+        return cat_func(x_list)
 
     def __call__(
         self,
@@ -279,8 +285,8 @@ class MergedAttention(nn.Module):
 
         # must has cache, and split by uuid
         request_cache: RequestsCache = cache.request_cache
-        queries = cat_func(self._rope(queries, request_cache, cache.uuid_list))
-        keys = cat_func(self._rope(keys, request_cache, cache.uuid_list))
+        queries = self._rope(queries, request_cache, cache.uuid_list)
+        keys = self._rope(keys, request_cache, cache.uuid_list)
 
         keys, values = request_cache.update(keys, values, cache.uuid_list, self.layer_idx - self.offset)
 
@@ -304,9 +310,15 @@ class PlainAttention(Attention):
         self.offset = offset
 
     def _rope(self, xs: mx.array, request_cache: RequestsCache, uuid_list: List[str]) -> List[mx.array]:
-        index_list = request_cache.get_index_list(uuid_list)
         offset_list = request_cache.get_offset_list(uuid_list, self.layer_idx - self.offset)
-        return [self.rope(x, offset) for x, offset in zip(split_func(xs, index_list), offset_list)]
+        x_list = []
+        start = 0
+        for uuid, offset in zip(uuid_list, offset_list):
+            end = start + request_cache.get_seq_len(uuid)
+            xs_ = xs[:, start:end]
+            x_list.append(self.rope(xs_, offset))
+            start = end
+        return cat_func(x_list)
 
     def __call__(
         self,
@@ -324,7 +336,7 @@ class PlainAttention(Attention):
 
         # must has cache, and split by uuid
         request_cache: RequestsCache = cache.request_cache
-        queries = cat_func(self._rope(queries, request_cache, cache.uuid_list))
+        queries = self._rope(queries, request_cache, cache.uuid_list)
         keys = self._rope(keys, request_cache, cache.uuid_list)
 
         keys, values = request_cache.update(keys, values, cache.uuid_list, self.layer_idx - self.offset)
