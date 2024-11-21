@@ -7,14 +7,20 @@ import torch
 from tllm import HAS_MLX
 from tllm.schemas import MIX_TENSOR
 
+from tllm.commons.attn import get_attention_implementation
+
+
 if HAS_MLX:
     import mlx.core as mx
 
-    cat_func = lambda tensors: mx.concat(tensors, axis=-2)
-    split_func = lambda tensor, indices: mx.split(tensor, indices, axis=-2)
+    seq_dim = -2
+    cat_func = lambda tensors: mx.concat(tensors, axis=seq_dim)
+    split_func = lambda tensor, indices: mx.split(tensor, indices, axis=seq_dim)
 else:
-    cat_func = lambda tensors: torch.cat(tensors, dim=-2)
-    split_func = lambda tensor, indices: torch.split(tensor, indices, dim=-2)
+    _, attention_type = get_attention_implementation()
+    seq_dim = 0 if attention_type == "flash_attention" else -2
+    cat_func = lambda tensors: torch.cat(tensors, dim=seq_dim)
+    split_func = lambda tensor, indices: torch.split(tensor, indices, dim=seq_dim)
 
 
 KV_CACHE_TYPE = Tuple[MIX_TENSOR, MIX_TENSOR]
@@ -22,12 +28,12 @@ KV_CACHE_TYPE = Tuple[MIX_TENSOR, MIX_TENSOR]
 
 class KVCache:
     def __init__(self) -> None:
-        # key_states/value_states: bsz x num_heads x seq_len x head_dim
+        # key_states/value_states: num_heads x seq_len x head_dim OR seq_len x num_heads x head_dim
         self.key_states: Optional[MIX_TENSOR] = None
         self.value_states: Optional[MIX_TENSOR] = None
 
     def __len__(self) -> int:
-        return 0 if self.key_states is None else self.key_states.shape[-2]
+        return 0 if self.key_states is None else self.key_states.shape[seq_dim]
 
     def update(self, key_states: MIX_TENSOR, value_states: MIX_TENSOR) -> KV_CACHE_TYPE:
         if self.key_states is not None:

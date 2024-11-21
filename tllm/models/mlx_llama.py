@@ -11,7 +11,7 @@ import numpy as np
 from transformers import AutoConfig
 
 from tllm.commons.mlx_layers import TransformerBlock
-from tllm.models.cache import AttentionData, CacheManager
+from tllm.commons.cache import AttentionData, CacheManager
 from tllm.models.mlx_helper import build_forward_cache, empty_func, quantization_func, read_from_safetensors
 from tllm.models.utils import get_weight_path
 from tllm.schemas import SeqInput

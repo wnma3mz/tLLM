@@ -10,7 +10,7 @@ from mlx_lm.models.llama import ModelArgs
 import numpy as np
 from transformers import AutoConfig
 
-from tllm.models.cache import CacheManager
+from tllm.commons.cache import CacheManager
 from tllm.models.mlx_helper import read_from_safetensors
 from tllm.models.mlx_llama import Decoder, build_forward_cache, quantization_func
 from tllm.models.utils import get_weight_path

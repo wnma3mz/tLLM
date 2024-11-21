@@ -15,6 +15,7 @@ async def requests_func(messages: List[Dict[str, Any]]):
         "model": "tt",
         # "stream": True
         "stream": False,
+        "max_tokens": 200,
     }
     time.sleep(random.random() * 2)
     async with aiohttp.ClientSession() as session:

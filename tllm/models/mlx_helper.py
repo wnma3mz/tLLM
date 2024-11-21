@@ -4,7 +4,7 @@ from typing import Dict, List
 import mlx.core as mx
 import mlx.nn as nn
 
-from tllm.models.cache import AttentionData, CacheManager, RequestsCache
+from tllm.commons.cache import AttentionData, CacheManager, RequestsCache
 from tllm.schemas import SeqInput
 
 

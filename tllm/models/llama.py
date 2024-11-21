@@ -10,7 +10,7 @@ from transformers.models.llama.modeling_llama import LlamaForCausalLM, LlamaRMSN
 
 from tllm.commons.attn import get_attention_implementation
 from tllm.commons.layers import LlamaDecoderLayer
-from tllm.models.cache import AttentionData, CacheManager, RequestsCache
+from tllm.commons.cache import AttentionData, CacheManager, RequestsCache
 from tllm.models.torch_helper import EmptyLayer, build_mask, read_from_safetensors
 from tllm.models.utils import get_weight_path
 from tllm.schemas import SeqInput
