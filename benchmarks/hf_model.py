@@ -42,8 +42,9 @@ def load_vl_message():
 
 
 if __name__ == "__main__":
-    model_path = "/Users/jianghulu/.cache/huggingface/hub/models--mlx-community--Qwen2.5-0.5B-Instruct-bf16/snapshots/56d07e766edd7159fbe12ed12d9cf114bf38bf1e"
-    model_path = "/Users/jianghulu/.cache/huggingface/hub/models--Qwen--Qwen2-VL-2B-Instruct/snapshots/aca78372505e6cb469c4fa6a35c60265b00ff5a4"
+    model_path: str = "/Users/lujianghu/Documents/Llama-3.2-1B-Instruct"
+    model_path: str = "mlx-community/Qwen2.5-0.5B-Instruct-bf16"
+    model_path: str = "Qwen/Qwen2-VL-2B-Instruct"
     tok = TokenizerUtils(model_path)
     model = load_qwen2_vl(model_path)
     processor = AutoProcessor.from_pretrained(model_path, trust_remote_code=True)

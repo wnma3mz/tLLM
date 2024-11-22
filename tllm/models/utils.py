@@ -33,6 +33,7 @@ def get_weight_path(model_path: str) -> Tuple[set, List[str]]:
         file_set.add("model.safetensors")
     return file_set, prefix_key_list
 
+
 def get_model_path(path_or_hf_repo: str, revision: Optional[str] = None) -> Path:
     model_path = Path(path_or_hf_repo)
     if not model_path.exists():

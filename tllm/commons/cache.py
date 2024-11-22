@@ -5,7 +5,6 @@ from typing import *
 import torch
 
 from tllm import HAS_MLX
-from tllm.commons.attn import get_attention_implementation
 from tllm.schemas import MIX_TENSOR
 
 if HAS_MLX:
@@ -14,7 +13,7 @@ if HAS_MLX:
     seq_dim = -2
     cat_func = lambda tensors: mx.concat(tensors, axis=seq_dim)
 else:
-    _, attention_type, seq_dim = get_attention_implementation()
+    seq_dim = 0
     cat_func = lambda tensors: torch.cat(tensors, dim=seq_dim)
 
 
@@ -62,11 +61,7 @@ class RequestsCache:
         return [self.get_cache_seq_len(uuid, layer_idx) for uuid in uuid_list]
 
     def update(
-        self,
-        key_states: Union[torch.Tensor, List["mx.array"]],
-        value_states: MIX_TENSOR,
-        uuid_list: List[str],
-        layer_idx: int,
+        self, key_states: MIX_TENSOR, value_states: MIX_TENSOR, uuid_list: List[str], layer_idx: int
     ) -> KV_CACHE_TYPE:
         # TODO Need Optimization
         key_lst, value_lst = [], []
@@ -88,6 +83,39 @@ class RequestsCache:
             value_lst.append(kv_cache.value_states)
             start = end
         return cat_func(key_lst), cat_func(value_lst)
+
+        # start = 0
+        # max_seq_len = 100
+        # if seq_dim == -2:
+        #     total_k = torch.empty(num_heads, seq_len, head_dim, dtype=key_states.dtype, device=key_states.device)
+        #     total_v = torch.empty(num_heads, seq_len, head_dim, dtype=key_states.dtype, device=key_states.device)
+        # else:
+        #     total_k = torch.empty(seq_len, num_heads, head_dim, dtype=key_states.dtype, device=key_states.device)
+        #     total_v = torch.empty(seq_len, num_heads, head_dim, dtype=key_states.dtype, device=key_states.device)
+        # total_start = 0
+        # for uuid in uuid_list:
+        #     kv_cache: KVCache = self.get_layer_idx_kv_cache(uuid, layer_idx)
+        #     interval = self.get_seq_len(uuid)
+        #     end = start + interval
+        #     req_start, req_end = kv_cache.act_len+start, kv_cache.act_len + end
+        #     if seq_dim == -2:
+        #         cur_key_states, cur_value_states = key_states[:, start:end], value_states[:, start:end]
+        #         kv_cache.key_states[:, req_start:req_end], kv_cache.value_states[:, req_start:req_end] = cur_key_states, cur_value_states
+        #         total_k[:, total_start:total_end] = kv_cache.key_states[:, :req_end]
+        #         total_v[:, total_start:total_end] = kv_cache.value_states[:, :req_end]
+        #     else:
+        #         cur_key_states, cur_value_states = key_states[start:end], value_states[start:end]
+        #         kv_cache.key_states[req_start:req_end], kv_cache.value_states[req_start:req_end] = cur_key_states, cur_value_states
+        #         total_k[total_start:total_end] = kv_cache.key_states[:req_end]
+        #         total_v[total_start:total_end] = kv_cache.value_states[:req_end]
+        #     kv_cache.act_len = req_end
+        #     total_end = total_start + kv_cache.act_len
+        #     total_start += kv_cache.act_len
+        #     start = end
+        # if seq_dim == -2:
+        #     return total_k[:, :total_end], kv_cache.value_states[:, :total_end]
+        # else:
+        #     return total_k[:total_end], kv_cache.value_states[:total_end]
 
 
 class AttentionData:

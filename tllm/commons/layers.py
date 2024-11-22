@@ -16,33 +16,19 @@ from tllm.commons.attn import get_attention_implementation
 from tllm.commons.cache import AttentionData, RequestsCache
 
 # Get the best available attention implementation
-self_attn_func, attention_type, seq_dim = get_attention_implementation()
+self_attn_func, attention_type = get_attention_implementation()
 
-if seq_dim == 0:
 
-    def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-        """
-        This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-        num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-        """
-        slen, num_key_value_heads, head_dim = hidden_states.shape
-        if n_rep == 1:
-            return hidden_states
-        hidden_states = hidden_states[:, :, None, :].expand(slen, num_key_value_heads, n_rep, head_dim)
-        return hidden_states.reshape(slen, num_key_value_heads * n_rep, head_dim)
-
-else:
-
-    def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-        """
-        This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-        num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-        """
-        num_key_value_heads, slen, head_dim = hidden_states.shape
-        if n_rep == 1:
-            return hidden_states
-        hidden_states = hidden_states[:, None, :, :].expand(num_key_value_heads, n_rep, slen, head_dim)
-        return hidden_states.reshape(num_key_value_heads * n_rep, slen, head_dim)
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    slen, num_key_value_heads, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :].expand(slen, num_key_value_heads, n_rep, head_dim)
+    return hidden_states.reshape(slen, num_key_value_heads * n_rep, head_dim)
 
 
 class BaseParallelLayer(nn.Module):
@@ -163,43 +149,6 @@ class MergedLlamaSdpaAttention(nn.Module):
 
         query_states, key_states, value_states = self.qkv_proj(hidden_states)
 
-        query_states = query_states.view(q_len, -1, self.head_dim).transpose(0, 1)
-        key_states = key_states.view(q_len, -1, self.head_dim).transpose(0, 1)
-        value_states = value_states.view(q_len, -1, self.head_dim).transpose(0, 1)
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(
-            query_states, key_states, cos, sin, attention_data.position_ids, unsqueeze_dim=0
-        )
-        request_cache: RequestsCache = attention_data.request_cache
-        key_states, value_states = request_cache.update(
-            key_states, value_states, attention_data.uuid_list, self.layer_idx - self.config.offset
-        )
-
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
-
-        attn_output = self_attn_func(query_states, key_states, value_states, attn_mask=attention_data.attn_mask)
-
-        attn_output = attn_output.transpose(0, 1).contiguous()
-        attn_output = attn_output.reshape(q_len, -1)
-
-        attn_output = self.comm.all_reduce(self.o_proj(attn_output))
-        return attn_output, None
-
-
-class MergedLlamaFlashAttention(MergedLlamaSdpaAttention):
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
-        attention_data: AttentionData,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        # [seq_len, hidden_size]
-        q_len, _ = hidden_states.size()
-
-        query_states, key_states, value_states = self.qkv_proj(hidden_states)
-
         query_states = query_states.view(q_len, -1, self.head_dim)
         key_states = key_states.view(q_len, -1, self.head_dim)
         value_states = value_states.view(q_len, -1, self.head_dim)
@@ -272,10 +221,7 @@ class LlamaDecoderLayer(nn.Module):
 
         if is_merge:
             self.mlp = MergedLlamaMLP(config)
-            if seq_dim == 0:
-                self.self_attn = MergedLlamaFlashAttention(config=config, layer_idx=layer_idx)
-            else:
-                self.self_attn = MergedLlamaSdpaAttention(config=config, layer_idx=layer_idx)
+            self.self_attn = MergedLlamaSdpaAttention(config=config, layer_idx=layer_idx)
         else:
             self.mlp = LlamaMLP(config)
             self.self_attn = PlainLlamaSdpaAttention(config=config, layer_idx=layer_idx)

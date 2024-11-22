@@ -26,7 +26,7 @@ def get_attention_implementation() -> Tuple[Callable, str, int]:
                 causal=True,
             )
 
-        return flash_attention, "flash_attention", 0
+        return flash_attention, "flash_attention"
 
     except ImportError:
         try:
@@ -38,9 +38,13 @@ def get_attention_implementation() -> Tuple[Callable, str, int]:
             ) -> torch.Tensor:
                 """XFormers attention implementation"""
                 # return fmha.memory_efficient_attention(q.unsqueeze(0), k.unsqueeze(0), v.unsqueeze(0), attn_bias=attn_mask)[0]
-                return xformers_attention(q, k, v, att_mask=attn_mask)
+                return (
+                    xformers_attention(q.transpose(0, 1), k.transpose(0, 1), v.transpose(0, 1), att_mask=attn_mask)
+                    .transpose(0, 1)
+                    .contiguous()
+                )
 
-            return xformers_attn, "xformers", -2
+            return xformers_attn, "xformers"
 
         except ImportError:
             import torch.nn.functional as F
@@ -49,6 +53,12 @@ def get_attention_implementation() -> Tuple[Callable, str, int]:
                 q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, attn_mask: Optional[torch.Tensor]
             ) -> torch.Tensor:
                 """PyTorch native attention implementation"""
-                return F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask)
+                return (
+                    F.scaled_dot_product_attention(
+                        q.transpose(0, 1), k.transpose(0, 1), v.transpose(0, 1), attn_mask=attn_mask
+                    )
+                    .transpose(0, 1)
+                    .contiguous()
+                )
 
-            return torch_attn, "torch", -2
+            return torch_attn, "torch"

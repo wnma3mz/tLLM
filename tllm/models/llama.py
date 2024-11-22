@@ -15,10 +15,11 @@ from tllm.models.torch_helper import EmptyLayer, build_mask, read_from_safetenso
 from tllm.models.utils import get_model_path, get_weight_path
 from tllm.schemas import SeqInput
 
-_, attention_type, _ = get_attention_implementation()
+_, attention_type = get_attention_implementation()
 
 if attention_type == "xformers":
     from xformers.ops import fmha
+
 
 def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_layers: int) -> AttentionData:
     request_cache = RequestsCache(num_layers)

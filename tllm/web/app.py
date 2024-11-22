@@ -119,7 +119,7 @@ class ChatInterface:
         response = requests.post(chat_url, json=data, stream=True)
 
         tokens_generated = 0
-        tokens_per_second = 0.
+        tokens_per_second = 0.0
         start_time = time.time()
         partial_message = ""
 
@@ -131,7 +131,7 @@ class ChatInterface:
                 data_chunk = process_response_chunk(chunk)
                 if data_chunk is None:
                     break
-                
+
                 delta_content = data_chunk["choices"][0]["delta"]["content"]
                 if delta_content is not None:
                     partial_message += delta_content
@@ -144,7 +144,7 @@ class ChatInterface:
                         start_time = time.time()
 
                     if tokens_generated > 1:
-                        tokens_per_second = (tokens_generated-1) / time_elapsed
+                        tokens_per_second = (tokens_generated - 1) / time_elapsed
 
                     yield history, self.metric_text.format(token_nums=tokens_generated, speed=tokens_per_second)
 

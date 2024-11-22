@@ -4,7 +4,7 @@ from transformers import AutoConfig
 from tllm.models.mlx_qwen_vl import Qwen2VisionModel
 
 if __name__ == "__main__":
-    model_path = "/Users/jianghulu/.cache/huggingface/hub/models--Qwen--Qwen2-VL-2B-Instruct/snapshots/aca78372505e6cb469c4fa6a35c60265b00ff5a4"
+    model_path: str = "Qwen/Qwen2-VL-2B-Instruct"
     config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
     model = Qwen2VisionModel(config.vision_config)
     model.set_dtype(mx.bfloat16)
