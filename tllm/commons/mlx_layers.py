@@ -264,8 +264,7 @@ class MergedAttention(nn.Module):
         start = 0
         for uuid, offset in zip(uuid_list, offset_list):
             end = start + request_cache.get_seq_len(uuid)
-            xs_ = xs[:, start:end]
-            x_list.append(self.rope(xs_, offset))
+            x_list.append(self.rope(xs[start:end].transpose(1, 0, 2), offset).transpose(1, 0, 2))
             start = end
         return cat_func(x_list)
 
@@ -279,9 +278,9 @@ class MergedAttention(nn.Module):
         queries, keys, values = self.qkv_proj(x)
 
         # Prepare the queries, keys and values for the attention computation
-        queries = queries.reshape(L, self.n_heads, -1).transpose(1, 0, 2)
-        keys = keys.reshape(L, self.n_kv_heads, -1).transpose(1, 0, 2)
-        values = values.reshape(L, self.n_kv_heads, -1).transpose(1, 0, 2)
+        queries = queries.reshape(L, self.n_heads, -1)
+        keys = keys.reshape(L, self.n_kv_heads, -1)
+        values = values.reshape(L, self.n_kv_heads, -1)
 
         # must has cache, and split by uuid
         request_cache: RequestsCache = cache.request_cache
@@ -291,9 +290,9 @@ class MergedAttention(nn.Module):
         keys, values = request_cache.update(keys, values, cache.uuid_list, self.layer_idx - self.offset)
 
         output = mx.fast.scaled_dot_product_attention(
-            mx.expand_dims(queries, axis=0),
-            mx.expand_dims(keys, axis=0),
-            mx.expand_dims(values, axis=0),
+            mx.expand_dims(queries.transpose(1, 0, 2), axis=0),
+            mx.expand_dims(keys.transpose(1, 0, 2), axis=0),
+            mx.expand_dims(values.transpose(1, 0, 2), axis=0),
             scale=self.scale,
             mask=mask,
         )[0]
@@ -330,9 +329,9 @@ class PlainAttention(Attention):
         queries, keys, values = self.q_proj(x), self.k_proj(x), self.v_proj(x)
 
         # Prepare the queries, keys and values for the attention computation
-        queries = queries.reshape(L, self.n_heads, -1).transpose(1, 0, 2)
-        keys = keys.reshape(L, self.n_kv_heads, -1).transpose(1, 0, 2)
-        values = values.reshape(L, self.n_kv_heads, -1).transpose(1, 0, 2)
+        queries = queries.reshape(L, self.n_heads, -1)
+        keys = keys.reshape(L, self.n_kv_heads, -1)
+        values = values.reshape(L, self.n_kv_heads, -1)
 
         # must has cache, and split by uuid
         request_cache: RequestsCache = cache.request_cache
@@ -342,9 +341,9 @@ class PlainAttention(Attention):
         keys, values = request_cache.update(keys, values, cache.uuid_list, self.layer_idx - self.offset)
 
         output = mx.fast.scaled_dot_product_attention(
-            mx.expand_dims(queries, axis=0),
-            mx.expand_dims(keys, axis=0),
-            mx.expand_dims(values, axis=0),
+            mx.expand_dims(queries.transpose(1, 0, 2), axis=0),
+            mx.expand_dims(keys.transpose(1, 0, 2), axis=0),
+            mx.expand_dims(values.transpose(1, 0, 2), axis=0),
             scale=self.scale,
             mask=mask,
         )[0]

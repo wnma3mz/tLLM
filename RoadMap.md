@@ -70,6 +70,3 @@
         - [ ] Prefix-tree Cache
 - [ ] Shard Storage
 - [x] Auto Download
-
-TODO:
-- [] mlx transpose kv cache
