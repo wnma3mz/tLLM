@@ -12,7 +12,7 @@ from tllm.commons.attn import get_attention_implementation
 from tllm.commons.cache import AttentionData, CacheManager, RequestsCache
 from tllm.commons.layers import LlamaDecoderLayer
 from tllm.models.torch_helper import EmptyLayer, build_mask, read_from_safetensors
-from tllm.models.utils import get_weight_path
+from tllm.models.utils import get_model_path, get_weight_path
 from tllm.schemas import SeqInput
 
 _, attention_type, _ = get_attention_implementation()
@@ -124,6 +124,7 @@ class LlamaModel(nn.Module):
     @classmethod
     def from_pretrained(cls, config, model_path: str, state_dict: Optional[Any] = None, is_merge: bool = True):
         model = cls(config, is_merge)
+        model_path = get_model_path(model_path)
         state_dict = LlamaForCausalLM.from_pretrained(
             model_path, trust_remote_code=True, device_map="cpu", torch_dtype=model.dtype, low_cpu_mem_usage=True
         ).state_dict()
@@ -267,6 +268,7 @@ class TLlamaForCausalLM(nn.Module):
             else:
                 cls.eos_token_ids.add(config.eos_token_id)
 
+        model_path = get_model_path(model_path)
         file_set, prefix_key_list = get_weight_path(model_path)
         state_dict = {}
         for file in file_set:

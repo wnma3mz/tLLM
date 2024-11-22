@@ -1,7 +1,5 @@
 #!/bin/bash
 MODEL_PATH=/Users/lujianghu/Documents/Llama-3.2-1B-Instruct
-
-
 export PYTHONPATH="./":$PYTHONPATH;
 export OMP_NUM_THREADS=8;
 

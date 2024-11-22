@@ -372,7 +372,7 @@ class MergedMLP(nn.Module):
         return self.down_proj(nn.silu(gate_out) * up_out)
 
 
-class TransformerBlock(TransformerBlock):
+class MLXTransformerBlock(TransformerBlock):
     def __init__(self, args: ModelArgs, layer_idx: int, offset: int, is_merge: bool = True):
         super(TransformerBlock).__init__()
         self.num_attention_heads = args.num_attention_heads

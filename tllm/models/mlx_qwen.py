@@ -1,5 +1,4 @@
 import glob
-import itertools
 import os
 import re
 from typing import *
@@ -13,7 +12,7 @@ from transformers import AutoConfig
 from tllm.commons.cache import CacheManager
 from tllm.models.mlx_helper import get_last_hidden_states, read_from_safetensors
 from tllm.models.mlx_llama import Decoder, build_forward_cache, quantization_func
-from tllm.models.utils import get_weight_path
+from tllm.models.utils import get_model_path, get_weight_path
 from tllm.schemas import SeqInput
 
 
@@ -57,6 +56,7 @@ class MLXQwen2Model(nn.Module):
             is_merge = False
         model = cls(config, is_merge)
         if state_dict is None:
+            model_path = get_model_path(model_path)
             weights = model.read_weight_from_model_path(model_path, is_merge)
         else:
             weights = state_dict
@@ -174,6 +174,7 @@ class MLXQwen2ForCausalLM(nn.Module):
                 cls.eos_token_ids.add(config.eos_token_id)
 
         if state_dict is None:
+            model_path = get_model_path(model_path)
             file_set, prefix_key_list = get_weight_path(model_path)
             state_dict = {}
             for file in file_set:

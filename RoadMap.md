@@ -1,0 +1,72 @@
+# RoadMap
+
+使用 torch.dist 实现 张量并行，使用 rpc 实现流水并行
+
+- [ ] Speed Up
+    - [x] Merge Linear
+    - [x] Pipeline Parallel by grpc
+    - [x] Tensor Parallel by torch.dist
+    - [x] Sequence KV Cache
+    - [x] Performance Testing
+    - [x] Attention
+        - [x] SDPA
+        - [x] xformers
+        - [x] flash_attention
+- [x] Decoding Strategy
+    - [x] Top-K Sampling
+    - [x] Top-P Sampling
+    - [x] Temperature Sampling
+- [ ] Model
+    - [ ] LLM
+        - [x] LLaMA
+        - [x] Qwen2
+    - [ ] Multi-Modal
+        - [x] Qwen2-VL
+- [x] MLX Framework
+    - [x] With Torch Inference
+        - [x] Some bugs with multi requests
+    - [x] Quantization
+    - [x] MLX Server
+    - [ ] LoRA Training
+- [x] Web UI
+    - [x] Node Status
+        - [ ] Display Multi Model
+    - [x] ChatWeb Demo by Gradio
+        - [x] Parameters
+        - [x] System
+        - [x] Button
+- [x] Backend
+    - [x] OpenAI API format
+        - [x] Streaming Output
+        - [x] chat completion(stream)
+        - [x] chat completion(non-stream)
+        - [x] using anythingLLM
+    - [x] Client Send Url and Port
+    - [ ] Auto Layer Split
+        - [x] get free layer idx
+        - [ ] calculate layer memory and recommend split
+        - [ ] split model before load
+    - [x] Async Generation
+        - [x] Multi-Sequence Batch=1
+        - [x] Queuing mechanism
+        - [x] Continuous Batch
+        - [x] Test Cases
+        - [x] Client Disconnect and Abort
+        - [x] await Event
+    - [x] Communication
+        - [x] Communication Time Benchmark
+        - [x] Async GRPC
+        - [x] Ring Communication
+    - [ ] Auto Find Node
+        - [x] WebSocket Communication
+        - [x] Client Retry Connect
+        - [x] Client auto update url 
+        - [ ] Master Exit
+- [ ] KV Cache
+    - [x] Request/Sequence Cache
+    - [x] Custom KV Cache Class
+    - [ ] Conversation KV Cache (in progress)
+    - [ ] Token-Level Cache
+        - [ ] Prefix-tree Cache
+- [ ] Shard Storage
+- [x] Auto Download

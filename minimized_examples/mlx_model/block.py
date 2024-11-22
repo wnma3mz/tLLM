@@ -10,7 +10,7 @@ from mlx_lm.models.cache import KVCache, RotatingKVCache
 from mlx_lm.models.llama import ModelArgs
 from transformers import AutoTokenizer
 
-from tllm.models.cache import AttentionData, RequestsCache
+from tllm.commons.cache import AttentionData, RequestsCache
 from tllm.models.mlx_llama import Decoder
 
 

@@ -1,6 +1,9 @@
 import json
 import os
-from typing import List, Set, Tuple
+from pathlib import Path
+from typing import List, Optional, Set, Tuple
+
+from huggingface_hub import snapshot_download
 
 from tllm.schemas import GenerateEnd
 
@@ -29,3 +32,31 @@ def get_weight_path(model_path: str) -> Tuple[set, List[str]]:
     else:
         file_set.add("model.safetensors")
     return file_set, prefix_key_list
+
+def get_model_path(path_or_hf_repo: str, revision: Optional[str] = None) -> Path:
+    model_path = Path(path_or_hf_repo)
+    if not model_path.exists():
+        try:
+            model_path = Path(
+                snapshot_download(
+                    repo_id=path_or_hf_repo,
+                    revision=revision,
+                    allow_patterns=[
+                        "*.json",
+                        "*.safetensors",
+                        "*.py",
+                        "tokenizer.model",
+                        "*.tiktoken",
+                        "*.txt",
+                    ],
+                )
+            )
+        except:
+            raise ValueError(
+                f"Model not found for path or HF repo: {path_or_hf_repo}.\n"
+                "Please make sure you specified the local path or Hugging Face"
+                " repo id correctly.\nIf you are trying to access a private or"
+                " gated Hugging Face repo, make sure you are authenticated:\n"
+                "https://huggingface.co/docs/huggingface_hub/en/guides/cli#huggingface-cli-login"
+            ) from None
+    return model_path

@@ -9,6 +9,7 @@ from transformers import AutoConfig, AutoProcessor
 
 from tllm.commons.mlx_layers import PatchEmbed, PatchMerger, VisionMlp, VisionRotaryEmbedding, VisionSdpaAttention
 from tllm.models.mlx_llama import quantization_func
+from tllm.models.utils import get_model_path
 
 
 class Qwen2VLVisionBlock(nn.Module):
@@ -108,6 +109,7 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
         model = cls(config)
 
         # load processor
+        model_path = get_model_path(model_path)
         model.processor = AutoProcessor.from_pretrained(model_path, trust_remote_code=True)
         model.mm_config = {
             "vision_start_id": config.vision_start_token_id,

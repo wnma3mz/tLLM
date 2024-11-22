@@ -10,7 +10,7 @@ import numpy as np
 from transformers import AutoConfig
 
 from tllm.commons.cache import AttentionData, CacheManager
-from tllm.commons.mlx_layers import TransformerBlock
+from tllm.commons.mlx_layers import MLXTransformerBlock
 from tllm.models.mlx_helper import (
     build_forward_cache,
     empty_func,
@@ -18,7 +18,7 @@ from tllm.models.mlx_helper import (
     quantization_func,
     read_from_safetensors,
 )
-from tllm.models.utils import get_weight_path
+from tllm.models.utils import get_model_path, get_weight_path
 from tllm.schemas import SeqInput
 
 
@@ -28,7 +28,7 @@ class Decoder(nn.Module):
         self.vocab_size = args.vocab_size
         self.num_hidden_layers = args.num_hidden_layers
         self.layers = [empty_func] * start_layer_idx + [
-            TransformerBlock(args=args, layer_idx=layer_idx, offset=start_layer_idx, is_merge=is_merge)
+            MLXTransformerBlock(args=args, layer_idx=layer_idx, offset=start_layer_idx, is_merge=is_merge)
             for layer_idx in range(start_layer_idx, end_layer_idx)
         ]
 
@@ -76,6 +76,7 @@ class MLXLlamaModel(nn.Module):
             is_merge = False
         model = cls(config, is_merge)
         if state_dict is None:
+            model_path = get_model_path(model_path)
             weights = model.read_weight_from_model_path(model_path, is_merge)
         else:
             weights = state_dict
@@ -180,6 +181,7 @@ class MLXLlamaForCausalLM(nn.Module):
                 cls.eos_token_ids.add(config.eos_token_id)
 
         if state_dict is None:
+            model_path = get_model_path(model_path)
             file_set, prefix_key_list = get_weight_path(model_path)
             state_dict = {}
             for file in file_set:
