@@ -5,9 +5,9 @@ from typing import *
 
 import torch
 
+from tllm.commons.manager import load_master_model
 from tllm.engine import AsyncEngine
 from tllm.generate import LLMGenerator, TokenizerUtils
-from tllm.models.manager import load_master_model
 from tllm.rpc.manager import LocalRPCManager, RPCManager
 from tllm.rpc.master_handler import MasterHandler, PendingRequests
 

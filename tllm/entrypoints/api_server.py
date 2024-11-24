@@ -13,7 +13,7 @@ import uvicorn
 
 from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionResponse
 from tllm.entrypoints.server_chat import OpenAIServing
-from tllm.schemas import ClientData, InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
+from tllm.schemas import InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
 from tllm.utils import init_engine, setup_logger, setup_seed
 from tllm.websocket.manager import WebsocketManager
 
@@ -71,7 +71,7 @@ async def create_completion(request: ChatCompletionRequest, raw_request: Request
         return JSONResponse(content=generator.model_dump())
 
 
-@app.post("/health")
+@app.get("/health")
 async def health():
     return Response(status_code=200)
 
@@ -101,41 +101,42 @@ async def monitor_websocket(websocket: WebSocket):
         ws_manager.monitor_websockets.remove(websocket)
 
 
-def update_master_url(clients: List[ClientData]):
-    # 客户端断开连接后，需要重新更新 url
-    if clients:
-        logger.info(f"Update url: {clients[0].host}; PP Size: {len(clients)}")
-        openai_serving_chat.engine.update_url(clients[0].host, len(clients))
-
-
 async def update_model_url():
     # 如果有操作需要更新各个客户端的信息，需要在这里更新
     if ws_manager.has_full_model:
         return
-    logger.info("Update model url start")
     ws_manager.set_connect_clients()
-    update_master_url(ws_manager.connect_clients)
+    clients = ws_manager.connect_clients
+    openai_serving_chat.engine.update_url(clients[0].host, len(clients))
     await ws_manager.send_config(args.master_url)
-    logger.info("Update model url end")
+    # TODO 后台持续进行健康检查，如果有节点挂掉，需要重新分配
+    # while True:
+    #     i = await ws_manager.health_check()
+    #     if i != -1:
+    #         ws_manager.connect_clients = []
 
 
 @app.post("/register_client")
-async def register_client_func(request: RegisterClientRequest, raw_request: Request) -> RegisterClientResponse:
+async def register_client_func(
+    request: RegisterClientRequest, raw_request: Request, background_tasks: BackgroundTasks
+) -> RegisterClientResponse:
     model_path: str = args.model_path
     response = await ws_manager.register_client(request, model_path)
     if request.pp_rank == -1:
         logger.info(f"Client {request.client_id} register")
     else:
         logger.info(f"Client {request.client_id} has been init: {request}")
-        await update_model_url()
+        background_tasks.add_task(update_model_url)
     return response
 
 
 @app.post("/init_model")
-async def init_model_func(request: InitModelRequest, raw_request: Request) -> InitModelResponse:
+async def init_model_func(
+    request: InitModelRequest, raw_request: Request, background_tasks: BackgroundTasks
+) -> InitModelResponse:
     logger.info(f"Client {request.client_id} init: {request}")
     response = await ws_manager.init_client(request)
-    await update_model_url()
+    background_tasks.add_task(update_model_url)
     return response
 
 
@@ -157,25 +158,47 @@ async def serve_http(app: FastAPI, loop: asyncio.AbstractEventLoop, master_handl
     asyncio.set_event_loop(loop)
     server_task = loop.create_task(server.serve())
 
-    def signal_handler() -> None:
+    # Setup graceful shutdown handlers
+    async def shutdown_handler():
+        server.should_exit = True
+
+        if master_handler:
+            try:
+                await master_handler.stop()
+            except Exception as e:
+                logger.error(f"Error stopping master handler: {e}")
+
+        try:
+            await engine.stop()
+            await server.shutdown()
+        except Exception as e:
+            logger.error(f"Error stopping engine: {e}")
+        finally:
+            loop.stop()
+
+        logger.info("Shutdown sequence completed")
+
+    async def signal_handler() -> None:
         # prevents the uvicorn signal handler to exit early
         server_task.cancel()
+        await shutdown_handler()
 
     async def dummy_shutdown() -> None:
         pass
 
-    loop.add_signal_handler(signal.SIGINT, signal_handler)
-    loop.add_signal_handler(signal.SIGTERM, signal_handler)
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(signal_handler()))
 
     try:
         await server_task
         return dummy_shutdown()
     except asyncio.CancelledError:
         logger.info("Shutting down FastAPI HTTP server.")
-        if master_handler:
-            await master_handler.stop()
-        await engine.stop()
-        return server.shutdown()
+        await shutdown_handler()
+    except Exception as e:
+        logger.error(f"Unexpected error in server task: {e}")
+        await shutdown_handler()
+        raise
 
 
 async def run_server(args) -> None:

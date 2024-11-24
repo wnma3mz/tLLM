@@ -119,6 +119,8 @@ class AsyncEngine:
                         sequence_data.condition.notify()
 
                 # await asyncio.sleep(self.sleep_time)
+            except asyncio.CancelledError:
+                self.logger.debug("CancelledError")
             except Exception as e:
                 self.logger.error(f"Error processing prefill_queue data: {str(e)}")
                 traceback.print_exc()
@@ -194,10 +196,11 @@ class AsyncEngine:
         if self.processing_task is not None:
             self.processing_task.cancel()
             try:
-                await self.processing_task
+                await asyncio.wait_for(self.processing_task, timeout=5.0)
             except asyncio.CancelledError:
-                pass
-            self.processing_task = None
+                self.logger.debug("CancelledError")
+            finally:
+                self.processing_task = None
 
     async def abort(self, request_id: str):
         # 从 prefill_queue 和 decoding_queue 中移除 request_id

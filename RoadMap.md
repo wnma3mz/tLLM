@@ -80,5 +80,4 @@ Master 和 Client 交互方式 http
 
     - 之后 Master 会向 Client 定时发送心跳包，确保 Client 连接正常
 - 如果 Master 重启，Master 会丢失所有的 Client 信息
-    - Master 需要离线保存所有的 Client 信息，在重启后恢复
-    - 校验：Client 需要有一些状态码，比如是否已经初始化模型，是否已经连接到 Master 等
+    - Client 会有定时心跳检查，带着已有状态重新连接

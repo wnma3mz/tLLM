@@ -1,3 +1,4 @@
+import time
 from typing import Tuple
 
 from transformers import AutoConfig
@@ -36,7 +37,9 @@ class ModelManager:
         #     config.decoder_start_layer_idx = self.start_idx
         #     config.decoder_end_layer_idx = self.end_idx
         #     config.comm = SingleNodeCommunicator()
+        s1 = time.perf_counter()
         model = MY_MODEL_CLASS.from_pretrained(config, model_path)
+        print(f"Model loaded in {time.perf_counter() - s1:.2f}s")
         return model
 
 

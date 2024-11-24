@@ -1,8 +1,7 @@
 # coding: utf-8
 import asyncio
 from concurrent import futures
-from typing import *
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 import grpc
 
@@ -96,6 +95,7 @@ class MasterHandler(schemas_pb2_grpc.RPCServiceServicer):
                 await self.server.stop(grace=5)
                 await self.server.wait_for_termination()
             except Exception as e:
+                print("master handler error", str(e))
                 pass
 
     async def Forward(

@@ -23,7 +23,7 @@ class WebsocketManager:
     def get_free_layer(self) -> Tuple[int, int, int]:
         # 返回一个未被注册的start idx 和 end idx，如果所有层都被注册了，则随机返回一个
         if self.has_full_model:
-            pp_rank = random.choice(len(self.layer_info))
+            pp_rank = random.choice(0, len(self.layer_info))
             return self.layer_info[pp_rank]
         else:
             for pp_rank, (start_idx, end_idx, count) in enumerate(self.client_info):
@@ -106,14 +106,29 @@ class WebsocketManager:
     def set_connect_clients(self):
         x = find_continuous_path(self.clients, self.total_layers)
         self.connect_clients = x if x else []
-        print(self.connect_clients)
 
-        self.client_manager.update_url([x.host for x in self.connect_clients])
+        host_list = [x.host for x in self.connect_clients]
+        self.print_host_list()
+        self.client_manager.update_url(host_list)
+
+    def print_host_list(self):
+        print("route path: ", "->".join([x.host for x in self.connect_clients]))
+
+    # TODO: 并发 send/heath_check
+    async def health_check(self) -> int:
+        for i, client in enumerate(self.connect_clients):
+            if not await self.client_manager.health_check(i):
+                return i
+        return -1
 
     async def send_config(self, master_url):
         for i, client in enumerate(self.connect_clients):
-            url = master_url if i == len(self.connect_clients) - 1 else self.connect_clients[i + 1].host
-            await self.client_manager.set_config(i, {"forward_url": url, "master_url": master_url, "pp_rank": i})
+            if i == len(self.connect_clients) - 1:
+                url = master_url
+                await self.client_manager.set_config(i, {"forward_url": url, "master_url": master_url, "pp_rank": i})
+            else:
+                url = self.connect_clients[i + 1].host
+                self.client_manager.set_config(i, {"forward_url": url, "master_url": master_url, "pp_rank": i})
 
     def find_connect_clients(self, client_id) -> bool:
         for client in self.clients.values():

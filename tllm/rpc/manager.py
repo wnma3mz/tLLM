@@ -7,7 +7,7 @@ import grpc
 
 from tllm.commons.communicator import SingleNodeCommunicator
 from tllm.commons.convert import deserialize_tensor, serialize_tensor
-from tllm.models.manager import ModelManager
+from tllm.commons.manager import ModelManager
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.rpc.master_handler import PendingRequests
 from tllm.schemas import MIX_TENSOR, SeqInput
@@ -42,7 +42,10 @@ class RPCManager:
         )
         asyncio.create_task(self.rpc_forward(seq_input.uuid_list, seq_input.seq_len_list, hidden_states))
         await asyncio.sleep(0)
-        output = await asyncio.wait_for(forward_future, timeout=100.0)  # 所有节点的总处理时间不超过 100s
+        try:
+            output = await asyncio.wait_for(forward_future, timeout=100.0)  # 所有节点的总处理时间不超过 100s
+        except asyncio.CancelledError:
+            raise asyncio.CancelledError
 
         return deserialize_tensor(output), await asyncio.wait_for(status_future, timeout=100.0)
 
@@ -70,3 +73,30 @@ class ClientRPCManager:
 
     async def set_config(self, idx: int, config: Dict) -> None:
         await self.stub_list[idx].SetConfig(schemas_pb2.SetConfigRequest(**config))
+
+    async def health_check(self, idx: int) -> bool:
+        try:
+            await self.stub_list[idx].Health(schemas_pb2.Empty())
+            return True
+        except Exception as e:
+            return False
+
+
+class MasterRPCManager:
+    # 向 Master 发送 gRPC 请求
+    def __init__(self, grpc_options: List[Tuple[str, int]]):
+        self.grpc_options = grpc_options
+        self.master_stub = None
+
+    def update_url(self, master_url: str, forward_url: str, pp_idx: int):
+        master_channel = grpc.aio.insecure_channel(master_url, options=self.grpc_options)
+        forward_channel = grpc.aio.insecure_channel(forward_url, options=self.grpc_options)
+        self.master_stub = schemas_pb2_grpc.RPCServiceStub(master_channel)
+        self.forward_stub = schemas_pb2_grpc.RPCServiceStub(forward_channel)
+        self.pp_idx = pp_idx
+
+    async def rpc_func(self, uuid, seq_len, hidden_states: schemas_pb2.BFloat16Tensor, cost_time: float):
+        forward_request = {"uuid": uuid, "seq_len": seq_len, "hidden_states": hidden_states}
+        status_request = {"uuid": uuid, "seq_len": seq_len, "pp_idx": self.pp_idx, "cost_time": cost_time}
+        self.master_stub.Status(schemas_pb2.StatusRequest(**status_request))
+        self.forward_stub.Forward(schemas_pb2.ForwardRequest(**forward_request))
