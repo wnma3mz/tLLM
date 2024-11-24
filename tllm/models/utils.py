@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List, Optional, Set, Tuple
 
 from huggingface_hub import snapshot_download
+from transformers import AutoConfig
 
 from tllm.schemas import GenerateEnd
 
@@ -36,7 +37,9 @@ def get_weight_path(model_path: str) -> Tuple[set, List[str]]:
 
 def get_model_path(path_or_hf_repo: str, revision: Optional[str] = None) -> Path:
     model_path = Path(path_or_hf_repo)
+    # TODO: setting timeout
     if not model_path.exists():
+        print("Model not found locally. Downloading from Hugging Face Hub.")
         try:
             model_path = Path(
                 snapshot_download(
@@ -59,5 +62,15 @@ def get_model_path(path_or_hf_repo: str, revision: Optional[str] = None) -> Path
                 " repo id correctly.\nIf you are trying to access a private or"
                 " gated Hugging Face repo, make sure you are authenticated:\n"
                 "https://huggingface.co/docs/huggingface_hub/en/guides/cli#huggingface-cli-login"
-            ) from None
+            )
     return model_path
+
+
+def read_eos_token_ids(config: AutoConfig) -> Set[int]:
+    eos_token_ids = set()
+    if hasattr(config, "eos_token_ids"):
+        if isinstance(config.eos_token_id, list):
+            eos_token_ids |= set(config.eos_token_ids)
+        else:
+            eos_token_ids.add(config.eos_token_id)
+    return eos_token_ids

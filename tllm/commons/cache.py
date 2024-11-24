@@ -19,7 +19,9 @@ KV_CACHE_TYPE = Tuple[MIX_TENSOR, MIX_TENSOR]
 
 
 class KVCache:
-    def __init__(self, seq_len: Optional[int] = -1, num_key_value_heads: Optional[int] = -1, head_dim: Optional[int] = -1) -> None:
+    def __init__(
+        self, seq_len: Optional[int] = -1, num_key_value_heads: Optional[int] = -1, head_dim: Optional[int] = -1
+    ) -> None:
         # key_states/value_states: seq_len x num_heads x head_dim
         if seq_len == -1:
             self.key_states: Optional[MIX_TENSOR] = None

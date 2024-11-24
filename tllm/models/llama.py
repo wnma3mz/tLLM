@@ -12,7 +12,7 @@ from tllm.commons.attn import get_attention_implementation
 from tllm.commons.cache import AttentionData, CacheManager, RequestsCache
 from tllm.commons.layers import LlamaDecoderLayer
 from tllm.models.torch_helper import EmptyLayer, build_mask, read_from_safetensors
-from tllm.models.utils import get_model_path, get_weight_path
+from tllm.models.utils import get_model_path, get_weight_path, read_eos_token_ids
 from tllm.schemas import SeqInput
 
 _, attention_type = get_attention_implementation()
@@ -261,13 +261,7 @@ class TLlamaForCausalLM(nn.Module):
         cls.config = config
         cls.num_layers = config.num_hidden_layers
         cls.logger = logger
-        cls.eos_token_ids = set()
-
-        if hasattr(config, "eos_token_ids"):
-            if isinstance(config.eos_token_id, list):
-                cls.eos_token_ids |= set(config.eos_token_ids)
-            else:
-                cls.eos_token_ids.add(config.eos_token_id)
+        cls.eos_token_ids = read_eos_token_ids(config)
 
         model_path = get_model_path(model_path)
         file_set, prefix_key_list = get_weight_path(model_path)
