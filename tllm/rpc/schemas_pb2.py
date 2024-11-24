@@ -16,7 +16,7 @@ _sym_db = _symbol_database.Default()
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\x16tllm/rpc/schemas.proto\x12\x07schemas"-\n\x0e\x42\x46loat16Tensor\x12\x0c\n\x04\x64\x61ta\x18\x01 \x01(\x0c\x12\r\n\x05shape\x18\x02 \x03(\x05"_\n\x0e\x46orwardRequest\x12\x0c\n\x04uuid\x18\x01 \x03(\t\x12\x0f\n\x07seq_len\x18\x02 \x03(\x05\x12.\n\rhidden_states\x18\x03 \x01(\x0b\x32\x17.schemas.BFloat16Tensor"Q\n\rStatusRequest\x12\x0c\n\x04uuid\x18\x01 \x03(\t\x12\x0f\n\x07seq_len\x18\x02 \x03(\x05\x12\x0e\n\x06pp_idx\x18\x03 \x01(\x05\x12\x11\n\tcost_time\x18\x04 \x01(\x02"-\n\x0eStatusResponse\x12\x0b\n\x03msg\x18\x01 \x01(\t\x12\x0e\n\x06status\x18\x02 \x01(\x05".\n\x0f\x46orwardResponse\x12\x0b\n\x03msg\x18\x01 \x01(\t\x12\x0e\n\x06status\x18\x02 \x01(\x05"-\n\x0eHealthResponse\x12\x0b\n\x03msg\x18\x01 \x01(\t\x12\x0e\n\x06status\x18\x02 \x01(\x05"\x07\n\x05\x45mpty2\xb8\x01\n\nRPCService\x12\x39\n\x06Status\x12\x16.schemas.StatusRequest\x1a\x17.schemas.StatusResponse\x12<\n\x07\x46orward\x12\x17.schemas.ForwardRequest\x1a\x18.schemas.ForwardResponse\x12\x31\n\x06Health\x12\x0e.schemas.Empty\x1a\x17.schemas.HealthResponseb\x06proto3'
+    b'\n\x16tllm/rpc/schemas.proto\x12\x07schemas"-\n\x0e\x42\x46loat16Tensor\x12\x0c\n\x04\x64\x61ta\x18\x01 \x01(\x0c\x12\r\n\x05shape\x18\x02 \x03(\x05"_\n\x0e\x46orwardRequest\x12\x0c\n\x04uuid\x18\x01 \x03(\t\x12\x0f\n\x07seq_len\x18\x02 \x03(\x05\x12.\n\rhidden_states\x18\x03 \x01(\x0b\x32\x17.schemas.BFloat16Tensor"Q\n\rStatusRequest\x12\x0c\n\x04uuid\x18\x01 \x03(\t\x12\x0f\n\x07seq_len\x18\x02 \x03(\x05\x12\x0e\n\x06pp_idx\x18\x03 \x01(\x05\x12\x11\n\tcost_time\x18\x04 \x01(\x02"-\n\x0eStatusResponse\x12\x0b\n\x03msg\x18\x01 \x01(\t\x12\x0e\n\x06status\x18\x02 \x01(\x05".\n\x0f\x46orwardResponse\x12\x0b\n\x03msg\x18\x01 \x01(\t\x12\x0e\n\x06status\x18\x02 \x01(\x05"-\n\x0eHealthResponse\x12\x0b\n\x03msg\x18\x01 \x01(\t\x12\x0e\n\x06status\x18\x02 \x01(\x05"\x07\n\x05\x45mpty"L\n\x10SetConfigRequest\x12\x13\n\x0b\x66orward_url\x18\x01 \x01(\t\x12\x12\n\nmaster_url\x18\x02 \x01(\t\x12\x0f\n\x07pp_rank\x18\x03 \x01(\x05"0\n\x11SetConfigResponse\x12\x0b\n\x03msg\x18\x01 \x01(\t\x12\x0e\n\x06status\x18\x02 \x01(\x05\x32\xfc\x01\n\nRPCService\x12\x39\n\x06Status\x12\x16.schemas.StatusRequest\x1a\x17.schemas.StatusResponse\x12<\n\x07\x46orward\x12\x17.schemas.ForwardRequest\x1a\x18.schemas.ForwardResponse\x12\x31\n\x06Health\x12\x0e.schemas.Empty\x1a\x17.schemas.HealthResponse\x12\x42\n\tSetConfig\x12\x19.schemas.SetConfigRequest\x1a\x1a.schemas.SetConfigResponseb\x06proto3'
 )
 
 _globals = globals()
@@ -38,6 +38,10 @@ if not _descriptor._USE_C_DESCRIPTORS:
     _globals["_HEALTHRESPONSE"]._serialized_end = 402
     _globals["_EMPTY"]._serialized_start = 404
     _globals["_EMPTY"]._serialized_end = 411
-    _globals["_RPCSERVICE"]._serialized_start = 414
-    _globals["_RPCSERVICE"]._serialized_end = 598
+    _globals["_SETCONFIGREQUEST"]._serialized_start = 413
+    _globals["_SETCONFIGREQUEST"]._serialized_end = 489
+    _globals["_SETCONFIGRESPONSE"]._serialized_start = 491
+    _globals["_SETCONFIGRESPONSE"]._serialized_end = 539
+    _globals["_RPCSERVICE"]._serialized_start = 542
+    _globals["_RPCSERVICE"]._serialized_end = 794
 # @@protoc_insertion_point(module_scope)

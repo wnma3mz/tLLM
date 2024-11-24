@@ -7,9 +7,7 @@ import aiohttp
 
 
 async def requests_func(messages: List[Dict[str, Any]]):
-    # url = "http://192.168.1.4:8022/v1/chat/completions"
     url = "http://localhost:8022/v1/chat/completions"
-
     data = {
         "messages": messages,
         "model": "tt",

@@ -38,9 +38,23 @@ message HealthResponse {
 
 message Empty {}
 
+message SetConfigRequest {
+    string forward_url = 1;
+    string master_url = 2;
+    int32 pp_rank = 3;
+}
+
+message SetConfigResponse {
+    string msg = 1;
+    int32 status = 2;
+}
+
+
+
 
 service RPCService {
     rpc Status (StatusRequest) returns (StatusResponse);
     rpc Forward (ForwardRequest) returns (ForwardResponse);
     rpc Health (Empty) returns (HealthResponse);
+    rpc SetConfig (SetConfigRequest) returns (SetConfigResponse);
 }

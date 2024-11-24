@@ -70,3 +70,15 @@
         - [ ] Prefix-tree Cache
 - [ ] Shard Storage
 - [x] Auto Download
+
+
+Master 和 Client 交互方式 http
+- Master 先启动，已知模型名和层数
+    - Client 启动 grpc，HTTP 发送可连接到地址信息（TODO 内存/显存大小/算力等信息）到 Master
+    - Master 返回模型名，分配的起始和结束层数（同步操作，不需要状态）
+    - Client 下载模型，加载模型，向 Master 发送 InitModel 信息完成
+
+    - 之后 Master 会向 Client 定时发送心跳包，确保 Client 连接正常
+- 如果 Master 重启，Master 会丢失所有的 Client 信息
+    - Master 需要离线保存所有的 Client 信息，在重启后恢复
+    - 校验：Client 需要有一些状态码，比如是否已经初始化模型，是否已经连接到 Master 等

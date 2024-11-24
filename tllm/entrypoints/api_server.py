@@ -13,6 +13,7 @@ import uvicorn
 
 from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionResponse
 from tllm.entrypoints.server_chat import OpenAIServing
+from tllm.schemas import ClientData, InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
 from tllm.utils import init_engine, setup_logger, setup_seed
 from tllm.websocket.manager import WebsocketManager
 
@@ -44,7 +45,7 @@ async def get_index():
 
 @app.post("/v1/chat/completions")
 async def create_chat_completion(request: ChatCompletionRequest, raw_request: Request) -> ChatCompletionResponse:
-    if ws_manager.url_list is None and not is_local:
+    if not ws_manager.has_full_model and not is_local:
         raise ValueError("No available Full Node to process the request")
     try:
         generator = await openai_serving_chat.create_chat_completion(request, raw_request)
@@ -60,6 +61,8 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
 
 @app.post("/v1/completions")
 async def create_completion(request: ChatCompletionRequest, raw_request: Request) -> ChatCompletionResponse:
+    if not ws_manager.has_full_model and not is_local:
+        raise ValueError("No available Full Node to process the request")
     generator = await openai_serving_chat.create_chat_completion(request, raw_request)
     if request.stream:
         return StreamingResponse(content=generator, media_type="text/event-stream")
@@ -85,13 +88,9 @@ async def show_version():
     return JSONResponse(content=ver)
 
 
-@app.get("/unregister_layer_idx")
-async def get_unregister_layer_idx() -> Dict[str, List[int]]:
-    return JSONResponse(content={"data": ws_manager.unregister_layer_idx()})
-
-
 @app.websocket("/ws/monitor")
 async def monitor_websocket(websocket: WebSocket):
+    # 前端页面展示用
     await websocket.accept()
     ws_manager.monitor_websockets.add(websocket)
     try:
@@ -102,44 +101,42 @@ async def monitor_websocket(websocket: WebSocket):
         ws_manager.monitor_websockets.remove(websocket)
 
 
-async def update_state():
-    # 当 url_list 不为空时，表示可以处理服务
-    # - master 端更新 url
-    # - 发送给所有 pp，告知转发的 url 是什么（forward url）
-    if ws_manager.url_list is not None:
-        openai_serving_chat.engine.generator.manager.update_url(ws_manager.url_list[0], len(ws_manager.url_list))
-        for i, client_id in enumerate(ws_manager.client_id_list):
-            if i == len(ws_manager.client_id_list) - 1:
-                url = ws_manager.master_url
-            else:
-                url = ws_manager.url_list[i + 1]
-            message = {"type": "forward_url", "forward_url": url, "pp_rank": i, "master_url": ws_manager.master_url}
-            await ws_manager.ws_clients[client_id].send_json(message)
+def update_master_url(clients: List[ClientData]):
+    # 客户端断开连接后，需要重新更新 url
+    if clients:
+        logger.info(f"Update url: {clients[0].host}; PP Size: {len(clients)}")
+        openai_serving_chat.engine.update_url(clients[0].host, len(clients))
+
+
+async def update_model_url():
+    # 如果有操作需要更新各个客户端的信息，需要在这里更新
+    if ws_manager.has_full_model:
+        return
+    logger.info("Update model url start")
+    ws_manager.set_connect_clients()
+    update_master_url(ws_manager.connect_clients)
+    await ws_manager.send_config(args.master_url)
+    logger.info("Update model url end")
+
+
+@app.post("/register_client")
+async def register_client_func(request: RegisterClientRequest, raw_request: Request) -> RegisterClientResponse:
+    model_path: str = args.model_path
+    response = await ws_manager.register_client(request, model_path)
+    if request.pp_rank == -1:
+        logger.info(f"Client {request.client_id} register")
     else:
-        return None
+        logger.info(f"Client {request.client_id} has been init: {request}")
+        await update_model_url()
+    return response
 
 
-@app.websocket("/ws/client/{client_id}")
-async def client_websocket(websocket: WebSocket, client_id: str):
-    await websocket.accept()
-
-    try:
-        while True:
-            data = await websocket.receive_json()
-            if data["type"] == "register_layers":
-                ws_manager.register_client(client_id, data, websocket)
-
-                await ws_manager.broadcast_state()
-                # 根据 layer idx 自动算 pp idx
-                ws_manager.update_pp_url_list()
-                await update_state()
-
-    except WebSocketDisconnect:
-        # 如果断开连接，删除client
-        ws_manager.unregister_client(client_id)
-        ws_manager.update_pp_url_list()
-        await update_state()
-        await ws_manager.broadcast_state()
+@app.post("/init_model")
+async def init_model_func(request: InitModelRequest, raw_request: Request) -> InitModelResponse:
+    logger.info(f"Client {request.client_id} init: {request}")
+    response = await ws_manager.init_client(request)
+    await update_model_url()
+    return response
 
 
 def parse_args():
@@ -197,9 +194,8 @@ async def run_server(args) -> None:
 
     logger.info(f"init cost time {time.time() - s1}")
     openai_serving_chat = OpenAIServing(engine, tok, args)
-    model_name = openai_serving_chat.model_name
     total_layers = engine.generator.model.num_layers
-    ws_manager = WebsocketManager(total_layers, model_name, args.master_url)
+    ws_manager = WebsocketManager(total_layers, args.model_path)
 
     loop = await engine.start()
     uvicorn_kwargs = {"host": "0.0.0.0", "port": args.port}

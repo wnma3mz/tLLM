@@ -86,6 +86,9 @@ class LLMGenerator:
         self.processor = getattr(model, "processor", None)
         self.mm_config = getattr(model, "mm_config", None)
 
+    def update_url(self, url: str, pp_size: int):
+        self.manager.update_url(url, pp_size)
+
     async def forward(self, inputs_embeds: MIX_TENSOR, seq_input: SeqInput) -> ForwardResult:
         s1 = time.perf_counter()
         hidden_states, calc_cost_time_list = await self.manager.forward(inputs_embeds, seq_input)

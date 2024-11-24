@@ -1,26 +1,43 @@
 import argparse
 import asyncio
 from concurrent import futures
-import json
 import logging
 import os
 import time
-from typing import *
+from typing import List, Tuple
+import uuid
 
+import aiohttp
 import grpc
 import torch
 
 from tllm.commons.communicator import Communicator, SingleNodeCommunicator
 from tllm.commons.convert import deserialize_tensor, serialize_tensor
+from tllm.models.manager import ModelManager
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
-from tllm.schemas import SeqInput
+from tllm.schemas import InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse, SeqInput
 from tllm.utils import setup_logger
-from tllm.websocket.client import HandlerArgs, ModelManager, WebSocketClient
+
+
+async def register_client(url: str, request_data: RegisterClientRequest):
+    url = f"{url}/register_client"
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, json=request_data.dict(), timeout=3) as response:
+            return RegisterClientResponse(**await response.json())
+
+
+async def init_model(url: str, request_data: InitModelRequest):
+    url = f"{url}/init_model"
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, json=request_data.dict(), timeout=3) as response:
+            return InitModelResponse(**await response.json())
 
 
 class RPCManager:
+    # 向 Master 发送 gRPC 请求
     def __init__(self, grpc_options: List[Tuple[str, int]]):
         self.grpc_options = grpc_options
+        self.master_stub = None
 
     def update_url(self, master_url: str, forward_url: str, pp_idx: int):
         master_channel = grpc.aio.insecure_channel(master_url, options=self.grpc_options)
@@ -37,16 +54,18 @@ class RPCManager:
 
 
 class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
-    def __init__(self, comm: Communicator, model, ws_client: WebSocketClient, logger, ip_addr: str = "localhost"):
+    def __init__(self, comm: Communicator, logger, master_url: str, ip_addr: str = "localhost", port: int = 50051):
         self.comm = comm
-        self.model = model
         self.rank = comm.rank
-        self.init_model_flag = False
         self.ip_addr = ip_addr
+        self.port = port
         self.prefix_log_str = f"IP: [{self.ip_addr}]"
+        self.client_id = f"{str(uuid.uuid4())[:8]}"
+
         uuid_shape_list = [None, None]
         self.server = None
         self.logger = logger
+        self.master_url = master_url
 
         self.grpc_options = [
             ("grpc.max_metadata_size", 32 * 1024 * 1024),
@@ -54,20 +73,11 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
             ("grpc.max_receive_message_length", 128 * 1024 * 1024),
         ]
 
+        self.init_model_info = None
+        self.manager = RPCManager(self.grpc_options)
+
         if self.rank == 0:
-            self.manager = RPCManager(self.grpc_options)
-
-            master_url, forward_url, pp_rank = ws_client.get_config()
-            if master_url is not None:
-                self.logger.info(f"Init [Master]: {master_url}; [Forward]: {forward_url} [PP Rank]: {pp_rank}")
-                self.manager.update_url(master_url, forward_url, pp_rank)
-
-            async def on_config_update(master_url: str, forward_url: str, pp_rank: int):
-                self.logger.info(f"Update [Master]: {master_url}; [Forward]: {forward_url} [PP Rank]: {pp_rank}")
-                self.manager.update_url(master_url, forward_url, pp_rank)
-
-            ws_client.add_update_callback(on_config_update)
-
+            pass
         else:
             while self.comm.world_size > 1:
                 self.comm.broadcast_object(uuid_shape_list)
@@ -77,21 +87,75 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
 
                 _ = self.model.forward(hidden_states, seq_input=seq_input)
 
+    async def load_model(self, model: str, start_idx: int, end_idx: int):
+        model_manager = ModelManager(start_idx, end_idx)
+        self.model = model_manager.load_model(self.comm, model)
+        self.logger.info(f"Model loaded")
+
+    async def connect(self):
+        """定期发送连接请求的协程"""
+        while self.is_running:
+            try:
+                if not self.init_model_info:
+                    register_request = RegisterClientRequest(
+                        client_id=self.client_id, host=f"{self.ip_addr}:{self.port}"
+                    )
+                    response: RegisterClientResponse = await register_client(self.master_url, register_request)
+
+                    await self.load_model(response.model, response.start_idx, response.end_idx)
+
+                    self.init_model_info = {
+                        "pp_rank": response.pp_rank,
+                        "start_idx": response.start_idx,
+                        "end_idx": response.end_idx,
+                    }
+                    init_request = InitModelRequest(client_id=self.client_id, **self.init_model_info)
+                    response = await init_model(self.master_url, init_request)
+                    self.logger.info(f"Connection successful: {response}")
+                else:
+                    register_request = RegisterClientRequest(
+                        client_id=self.client_id,
+                        host=f"{self.ip_addr}:{self.port}",
+                        pp_rank=self.init_model_info["pp_rank"],
+                        start_idx=self.init_model_info["start_idx"],
+                        end_idx=self.init_model_info["end_idx"],
+                    )
+                    response: RegisterClientResponse = await register_client(self.master_url, register_request)
+
+                self.is_running = False
+            except grpc.RpcError as e:
+                self.logger.error(f"Connection failed: {e}")
+            except Exception as e:
+                self.logger.error(f"Unexpected error: {e}")
+
+            # 等待一段时间后再次尝试连接
+            await asyncio.sleep(10)
+
     async def start(self):
         self.server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=10), options=self.grpc_options)
 
         schemas_pb2_grpc.add_RPCServiceServicer_to_server(self, self.server)
-        self.server.add_insecure_port(f"[::]:{args.port}")
-        self.logger.info(f"Starting gRPC server on port {args.port}")
+        self.server.add_insecure_port(f"[::]:{self.port}")
+        self.logger.info(f"Starting gRPC server on port {self.port}")
         await self.server.start()
+
+        self.is_running = True
+        connection_task = asyncio.create_task(self.connect())
 
         try:
             # 保持服务器运行
             await self.server.wait_for_termination()
         except KeyboardInterrupt:
+            self.is_running = False
+            connection_task.cancel()
+            try:
+                await connection_task
+            except asyncio.CancelledError:
+                pass
             await self.stop()
 
     async def stop(self):
+        self.is_running = False
         if self.server:
             try:
                 await self.server.stop(grace=5)
@@ -119,6 +183,12 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
 
         await self.manager.rpc_func(request.uuid, request.seq_len, output, cost_time)
 
+    async def SetConfig(
+        self, request: schemas_pb2.SetConfigRequest, context: grpc.ServicerContext
+    ) -> schemas_pb2.SetConfigResponse:
+        self.manager.update_url(request.master_url, request.forward_url, request.pp_rank)
+        return schemas_pb2.SetConfigResponse(msg="SetConfig Completed", status=200)
+
     async def Forward(
         self, request: schemas_pb2.ForwardRequest, context: grpc.ServicerContext
     ) -> schemas_pb2.ForwardResponse:
@@ -128,6 +198,10 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
             uuid: str
             seq_len: int
         """
+        if not hasattr(self, "model"):
+            return schemas_pb2.ForwardResponse(msg="Model not initialized", status=400)
+        if hasattr(self.manager, "master_stub") is None:
+            return schemas_pb2.ForwardResponse(msg="Manager not initialized", status=400)
         asyncio.create_task(self.forward_func(request))
 
         await asyncio.sleep(0)
@@ -141,12 +215,9 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=50051)
-    parser.add_argument("--master_url", type=str, default="ws://localhost:8000")
-    parser.add_argument("--start_layer_idx", type=int, default=0, help="start layer idx")
-    parser.add_argument("--end_layer_idx", type=int, default=11, help="end layer idx")
-    parser.add_argument("--model_path", type=str, required=True, help="model path")
+    parser.add_argument("--master_url", type=str, default="http://localhost:8000", help="master 的地址")
+    parser.add_argument("--ip_addr", type=str, default="localhost", help="提供给 master 连接的 ip, 如 localhost")
     parser.add_argument("--is_debug", action="store_true")
-    parser.add_argument("--ip_addr", type=str, default="localhost", help="提供给 server 连接的 ip")
     return parser.parse_args()
 
 
@@ -154,23 +225,10 @@ async def run(args):
     comm = SingleNodeCommunicator()
     if "WORLD_SIZE" in os.environ and int(os.environ["WORLD_SIZE"]) > 1:
         comm = Communicator(is_torchrun=True)
-    logger_name = f"handler_pp{args.start_layer_idx}-{args.end_layer_idx}"
+    logger_name = "handler"
     logger = setup_logger(logger_name, logging.DEBUG if args.is_debug else logging.INFO)
 
-    handler_args = HandlerArgs(
-        start_idx=args.start_layer_idx,
-        end_idx=args.end_layer_idx,
-        ip_addr=args.ip_addr,
-        port=args.port,
-        master_url=args.master_url,
-    )
-
-    ws_client = WebSocketClient(logger=logger, args=handler_args)
-    ws_client.start()
-    model_manager = ModelManager(handler_args.start_idx, handler_args.end_idx)
-    model = model_manager.load_model(comm, args.model_path)
-
-    rpc_servicer = RPCHandler(comm, model, ws_client, logger, args.ip_addr)
+    rpc_servicer = RPCHandler(comm, logger, args.master_url, args.ip_addr, args.port)
     if comm.rank == 0:
         await rpc_servicer.start()
 

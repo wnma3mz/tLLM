@@ -1,7 +1,6 @@
 import asyncio
 from dataclasses import dataclass, field
-from typing import *
-from typing import List, Optional, Union
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
 from PIL import Image
 import numpy as np
@@ -25,16 +24,6 @@ class MultiModalContent(BaseModel):
 
 
 MESSAGES = List[Dict[str, Union[str, List[MultiModalContent]]]]
-
-
-class NodeConfig(BaseModel):
-    start_layer_idx: int
-    end_layer_idx: int
-    checkpoint_path: str
-    prev_rank: int
-    next_start_rank: int
-    next_end_rank: int
-    rank: int = None
 
 
 class SamplingParams:
@@ -194,3 +183,57 @@ class SequenceRequestData:
             finished=True,
             prompt_logprobs=None,
         )
+
+
+class RegisterClientResponse(BaseModel):
+    pp_rank: int
+    start_idx: int
+    end_idx: int
+    msg: Optional[str] = None
+    model: Optional[str] = None
+
+    def __repr__(self):
+        return f"pp_rank={self.pp_rank} layer={self.start_idx}-{self.end_idx} model={self.model}"
+
+    def __str__(self):
+        return self.__repr__()
+
+
+class RegisterClientRequest(BaseModel):
+    client_id: str
+    host: str
+    pp_rank: Optional[int] = -1
+    start_idx: Optional[int] = -1
+    end_idx: Optional[int] = -1
+
+    def __repr__(self):
+        return f"ip={self.host} pp_rank={self.pp_rank} layer={self.start_idx}-{self.end_idx}"
+
+    def __str__(self):
+        return self.__repr__()
+
+
+class InitModelRequest(BaseModel):
+    client_id: str
+    pp_rank: int
+    start_idx: int
+    end_idx: int
+
+    def __repr__(self):
+        return f"pp_rank={self.pp_rank} layer={self.start_idx}-{self.end_idx}"
+
+    def __str__(self):
+        return self.__repr__()
+
+
+class InitModelResponse(BaseModel):
+    msg: str
+    status: int
+
+
+class ClientData(BaseModel):
+    client_id: str
+    host: str
+    start_idx: Optional[int] = None
+    end_idx: Optional[int] = None
+    pp_rank: Optional[int] = None

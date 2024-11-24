@@ -79,3 +79,23 @@ class HealthResponse(_message.Message):
 class Empty(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
+
+class SetConfigRequest(_message.Message):
+    __slots__ = ("forward_url", "master_url", "pp_rank")
+    FORWARD_URL_FIELD_NUMBER: _ClassVar[int]
+    MASTER_URL_FIELD_NUMBER: _ClassVar[int]
+    PP_RANK_FIELD_NUMBER: _ClassVar[int]
+    forward_url: str
+    master_url: str
+    pp_rank: int
+    def __init__(
+        self, forward_url: _Optional[str] = ..., master_url: _Optional[str] = ..., pp_rank: _Optional[int] = ...
+    ) -> None: ...
+
+class SetConfigResponse(_message.Message):
+    __slots__ = ("msg", "status")
+    MSG_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    msg: str
+    status: int
+    def __init__(self, msg: _Optional[str] = ..., status: _Optional[int] = ...) -> None: ...

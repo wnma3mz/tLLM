@@ -4,14 +4,12 @@ import socket
 from typing import *
 
 import torch
-from transformers import AutoConfig
 
 from tllm.engine import AsyncEngine
 from tllm.generate import LLMGenerator, TokenizerUtils
-from tllm.models.register import HAS_MLX, MODEL_REGISTER
+from tllm.models.manager import load_master_model
 from tllm.rpc.manager import LocalRPCManager, RPCManager
 from tllm.rpc.master_handler import MasterHandler, PendingRequests
-from tllm.schemas import NodeConfig
 
 
 def setup_seed(seed):
@@ -28,17 +26,6 @@ def parse_range_string(s):
         return result
     except:
         raise argparse.ArgumentTypeError("参数必须是形如 '1-2,3-4' 的范围字符串")
-
-
-# 用于 RPC 请求
-def call_remote_init(model_rref, node_config: NodeConfig) -> torch.futures.Future:
-    return model_rref.rpc_async().init_model(node_config)
-
-
-def call_remote_forward(
-    model_rref, hidden_states: Optional[torch.Tensor], shape_hidden_states: Tuple[int], uuid: str
-) -> torch.futures.Future:
-    return model_rref.rpc_async().forward(hidden_states, shape_hidden_states, uuid)
 
 
 def get_ip_address() -> str:
@@ -77,29 +64,9 @@ def setup_logger(name, level=logging.INFO):
 async def init_engine(
     model_path: str, is_local: str, logger, master_handler_port: int
 ) -> Tuple[AsyncEngine, TokenizerUtils, MasterHandler]:
-    if model_path.endswith(".gguf"):
-        raise ValueError("GGUF model not supported")
-        arch = "MLXLlamaForCausalLM"
-        from tllm.models.gguf_utils import load_gguf_weight
-
-        state_dict, config, _ = load_gguf_weight(model_path)
-        tok_path = ...
-        tok = TokenizerUtils(tok_path)
-    else:
-        config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
-        arch = config.architectures[0]
-        if HAS_MLX:
-            arch = "MLX" + arch
-        if arch not in MODEL_REGISTER:
-            raise ValueError(f"Model {arch} not supported")
-        tok = TokenizerUtils(model_path)
-        state_dict = None
-
-    MY_CausalLM_CLASS, _ = MODEL_REGISTER[arch]
-
-    model = MY_CausalLM_CLASS.from_pretrained(logger, config, model_path, state_dict)
+    model, tok, num_layers = load_master_model(model_path, logger)
     if is_local:
-        generator = LLMGenerator(LocalRPCManager(logger, model_path, config.num_hidden_layers), logger, model, tok)
+        generator = LLMGenerator(LocalRPCManager(logger, model_path, num_layers), logger, model, tok)
         master_handler = None
     else:
         pending_requests = PendingRequests()

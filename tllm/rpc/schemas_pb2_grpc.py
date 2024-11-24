@@ -59,6 +59,12 @@ class RPCServiceStub(object):
             response_deserializer=tllm_dot_rpc_dot_schemas__pb2.HealthResponse.FromString,
             _registered_method=True,
         )
+        self.SetConfig = channel.unary_unary(
+            "/schemas.RPCService/SetConfig",
+            request_serializer=tllm_dot_rpc_dot_schemas__pb2.SetConfigRequest.SerializeToString,
+            response_deserializer=tllm_dot_rpc_dot_schemas__pb2.SetConfigResponse.FromString,
+            _registered_method=True,
+        )
 
 
 class RPCServiceServicer(object):
@@ -82,6 +88,12 @@ class RPCServiceServicer(object):
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
+    def SetConfig(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
 
 def add_RPCServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -99,6 +111,11 @@ def add_RPCServiceServicer_to_server(servicer, server):
             servicer.Health,
             request_deserializer=tllm_dot_rpc_dot_schemas__pb2.Empty.FromString,
             response_serializer=tllm_dot_rpc_dot_schemas__pb2.HealthResponse.SerializeToString,
+        ),
+        "SetConfig": grpc.unary_unary_rpc_method_handler(
+            servicer.SetConfig,
+            request_deserializer=tllm_dot_rpc_dot_schemas__pb2.SetConfigRequest.FromString,
+            response_serializer=tllm_dot_rpc_dot_schemas__pb2.SetConfigResponse.SerializeToString,
         ),
     }
     generic_handler = grpc.method_handlers_generic_handler("schemas.RPCService", rpc_method_handlers)
@@ -189,6 +206,36 @@ class RPCService(object):
             "/schemas.RPCService/Health",
             tllm_dot_rpc_dot_schemas__pb2.Empty.SerializeToString,
             tllm_dot_rpc_dot_schemas__pb2.HealthResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def SetConfig(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/schemas.RPCService/SetConfig",
+            tllm_dot_rpc_dot_schemas__pb2.SetConfigRequest.SerializeToString,
+            tllm_dot_rpc_dot_schemas__pb2.SetConfigResponse.FromString,
             options,
             channel_credentials,
             insecure,

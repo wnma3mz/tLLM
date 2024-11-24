@@ -106,20 +106,32 @@
             const layerGrid = document.getElementById('layerGrid');
             layerGrid.innerHTML = '';
 
-            // 创建所有层的卡片
-            for (let i = 0; i < data.total_layers; i++) {
-                const count = data.layer_statistics[i] || 0;
-                
+            // 创建所有 Client 的卡片
+            for (const [startIdx, endIdx, clientNumber] of data.client_info) {
                 const card = document.createElement('div');
                 card.className = 'layer-card';
                 card.innerHTML = `
-                    <h2>Layer ${i}</h2>
-                    <div class="layer-count">${count}</div>
+                    <h2>Layer[${startIdx}-${endIdx}]</h2>
+                    <div class="layer-count">${clientNumber}</div>
                     <p></p>
                 `;
                 
                 layerGrid.appendChild(card);
             }
+            // 创建所有层的卡片            
+            // for (let i = 0; i < data.total_layers; i++) {
+            //     const count = data.layer_statistics[i] || 0;
+                
+            //     const card = document.createElement('div');
+            //     card.className = 'layer-card';
+            //     card.innerHTML = `
+            //         <h2>Layer ${i}</h2>
+            //         <div class="layer-count">${count}</div>
+            //         <p></p>
+            //     `;
+                
+            //     layerGrid.appendChild(card);
+            // }
         }
 
         // 启动WebSocket连接
