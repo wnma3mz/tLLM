@@ -25,6 +25,9 @@ def process_response_chunk(chunk: bytes) -> Optional[Dict]:
 
 
 class MessageProcessor:
+    def __init__(self, model: str):
+        self.model = model
+
     def _format_chat_history(self, img_path, history: List[List[str]], system_prompt: str) -> List[Dict[str, str]]:
         """将聊天历史转换为OpenAI格式"""
         formatted_history = []
@@ -59,7 +62,7 @@ class MessageProcessor:
     ) -> Dict[str, Any]:
         return {
             "messages": self._format_chat_history(img_path, history, system_prompt),
-            "model": "test",
+            "model": self.model,
             "stream": True,
             "temperature": temperature,
             "top_p": top_p,
@@ -72,7 +75,7 @@ class ChatInterface:
     def __init__(self):
         self.should_stop = False
         self.config = GenerationConfig()
-        self.message_processor = MessageProcessor()
+        self.message_processor = MessageProcessor(model="test")
         self.metric_text = "Tokens Generated: {token_nums}\nSpeed: {speed:.2f} tokens/second"
 
     def _create_chat_column(self) -> Tuple[gr.Chatbot, gr.Textbox, gr.Button, gr.Button, gr.Button]:

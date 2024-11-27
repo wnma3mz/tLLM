@@ -41,9 +41,9 @@ def test_stream(response):
 
 
 if __name__ == "__main__":
-    message_processor = MessageProcessor()
+    message_processor = MessageProcessor(model="test")
     message = [
-        {"role": "user", "content": "Hello, how are you?"},
+        ["Hello, how are you?", None],
     ]
     url = "http://localhost:8022/v1/chat/completions"
 
