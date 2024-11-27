@@ -140,8 +140,8 @@ class MergedLlamaSdpaAttention(nn.Module):
 
         max_seq_len = 1024
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        # self._k_cache = torch.zeros(size=(max_seq_len, self.num_key_value_heads, self.head_dim), dtype=self.o_proj.weight.dtype, device=self.device)
-        # self._v_cache = torch.zeros(size=(max_seq_len, self.num_key_value_heads, self.head_dim), dtype=self.o_proj.weight.dtype, device=self.device)
+        # self._k_cache = torch.zeros(size=(max_seq_len, self.num_key_value_heads, self.head_dim), dtype=torch.bfloat16, device=self.device)
+        # self._v_cache = torch.zeros(size=(max_seq_len, self.num_key_value_heads, self.head_dim), dtype=torch.bfloat16, device=self.device)
         self._k_cache, self._v_cache = None, None
 
     def forward(

@@ -48,7 +48,7 @@ class RequestsCache:
         self.cache_dict: Dict[str : Dict[str, Union[List[KVCache], int]]] = {}
         self.num_layers = num_layers
         self.max_seq_len, self.num_key_value_heads, self.head_dim = max_seq_len, num_key_value_heads, head_dim
-        if max_seq_len == -1:
+        if self.max_seq_len == -1:
             # not cat attention to save memory
             self.update = self.update_cat
         else:
@@ -164,19 +164,18 @@ class RequestsCache:
 
             # 最后拼接为整体
             total_end = total_start + kv_cache.kv_len
-            if empty_k_cache:
-                empty_k_cache[total_start:total_end] = kv_cache.key_states[: kv_cache.kv_len]
-                empty_v_cache[total_start:total_end] = kv_cache.value_states[: kv_cache.kv_len]
-            else:
+            if empty_k_cache is None:
                 k_list.append(kv_cache.key_states[: kv_cache.kv_len])
                 v_list.append(kv_cache.value_states[: kv_cache.kv_len])
+            else:
+                empty_k_cache[total_start:total_end] = kv_cache.key_states[: kv_cache.kv_len]
+                empty_v_cache[total_start:total_end] = kv_cache.value_states[: kv_cache.kv_len]
 
             total_start = total_end
-        if empty_k_cache:
-            return empty_k_cache[:total_end], empty_v_cache[:total_end]
-        else:
+        if empty_k_cache is None:
             return cat_func(k_list), cat_func(v_list)
-
+        else:
+            return empty_k_cache[:total_end], empty_v_cache[:total_end]
 
 class AttentionData:  #
     def __init__(
