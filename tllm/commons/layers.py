@@ -138,6 +138,12 @@ class MergedLlamaSdpaAttention(nn.Module):
         )
         self.o_proj = RowParallelLayer(self.num_heads * self.head_dim, self.hidden_size, self.world_size, self.rank)
 
+        max_seq_len = 1024
+        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        # self._k_cache = torch.zeros(size=(max_seq_len, self.num_key_value_heads, self.head_dim), dtype=self.o_proj.weight.dtype, device=self.device)
+        # self._v_cache = torch.zeros(size=(max_seq_len, self.num_key_value_heads, self.head_dim), dtype=self.o_proj.weight.dtype, device=self.device)
+        self._k_cache, self._v_cache = None, None
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -159,7 +165,12 @@ class MergedLlamaSdpaAttention(nn.Module):
         )
         request_cache: RequestsCache = attention_data.request_cache
         key_states, value_states = request_cache.update(
-            key_states, value_states, attention_data.uuid_list, self.layer_idx - self.config.offset
+            key_states,
+            value_states,
+            attention_data.uuid_list,
+            self.layer_idx - self.config.offset,
+            self._k_cache,
+            self._v_cache,
         )
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)

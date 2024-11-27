@@ -11,8 +11,10 @@ if HAS_MLX:
     import mlx.core as mx
 
     cat_func = lambda tensors: mx.concat(tensors, axis=0)
+    zeros_func = lambda x0, x1, x2: mx.zeros(shape=(x0, x1, x2), dtype=mx.bfloat16)
 else:
     cat_func = lambda tensors: torch.cat(tensors, dim=0)
+    zeros_func = lambda x0, x1, x2: torch.zeros(size=(x0, x1, x2), dtype=torch.bfloat16)
 
 
 KV_CACHE_TYPE = Tuple[MIX_TENSOR, MIX_TENSOR]
@@ -20,31 +22,64 @@ KV_CACHE_TYPE = Tuple[MIX_TENSOR, MIX_TENSOR]
 
 class KVCache:
     def __init__(
-        self, seq_len: Optional[int] = -1, num_key_value_heads: Optional[int] = -1, head_dim: Optional[int] = -1
+        self, max_seq_len: Optional[int] = -1, num_key_value_heads: Optional[int] = -1, head_dim: Optional[int] = -1
     ) -> None:
         # key_states/value_states: seq_len x num_heads x head_dim
-        if seq_len == -1:
+        if max_seq_len == -1:
             self.key_states: Optional[MIX_TENSOR] = None
             self.value_states: Optional[MIX_TENSOR] = None
         else:
-            self.key_states = torch.empty(seq_len, num_key_value_heads, head_dim)
-            self.value_states = torch.empty(seq_len, num_key_value_heads, head_dim)
+            self.key_states = zeros_func(max_seq_len, num_key_value_heads, head_dim)
+            self.value_states = zeros_func(max_seq_len, num_key_value_heads, head_dim)
+        self._len = 0
 
-    def __len__(self) -> int:
-        return 0 if self.key_states is None else self.key_states.shape[0]
+    def set_kv_len(self, len_: int):
+        self._len = len_
+
+    @property
+    def kv_len(self):
+        return self._len
 
 
 class RequestsCache:
-    def __init__(self, num_layers: int) -> None:
+    def __init__(
+        self, num_layers: int, max_seq_len: int = -1, num_key_value_heads: int = -1, head_dim: int = -1
+    ) -> None:
         self.cache_dict: Dict[str : Dict[str, Union[List[KVCache], int]]] = {}
         self.num_layers = num_layers
+        self.max_seq_len, self.num_key_value_heads, self.head_dim = max_seq_len, num_key_value_heads, head_dim
+        if max_seq_len == -1:
+            # not cat attention to save memory
+            self.update = self.update_cat
+        else:
+            # cat attention to save time
+            self.update = self.update_no_cat
 
     def add(self, uuid: str, seq_len: int, layer_cache_list: Optional[List[KVCache]] = None):
         # 保存每个 uuid 请求所有层的 cache
         self.cache_dict[uuid] = {
-            "cache": [KVCache() for _ in range(self.num_layers)] if layer_cache_list is None else layer_cache_list,
+            "cache": [
+                KVCache(self.max_seq_len, self.num_key_value_heads, self.head_dim) for _ in range(self.num_layers)
+            ]
+            if layer_cache_list is None
+            else layer_cache_list,
             "seq_len": seq_len,
         }
+
+    def build(self, seq_input, cache_manager):
+        q_len_list, k_len_list = [], []
+
+        for uuid, q_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
+            if uuid in cache_manager.cache_dict:
+                layer_cache_list, cache_seq_len = cache_manager.get(uuid)
+                k_len_list.append(cache_seq_len + q_len)
+            else:
+                layer_cache_list = None
+                k_len_list.append(q_len)
+            q_len_list.append(q_len)
+
+            self.add(uuid, q_len, layer_cache_list)
+        return q_len_list, k_len_list
 
     def get_kv_cache(self, uuid: str) -> List[KVCache]:
         return self.cache_dict[uuid]["cache"]
@@ -58,16 +93,22 @@ class RequestsCache:
 
     def get_cache_seq_len(self, uuid: str, layer_idx: Optional[int] = 0) -> int:
         # 获取每个 uuid 请求的 kv cache 的 seq_len
-        return len(self.get_kv_cache(uuid)[layer_idx])
+        x = self.get_kv_cache(uuid)[layer_idx].kv_len
+        return x
 
     def get_offset_list(self, uuid_list: List[str], layer_idx: int) -> List[int]:
         # 获取每个 uuid 请求的 offset，用于 mlx framework 旋转位置编码
         return [self.get_cache_seq_len(uuid, layer_idx) for uuid in uuid_list]
 
-    def update(
-        self, key_states: MIX_TENSOR, value_states: MIX_TENSOR, uuid_list: List[str], layer_idx: int
-    ) -> KV_CACHE_TYPE:
-        # TODO Need Optimization
+    def update_cat(
+        self,
+        key_states: MIX_TENSOR,
+        value_states: MIX_TENSOR,
+        uuid_list: List[str],
+        layer_idx: int,
+        empty_k_cache: Optional[MIX_TENSOR] = None,
+        empty_v_cache: Optional[MIX_TENSOR] = None,
+    ):
         key_lst, value_lst = [], []
         start = 0
         for uuid in uuid_list:
@@ -80,36 +121,64 @@ class RequestsCache:
             else:
                 kv_cache.key_states = cat_func([kv_cache.key_states, cur_key_states])
                 kv_cache.value_states = cat_func([kv_cache.value_states, cur_value_states])
+
+            kv_cache.set_kv_len(kv_cache.key_states.shape[0])
             key_lst.append(kv_cache.key_states)
             value_lst.append(kv_cache.value_states)
             start = end
         return cat_func(key_lst), cat_func(value_lst)
 
-        # start = 0
-        # max_seq_len = 100
+    def update_no_cat(
+        self,
+        key_states: MIX_TENSOR,
+        value_states: MIX_TENSOR,
+        uuid_list: List[str],
+        layer_idx: int,
+        empty_k_cache: Optional[MIX_TENSOR] = None,
+        empty_v_cache: Optional[MIX_TENSOR] = None,
+    ) -> KV_CACHE_TYPE:
+        start = 0
+        total_start = 0
 
-        # total_k = torch.empty(seq_len, num_heads, head_dim, dtype=key_states.dtype, device=key_states.device)
-        # total_v = torch.empty(seq_len, num_heads, head_dim, dtype=key_states.dtype, device=key_states.device)
-        # total_start = 0
-        # for uuid in uuid_list:
-        #     kv_cache: KVCache = self.get_layer_idx_kv_cache(uuid, layer_idx)
-        #     interval = self.get_seq_len(uuid)
-        #     end = start + interval
-        #     req_start, req_end = kv_cache.act_len+start, kv_cache.act_len + end
+        k_list, v_list = [], []
+        for uuid in uuid_list:
+            kv_cache: KVCache = self.get_layer_idx_kv_cache(uuid, layer_idx)
+            end = start + self.get_seq_len(uuid)  # 获取每个请求对应的区间
+            cur_key_states, cur_value_states = key_states[start:end], value_states[start:end]
 
-        #     cur_key_states, cur_value_states = key_states[start:end], value_states[start:end]
-        #     kv_cache.key_states[req_start:req_end], kv_cache.value_states[req_start:req_end] = cur_key_states, cur_value_states
-        #     total_k[total_start:total_end] = kv_cache.key_states[:req_end]
-        #     total_v[total_start:total_end] = kv_cache.value_states[:req_end]
+            if kv_cache.kv_len == 0:
+                kv_cache.key_states[: end - start], kv_cache.value_states[: end - start] = (
+                    cur_key_states,
+                    cur_value_states,
+                )
+                kv_cache.set_kv_len(end - start)  # 更新 kv cache 的有效长度
+            else:
+                len_ = kv_cache.kv_len
+                (
+                    kv_cache.key_states[len_ : len_ + 1],
+                    kv_cache.value_states[len_ : len_ + 1],
+                ) = (cur_key_states, cur_value_states)
+                kv_cache.set_kv_len(len_ + 1)  # 更新 kv cache 的有效长度
 
-        #     kv_cache.act_len = req_end
-        #     total_end = total_start + kv_cache.act_len
-        #     total_start += kv_cache.act_len
-        #     start = end
-        # return total_k[:total_end], kv_cache.value_states[:total_end]
+            start = end  # 更新下一个请求的起始位置
+
+            # 最后拼接为整体
+            total_end = total_start + kv_cache.kv_len
+            if empty_k_cache:
+                empty_k_cache[total_start:total_end] = kv_cache.key_states[: kv_cache.kv_len]
+                empty_v_cache[total_start:total_end] = kv_cache.value_states[: kv_cache.kv_len]
+            else:
+                k_list.append(kv_cache.key_states[: kv_cache.kv_len])
+                v_list.append(kv_cache.value_states[: kv_cache.kv_len])
+
+            total_start = total_end
+        if empty_k_cache:
+            return empty_k_cache[:total_end], empty_v_cache[:total_end]
+        else:
+            return cat_func(k_list), cat_func(v_list)
 
 
-class AttentionData:
+class AttentionData:  #
     def __init__(
         self,
         uuid_list: List[str],

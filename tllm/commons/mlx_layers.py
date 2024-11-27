@@ -258,6 +258,11 @@ class MergedAttention(nn.Module):
         self.layer_idx = layer_idx
         self.offset = offset
 
+        max_seq_len = 1024
+        # self._k_cache = mx.zeros(shape=(max_seq_len, args.num_key_value_heads, self.head_dim), dtype=self.o_proj.weight.dtype)
+        # self._v_cache = mx.zeros(shape=(max_seq_len, args.num_key_value_heads, self.head_dim), dtype=self.o_proj.weight.dtype)
+        self._k_cache, self._v_cache = None, None
+
     def _rope(self, xs: mx.array, request_cache: RequestsCache, uuid_list: List[str]) -> List[mx.array]:
         offset_list = request_cache.get_offset_list(uuid_list, self.layer_idx - self.offset)
         x_list = []
@@ -287,7 +292,9 @@ class MergedAttention(nn.Module):
         queries = self._rope(queries, request_cache, cache.uuid_list)
         keys = self._rope(keys, request_cache, cache.uuid_list)
 
-        keys, values = request_cache.update(keys, values, cache.uuid_list, self.layer_idx - self.offset)
+        keys, values = request_cache.update(
+            keys, values, cache.uuid_list, self.layer_idx - self.offset, self._k_cache, self._v_cache
+        )
 
         output = mx.fast.scaled_dot_product_attention(
             mx.expand_dims(queries.transpose(1, 0, 2), axis=0),

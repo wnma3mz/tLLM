@@ -59,6 +59,7 @@ class MLXLlamaModel(nn.Module):
         mask = mask if mask is None else mask.astype(hidden_states.dtype)
         output = self.model(hidden_states, mask=mask, cache=attention_data)
 
+        # TODO 异步保存 cache
         for uuid, seq_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
             self.cache_manager.set(uuid, attention_data.get_kv_cache_list(uuid), attention_data.get_cache_seq_len(uuid))
             self.cache_manager.check_alive()
