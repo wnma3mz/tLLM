@@ -31,7 +31,7 @@ def find_continuous_path(clients: Dict[str, ClientData], end_idx: int) -> Option
 
 
 def parse_model_size(model_name: str) -> float:
-    part_list = model_name.lower().rsplit("/", 1)[-1].split("-")
+    part_list = model_name.lower().split("-")[::-1]
     model_size = -1
     for part in part_list:
         if part.endswith("b"):

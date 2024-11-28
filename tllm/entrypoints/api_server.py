@@ -15,7 +15,7 @@ from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionRespo
 from tllm.entrypoints.server_chat import OpenAIServing
 from tllm.schemas import InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
 from tllm.utils import init_engine, setup_logger, setup_seed
-from tllm.websocket.manager import WebsocketManager
+from tllm.websocket.manager import PipelineManager, WebsocketManager
 
 engine: None
 openai_serving_chat: OpenAIServing = None
@@ -72,7 +72,14 @@ async def create_completion(request: ChatCompletionRequest, raw_request: Request
 
 
 @app.get("/health")
-async def health():
+async def health(background_tasks: BackgroundTasks):
+    # 检查是否需要重新更新节点的状态
+    # health_status = pp_manager.get_status()
+    # if health_status["last_check_result"] != -1:
+    #     pp_manager.stop_health_check_timer()
+    #     ws_manager.unset_connect_clients(health_status["last_check_result"])
+    #     background_tasks.add_task(update_model_url)
+
     return Response(status_code=200)
 
 
@@ -105,15 +112,14 @@ async def update_model_url():
     # 如果有操作需要更新各个客户端的信息，需要在这里更新
     if ws_manager.has_full_model:
         return
-    ws_manager.set_connect_clients()
+    host_list = ws_manager.set_connect_clients()
     clients = ws_manager.connect_clients
     openai_serving_chat.engine.update_url(clients[0].host, len(clients))
-    await ws_manager.send_config(args.master_url)
-    # TODO 后台持续进行健康检查，如果有节点挂掉，需要重新分配
-    # while True:
-    #     i = await ws_manager.health_check()
-    #     if i != -1:
-    #         ws_manager.connect_clients = []
+    pp_manager.update_url(host_list)
+    await pp_manager.send_config(args.master_url)
+    # 后台持续进行健康检查，如果有节点挂掉，需要重新分配
+    # TODO debug
+    # pp_manager.start_health_check_timer()
 
 
 @app.post("/register_client")
@@ -205,7 +211,7 @@ async def serve_http(app: FastAPI, loop: asyncio.AbstractEventLoop, master_handl
 async def run_server(args) -> None:
     setup_seed(42)
     global app
-    global logger, engine, ws_manager, openai_serving_chat
+    global logger, engine, ws_manager, pp_manager, openai_serving_chat
     global is_local
     is_local = args.is_local
 
@@ -222,6 +228,7 @@ async def run_server(args) -> None:
     openai_serving_chat = OpenAIServing(engine, tok, args)
     total_layers = engine.generator.model.num_layers
     ws_manager = WebsocketManager(total_layers, args.model_path)
+    pp_manager = PipelineManager(ws_manager.client_size)
 
     loop = await engine.start()
     uvicorn_kwargs = {"host": "0.0.0.0", "port": args.port}
