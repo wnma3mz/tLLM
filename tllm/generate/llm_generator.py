@@ -98,7 +98,7 @@ class LLMGenerator:
             calc_cost_time=sum(calc_cost_time_list),
         )
 
-    @torch.no_grad()
+    @torch.inference_mode()
     async def generate(self, sequence_request_list: List[SequenceRequestData]) -> AsyncGenerator:
         """
         @params:
@@ -142,7 +142,7 @@ class LLMGenerator:
         assert seq_logits.shape[0] == len(sequence_request_list)
 
         s1 = time.perf_counter()
-        # TODO batch decode by group
+        # TODO: batch decode by group
         # TODO: sequence_request.sampling_params
         seq_generate_ids: List[int] = sampling_func(seq_logits)
         seq_generate_texts = self.tok.decode(seq_generate_ids)
@@ -173,3 +173,17 @@ class LLMGenerator:
         self.logger.debug(f"de tokenizer cost time: {time.perf_counter() - s1:.4f}s")
         self.logger.debug(f"communication cost time: {forward_result.comm_cost_time:.4f}s({fraction*100:.1f}%)")
         self.logger.debug("=" * 5)
+
+
+class FakeLLMGenerator(LLMGenerator):
+
+    async def generate(self, sequence_request_list: List[SequenceRequestData]) -> AsyncGenerator:
+        generate_id, generate_text = 0, "fake "
+        for sequence_request in sequence_request_list:
+            sequence_request.output_ids.append(generate_id)
+            if len(sequence_request.output_ids) == sequence_request.sampling_params.max_tokens:
+                sequence_request.finish_reason_list = ["length"]
+                sequence_request.is_stop = True
+            else:
+                sequence_request.generate_text = generate_text
+                sequence_request.output_text += generate_text

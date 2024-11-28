@@ -148,6 +148,7 @@ def parse_args():
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--is_local", action="store_true")
     parser.add_argument("--is_debug", action="store_true")
+    parser.add_argument("--is_fake", action="store_true")
     return parser.parse_args()
 
 
@@ -213,7 +214,9 @@ async def run_server(args) -> None:
     logger.info("args: %s", args)
 
     s1 = time.time()
-    engine, tok, master_handler = await init_engine(args.model_path, args.is_local, logger, args.master_handler_port)
+    engine, tok, master_handler = await init_engine(
+        logger, args.model_path, args.master_handler_port, args.is_local, args.is_fake
+    )
 
     logger.info(f"init cost time {time.time() - s1}")
     openai_serving_chat = OpenAIServing(engine, tok, args)

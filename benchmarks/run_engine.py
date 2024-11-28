@@ -14,13 +14,14 @@ class Args:
     # model_path: str = "Qwen/Qwen2-VL-2B-Instruct"
     is_local: bool = True
     is_debug: bool = True
+    is_fake: bool = False
 
 
 async def main():
     args = Args()
 
     logger = setup_logger("engine", logging.DEBUG if args.is_debug else logging.INFO)
-    engine, tok, _ = await init_engine(args.model_path, args.is_local, logger, master_handler_port=25111)
+    engine, tok, _ = await init_engine(logger, args.model_path, 25111, args.is_local, args.is_fake)
     _ = await engine.start()
     messages = [{"role": "user", "content": "Hello, how are you?"}]
     # messages = [

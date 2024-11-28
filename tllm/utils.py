@@ -7,7 +7,7 @@ import torch
 
 from tllm.commons.manager import load_master_model
 from tllm.engine import AsyncEngine
-from tllm.generate import LLMGenerator, TokenizerUtils
+from tllm.generate import FakeLLMGenerator, LLMGenerator, TokenizerUtils
 from tllm.rpc.manager import LocalRPCManager, RPCManager
 from tllm.rpc.master_handler import MasterHandler, PendingRequests
 
@@ -62,10 +62,13 @@ def setup_logger(name, level=logging.INFO):
 
 
 async def init_engine(
-    model_path: str, is_local: str, logger, master_handler_port: int
+    logger, model_path: str, master_handler_port: int, is_local: bool, is_fake: bool = False
 ) -> Tuple[AsyncEngine, TokenizerUtils, MasterHandler]:
     model, tok, num_layers = load_master_model(model_path, logger)
-    if is_local:
+    if is_fake:
+        generator = FakeLLMGenerator(None, None, None, None)
+        master_handler = None
+    elif is_local:
         generator = LLMGenerator(LocalRPCManager(logger, model_path, num_layers), logger, model, tok)
         master_handler = None
     else:
