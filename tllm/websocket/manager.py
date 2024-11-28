@@ -14,12 +14,12 @@ class WebsocketManager:
     def __init__(self, total_layers: int, model_name: str):
         self.total_layers = total_layers
         self.model_name = model_name
-        self.clients: Dict[str, ClientData] = {}
+        self.clients: Dict[str, ClientData] = {}  # 连接的客户端, client_id -> ClientData
         self.monitor_websockets: Set[WebSocket] = set()  # 前端页面的websocket连接
 
         self.connect_clients = []
         self.client_size, self.layer_info = split_model_layers(parse_model_size(model_name), total_layers)
-        self.client_info = [[start_idx, end_idx, 0] for start_idx, end_idx in self.layer_info]
+        self.client_info = [[start_idx, end_idx, 0] for start_idx, end_idx in self.layer_info]  # 统计连接情况
 
     def get_free_layer(self) -> Tuple[int, int, int]:
         # 返回一个未被注册的start idx 和 end idx，如果所有层都被注册了，则随机返回一个
@@ -70,7 +70,7 @@ class WebsocketManager:
         self.client_info[request.pp_rank][-1] += 1
         return InitModelResponse(msg="success", status=200)
 
-    async def unregister_client(self, client_id: str):
+    def unregister_client(self, client_id: str):
         if client_id not in self.clients:
             return
         data = self.clients.pop(client_id)
@@ -93,13 +93,17 @@ class WebsocketManager:
 
     def set_connect_clients(self) -> List[str]:
         x = find_continuous_path(self.clients, self.total_layers)
-        self.connect_clients = x if x else []
+        self.connect_clients: List[ClientData] = x if x else []
 
+        if len(self.connect_clients) > 0:
+            return []
         self.print_host_list()
         return [x.host for x in self.connect_clients]
 
-    def unset_connect_clients(self, idx_list: List[int]) -> List[str]:
-        self.connect_clients = [x for i, x in enumerate(self.connect_clients) if i not in idx_list]
+    def unset_connect_clients(self, idx_list: List[int]):
+        for idx in idx_list:
+            self.unregister_client(self.connect_clients[idx].client_id)
+        self.connect_clients = []
 
     def print_host_list(self):
         print("route path: ", "->".join([x.host for x in self.connect_clients]))
@@ -145,7 +149,7 @@ class PipelineManager:
         self.last_check_result = [index for index, is_healthy in results if not is_healthy]
         return self.last_check_result
 
-    async def start_health_check_timer(self, interval: float = 60):
+    async def start_health_check(self, interval: float = 60):
         if self.task and not self.task.done():
             return
 
@@ -158,7 +162,9 @@ class PipelineManager:
 
         self.task = asyncio.create_task(check_loop())
 
-    def stop_health_check_timer(self):
+    def stop_health_check(self):
+        self.last_check_time = None
+        self.last_check_result = []
         if self.task and not self.task.done():
             self.task.cancel()
 
