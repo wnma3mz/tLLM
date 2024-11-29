@@ -74,18 +74,19 @@ async def create_completion(request: ChatCompletionRequest, raw_request: Request
 @app.get("/health")
 async def health(background_tasks: BackgroundTasks):
     # 检查是否需要重新更新节点的状态
-    # TODO test
-    # health_status = pp_manager.get_status()
-    # if len(health_status["last_check_result"]) > 0:
-    #     pp_manager.stop_health_check()
-    #     ws_manager.unset_connect_clients(health_status["last_check_result"])
-    #     background_tasks.add_task(update_model_url)
+    # 如果没有请求 health，那么状态不会被更新
+    health_status = await pp_manager.get_status()
+    if len(health_status["last_check_result"]) > 0:
+        logger.info(f"health check result: {health_status}")
+        pp_manager.stop_health_check()
+        ws_manager.unset_connect_clients(health_status["last_check_result"])
+        background_tasks.add_task(update_model_url)
 
     return Response(status_code=200)
 
 
 @app.get("/v1/models")
-async def show_available_models():
+async def show_available_models():  #
     models = await openai_serving_chat.show_available_models()
     return JSONResponse(content=models.model_dump())
 
@@ -118,10 +119,9 @@ async def update_model_url():
         clients = ws_manager.connect_clients
         openai_serving_chat.engine.update_url(clients[0].host, len(clients))
         pp_manager.update_url(host_list)
-        await pp_manager.send_config(args.master_url)
+        await pp_manager.send_config(args.master_url, host_list)
         # 后台持续进行健康检查，如果有节点挂掉，需要重新分配
-        # TODO test
-        # pp_manager.start_health_check()
+        await pp_manager.start_health_check()
 
 
 @app.post("/register_client")

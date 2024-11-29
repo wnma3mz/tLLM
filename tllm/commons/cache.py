@@ -58,11 +58,11 @@ class RequestsCache:
     def add(self, uuid: str, seq_len: int, layer_cache_list: Optional[List[KVCache]] = None):
         # 保存每个 uuid 请求所有层的 cache
         self.cache_dict[uuid] = {
-            "cache": [
-                KVCache(self.max_seq_len, self.num_key_value_heads, self.head_dim) for _ in range(self.num_layers)
-            ]
-            if layer_cache_list is None
-            else layer_cache_list,
+            "cache": (
+                [KVCache(self.max_seq_len, self.num_key_value_heads, self.head_dim) for _ in range(self.num_layers)]
+                if layer_cache_list is None
+                else layer_cache_list
+            ),
             "seq_len": seq_len,
         }
 

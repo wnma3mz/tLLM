@@ -30,6 +30,7 @@ class WebsocketManager:
             for pp_rank, (start_idx, end_idx, count) in enumerate(self.client_info):
                 if count == 0:
                     return pp_rank, start_idx, end_idx
+        raise ValueError("No free layer")
 
     async def register_client(self, request: RegisterClientRequest, model_path: str) -> RegisterClientResponse:
         if request.pp_rank == -1:
@@ -74,7 +75,7 @@ class WebsocketManager:
         if client_id not in self.clients:
             return
         data = self.clients.pop(client_id)
-        if data.pp_rank and data.pp_rank != -1:
+        if data.pp_rank is not None and data.pp_rank != -1:
             self.client_info[data.pp_rank][-1] -= 1
 
     @property
@@ -95,7 +96,7 @@ class WebsocketManager:
         x = find_continuous_path(self.clients, self.total_layers)
         self.connect_clients: List[ClientData] = x if x else []
 
-        if len(self.connect_clients) > 0:
+        if len(self.connect_clients) == 0:
             return []
         self.print_host_list()
         return [x.host for x in self.connect_clients]
@@ -106,7 +107,7 @@ class WebsocketManager:
         self.connect_clients = []
 
     def print_host_list(self):
-        print("route path: ", "->".join([x.host for x in self.connect_clients]))
+        print("route path: ", "->".join([f"[{x.host}]" for x in self.connect_clients]))
 
     def find_connect_clients(self, client_id) -> bool:
         for client in self.clients.values():
@@ -126,12 +127,14 @@ class PipelineManager:
     def update_url(self, host_list: List[str]):
         self.client_manager.update_url(host_list)
 
-    async def send_config(self, master_url: str):
+    async def send_config(self, master_url: str, host_list: List[str]):
+        assert len(host_list) == self.client_size
+
         async def set_single_config(i: int) -> None:
-            url = master_url if i == len(self.connect_clients) - 1 else self.connect_clients[i + 1].host
+            url = master_url if i == self.client_size - 1 else host_list[i + 1]
             await self.client_manager.set_config(i, {"forward_url": url, "master_url": master_url, "pp_rank": i})
 
-        tasks = [set_single_config(i) for i in range(len(self.connect_clients))]
+        tasks = [set_single_config(i) for i in range(self.client_size)]
         await asyncio.gather(*tasks)
 
     async def health_check(self) -> Tuple[int]:
@@ -139,7 +142,7 @@ class PipelineManager:
             result = await self.client_manager.health_check(index)
             return (index, result)
 
-        tasks = [check_single_client(i) for i, _ in enumerate(self.connect_clients)]
+        tasks = [check_single_client(i) for i in range(self.client_size)]
 
         # 等待所有任务完成，返回结果列表
         results = await asyncio.gather(*tasks, return_exceptions=False)
@@ -149,7 +152,7 @@ class PipelineManager:
         self.last_check_result = [index for index, is_healthy in results if not is_healthy]
         return self.last_check_result
 
-    async def start_health_check(self, interval: float = 60):
+    async def start_health_check(self, interval: float = 10):
         if self.task and not self.task.done():
             return
 
