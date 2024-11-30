@@ -44,6 +44,7 @@
     - [x] Client Send Url and Port
     - [ ] Auto Layer Split
         - [x] get free layer idx
+        - [x] fix split layer pipeline
         - [ ] calculate layer memory and recommend split
         - [ ] split model before load
     - [x] Async Generation
@@ -57,11 +58,11 @@
         - [x] Communication Time Benchmark
         - [x] Async GRPC
         - [x] Ring Communication
-    - [ ] Auto Find Node
+    - [x] Auto Find Node
         - [x] WebSocket Communication
         - [x] Client Retry Connect
         - [x] Client auto update url 
-        - [ ] Master Exit
+        - [x] Master Exit
 - [ ] KV Cache
     - [x] Request/Sequence Cache
     - [x] Custom KV Cache Class

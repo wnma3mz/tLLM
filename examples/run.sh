@@ -1,7 +1,7 @@
 #!/bin/bash
 MODEL_PATH=/Users/lujianghu/Documents/Llama-3.2-1B-Instruct
 MASTER_HANDLER_PORT=25111
-MASTER_URL=localhost:$MASTER_HANDLER_PORT
+MASTER_URL=localhost:$MASTER_HANDLER_PORT # master 的地址，用于其他客户端连接
 HTTP_PORT=8022
 
 export PYTHONPATH="./":$PYTHONPATH;
