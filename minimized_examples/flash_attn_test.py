@@ -2,7 +2,7 @@ import torch
 from vllm.vllm_flash_attn import flash_attn_varlen_func
 from xformers.components.attention.core import scaled_dot_product_attention
 
-from tllm.models.torch_helper import build_mask
+from tllm.models.torch.torch_helper import build_mask
 
 
 def prefill_test():

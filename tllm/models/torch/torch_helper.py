@@ -51,7 +51,7 @@ def read_from_safetensors(file_path: str, key_list: List[str]) -> Dict[str, torc
 
 
 class EmptyLayer(nn.Module):
-    @torch.no_grad()
+    @torch.inference_mode()
     def forward(
         self,
         hidden_states: torch.Tensor,

@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 
 from tllm.commons.communicator import SingleNodeCommunicator
-from tllm.commons.layers import MyLlamaMLP
+from tllm.models.torch.layers import MyLlamaMLP
 
 
 @dataclass

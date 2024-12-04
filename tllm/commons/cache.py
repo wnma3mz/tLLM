@@ -177,8 +177,34 @@ class RequestsCache:
         else:
             return empty_k_cache[:total_end], empty_v_cache[:total_end]
 
+    def update_tinygrad(self, key_states, value_states, uuid_list, layer_idx):
+        from tinygrad import Tensor
 
-class AttentionData:  #
+        key_lst, value_lst = [], []
+        start = 0
+
+        for uuid in uuid_list:
+            kv_cache = self.get_layer_idx_kv_cache(uuid, layer_idx)
+            interval = self.get_seq_len(uuid)
+            end = start + interval
+
+            cur_key, cur_value = key_states[start:end], value_states[start:end]
+
+            if kv_cache.key_states is None:
+                kv_cache.key_states, kv_cache.value_states = cur_key, cur_value
+            else:
+                kv_cache.key_states = Tensor.cat([kv_cache.key_states, cur_key])
+                kv_cache.value_states = Tensor.cat([kv_cache.value_states, cur_value])
+
+            kv_cache.set_kv_len(kv_cache.key_states.shape[0])
+            key_lst.append(kv_cache.key_states)
+            value_lst.append(kv_cache.value_states)
+            start = end
+
+        return Tensor.cat(key_lst), Tensor.cat(value_lst)
+
+
+class AttentionData:
     def __init__(
         self,
         uuid_list: List[str],

@@ -9,15 +9,19 @@ from transformers.models.llama.modeling_llama import LlamaForCausalLM, LlamaRMSN
 
 from tllm.commons.attn import get_attention_implementation
 from tllm.commons.cache import AttentionData, CacheManager
-from tllm.commons.layers import LlamaDecoderLayer
-from tllm.models.torch_helper import EmptyLayer, build_forward_cache, read_from_safetensors
+from tllm.models.torch.layers import LlamaDecoderLayer
+from tllm.models.torch.torch_helper import EmptyLayer, build_forward_cache, read_from_safetensors
 from tllm.models.utils import get_model_path, get_weight_path, read_eos_token_ids
 from tllm.schemas import SeqInput
 
 _, attention_type = get_attention_implementation()
 
-DTYPE = torch.float16
-DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
+DTYPE = torch.bfloat16
+if torch.cuda.is_available():
+    DEVICE = "cuda:0"
+    DTYPE = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+else:
+    DEVICE = "cpu"
 
 
 class Decoder(nn.Module):

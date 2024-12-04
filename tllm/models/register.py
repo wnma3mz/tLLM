@@ -4,6 +4,13 @@ MODEL_REGISTER = {"LlamaForCausalLM": (TLlamaForCausalLM, LlamaModel)}
 
 from tllm import HAS_MLX
 
+try:
+    from tllm.models.tinygrad.llama import TinyGradLlamaForCausalLM, TinyGradLlamaModel
+
+    MODEL_REGISTER.update({"TinyGradLlamaForCausalLM": (TinyGradLlamaForCausalLM, TinyGradLlamaModel)})
+except ImportError:
+    pass
+
 if HAS_MLX:
     from tllm.models.mlx_llama import MLXLlamaForCausalLM, MLXLlamaModel
     from tllm.models.mlx_qwen import MLXQwen2ForCausalLM, MLXQwen2Model
@@ -17,6 +24,6 @@ if HAS_MLX:
 
     sampling_func = greedy_decode
 else:
-    from tllm.models.torch_helper import greedy_decode
+    from tllm.models.torch.torch_helper import greedy_decode
 
     sampling_func = greedy_decode
