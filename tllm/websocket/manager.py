@@ -24,7 +24,7 @@ class WebsocketManager:
     def get_free_layer(self) -> Tuple[int, int, int]:
         # 返回一个未被注册的start idx 和 end idx，如果所有层都被注册了，则随机返回一个
         if self.has_full_model:
-            pp_rank = random.choice(0, len(self.layer_info))
+            pp_rank = random.choice(range(client_size))
             return self.layer_info[pp_rank]
         else:
             for pp_rank, (start_idx, end_idx, count) in enumerate(self.client_info):
