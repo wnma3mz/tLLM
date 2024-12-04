@@ -7,8 +7,8 @@ from transformers import AutoConfig, AutoTokenizer, LlamaForCausalLM
 
 from tllm.commons.communicator import SingleNodeCommunicator
 from tllm.generate.token_utils import TokenizerUtils
-from tllm.models.llama import MyLlamaModel
 from tllm.models.protocol import SeqInput
+from tllm.models.torch.llama import MyLlamaModel
 
 # PYTHONPATH='./' python3 minimized_examples/continue_batch/main.py
 

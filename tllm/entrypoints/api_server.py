@@ -233,7 +233,7 @@ async def run_server(args) -> None:
     pp_manager = PipelineManager(ws_manager.client_size)
 
     loop = await engine.start()
-    uvicorn_kwargs = {"host": "0.0.0.0", "port": args.port}
+    uvicorn_kwargs = {"host": "::", "port": args.port}
     shutdown_task = await serve_http(app, loop, master_handler, **uvicorn_kwargs)
     await shutdown_task
 

@@ -26,16 +26,16 @@
 
     3.2 (with communication)
 
-    - edit `examples/run_single_client.sh`
+    - edit `examples/run_client.sh`
 
-    - edit `examples/run.sh`
+    - edit `examples/run_server.sh`
 
     ```bash
     # first in one terminal
-    bash examples/run.sh 1
+    bash examples/run_server.sh 1
 
     # in another terminal
-    bash examples/run_single_client.sh 1
+    bash examples/run_client.sh 1
     ```
 
 4. testing
@@ -43,6 +43,20 @@
 ```python
 python benchmarks/run_async_requests.py
 ```
+
+### Features
+
+- [x] Support Multi-Requests
+- [x] Engine
+    - [x] mlx
+    - [x] torch
+    - [ ] tinygrad
+- [x] Communication
+    - [x] grpc
+- [x] Attention
+    - [x] xformers
+    - [x] flash-attn
+    - [ ] PageAttention
 
 ### Performance
 

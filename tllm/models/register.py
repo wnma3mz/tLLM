@@ -1,4 +1,4 @@
-from tllm.models.llama import LlamaModel, TLlamaForCausalLM
+from tllm.models.torch.llama import LlamaModel, TLlamaForCausalLM
 
 MODEL_REGISTER = {"LlamaForCausalLM": (TLlamaForCausalLM, LlamaModel)}
 

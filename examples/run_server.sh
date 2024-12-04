@@ -2,7 +2,7 @@
 MODEL_PATH=/Users/lujianghu/Documents/Llama-3.2-1B-Instruct
 MASTER_HANDLER_PORT=25111
 MASTER_URL=localhost:$MASTER_HANDLER_PORT # master 的地址，用于其他客户端连接
-HTTP_PORT=8022
+HTTP_PORT=8022                            # 本地 HTTP 服务的端口，websocket 前端页面
 
 export PYTHONPATH="./":$PYTHONPATH;
 # 1B 0-16

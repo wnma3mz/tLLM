@@ -9,7 +9,7 @@ import torch.multiprocessing as mp
 from transformers import AutoConfig, LlamaForCausalLM
 
 from tllm.commons.communicator import Communicator
-from tllm.models.llama import MyLlamaModel
+from tllm.models.torch.llama import MyLlamaModel
 from tllm.schemas import NodeConfig
 
 

@@ -1,6 +1,6 @@
 import os
 import re
-from typing import *
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -15,6 +15,9 @@ from tllm.models.utils import get_model_path, get_weight_path, read_eos_token_id
 from tllm.schemas import SeqInput
 
 _, attention_type = get_attention_implementation()
+
+DTYPE = torch.float16
+DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 
 class Decoder(nn.Module):
@@ -70,8 +73,8 @@ def get_last_hidden_states(hidden_states: torch.Tensor, seq_len_list: List[int])
 class LlamaModel(nn.Module):
     def __init__(self, config, is_merge: bool = True):
         super().__init__()
-        self.dtype = torch.bfloat16
-        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        self.dtype = DTYPE
+        self.device = DEVICE
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.cache_manager = CacheManager()
@@ -81,7 +84,7 @@ class LlamaModel(nn.Module):
         self.rotary_emb = TLlamaRotaryEmbedding(config=config)
 
     @classmethod
-    def from_pretrained(cls, config, model_path: str, state_dict: Optional[Any] = None, is_merge: bool = True):
+    def from_pretrained(cls, config, model_path: str, state_dict: Optional[Dict] = None, is_merge: bool = True):
         model = cls(config, is_merge)
         model_path = get_model_path(model_path)
         state_dict = LlamaForCausalLM.from_pretrained(
@@ -205,15 +208,15 @@ class LlamaModel(nn.Module):
 class TLlamaForCausalLM(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dtype = torch.bfloat16
-        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        self.dtype = DTYPE
+        self.device = DEVICE
         self.vocab_size = config.vocab_size
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @classmethod
-    def from_pretrained(cls, logger, config, model_path: str, state_dict: Optional[Any] = None):
+    def from_pretrained(cls, logger, config, model_path: str, state_dict: Optional[Dict] = None):
         model = cls(config)
 
         cls.config = config
