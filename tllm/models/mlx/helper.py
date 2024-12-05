@@ -1,7 +1,6 @@
 import itertools
 import math
 import os
-import re
 from typing import Dict, List
 
 import mlx.core as mx
@@ -86,74 +85,6 @@ def get_last_hidden_states(hidden_states: mx.array, seq_len_list: List[int]) -> 
     seq_hidden_states = mx.split(hidden_states, index_list, axis=0)
     hidden_states = mx.concat([x[-1:, :] for x in seq_hidden_states], axis=0)
     return hidden_states
-
-
-def merge_weight_func(
-    layer_pattern: re.Pattern, name_list: str, cat_name_fmt: str, weights: Dict[str, mx.array]
-) -> Dict[str, mx.array]:
-    key_list = list(weights.keys())
-
-    temp_w = {}  # save merge weights
-    merge_num = len(name_list)
-    for key in key_list:
-        res = layer_pattern.findall(key)
-        if res:
-            layer_idx = int(res[0])
-            if layer_idx not in temp_w:
-                temp_w[layer_idx] = {}
-        else:
-            continue
-
-        for name in name_list:
-            if name in key:
-                temp_w[layer_idx].update({name: weights.pop(key)})
-
-        layer_weights = temp_w.get(layer_idx, [])
-        if len(layer_weights) == merge_num:
-            name = cat_name_fmt.format(layer_idx=layer_idx)
-            weights[name] = mx.concatenate([layer_weights[qkv] for qkv in name_list], axis=0)
-            temp_w.pop(layer_idx)
-
-    layer_idx_list = list(temp_w.keys())
-    for layer_idx in layer_idx_list:
-        if len(temp_w[layer_idx]) != 0:
-            raise ValueError(
-                f"merge [{cat_name_fmt}] failed, layer_idx: {layer_idx}, temp_w: {temp_w[layer_idx].keys()}"
-            )
-    return weights
-
-
-def pop_weight_func(
-    prefix_key_list: List[str], weights: Dict[str, mx.array], num_layers: int, start_idx: int, end_idx: int
-) -> Dict[str, mx.array]:
-    prefix_key_list += [f"model.layers.{i}." for i in range(num_layers) if not (start_idx <= i < end_idx)]
-    key_list = list(weights.keys())
-    for key in key_list:
-        for prefix_key in prefix_key_list:
-            if key.startswith(prefix_key):
-                weights.pop(key)
-    return weights
-
-
-def default_merge_attn_weight(weights: Dict[str, mx.array]) -> Dict[str, mx.array]:
-    attn_pattern = re.compile(r"model\.layers\.(\d+)\.self_attn.*.weight")
-    attn_list = ["q_proj", "k_proj", "v_proj"]
-    attn_name = "model.layers.{layer_idx}.self_attn.qkv_proj.layer.weight"
-    return merge_weight_func(attn_pattern, attn_list, attn_name, weights)
-
-
-def default_merge_attn_bias(weights: Dict[str, mx.array]) -> Dict[str, mx.array]:
-    attn_pattern = re.compile(r"model\.layers\.(\d+)\.self_attn.*.bias")
-    attn_list = ["q_proj", "k_proj", "v_proj"]
-    attn_name = "model.layers.{layer_idx}.self_attn.qkv_proj.layer.bias"
-    return merge_weight_func(attn_pattern, attn_list, attn_name, weights)
-
-
-def default_merge_mlp_weight(weights: Dict[str, mx.array]) -> Dict[str, mx.array]:
-    mlp_pattern = re.compile(r"model\.layers\.(\d+)\.mlp.*.weight")
-    mlp_list = ["gate_proj", "up_proj"]
-    mlp_name = "model.layers.{layer_idx}.mlp.gate_up_proj.layer.weight"
-    return merge_weight_func(mlp_pattern, mlp_list, mlp_name, weights)
 
 
 def read_state_dict(model_path: str) -> Dict[str, mx.array]:

@@ -1,3 +1,4 @@
+import glob
 import os
 import re
 from typing import Dict, List, Optional, Tuple
@@ -5,13 +6,20 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import torch
 import torch.nn as nn
-from transformers.models.llama.modeling_llama import LlamaForCausalLM, LlamaRMSNorm, LlamaRotaryEmbedding
+from transformers.models.llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
 
 from tllm.commons.attn import get_attention_implementation
 from tllm.commons.cache import AttentionData, CacheManager
+from tllm.models.torch.helper import EmptyLayer, build_forward_cache, read_from_safetensors
 from tllm.models.torch.layers import LlamaDecoderLayer
-from tllm.models.torch.torch_helper import EmptyLayer, build_forward_cache, read_from_safetensors
-from tllm.models.utils import get_model_path, get_weight_path, read_eos_token_ids
+from tllm.models.utils import (
+    default_merge_attn_weight,
+    default_merge_mlp_weight,
+    get_model_path,
+    get_weight_path,
+    pop_weight_func,
+    read_eos_token_ids,
+)
 from tllm.schemas import SeqInput
 
 _, attention_type = get_attention_implementation()
@@ -91,87 +99,46 @@ class LlamaModel(nn.Module):
     def from_pretrained(cls, config, model_path: str, state_dict: Optional[Dict] = None, is_merge: bool = True):
         model = cls(config, is_merge)
         model_path = get_model_path(model_path)
-        state_dict = LlamaForCausalLM.from_pretrained(
-            model_path, trust_remote_code=True, device_map="cpu", torch_dtype=model.dtype, low_cpu_mem_usage=True
-        ).state_dict()
-        state_dict = model.read_weight_from_model_path(state_dict, is_merge)
+        state_dict = model.read_weight_from_model_path(model_path, is_merge)
         model.load_state_dict(state_dict)
-        del state_dict
 
         model.to(model.dtype).to(model.device)
         model.eval()
         return model
 
-    def read_weight_from_model_path(self, weights: Dict[str, torch.Tensor], is_merge: bool) -> Dict[str, torch.Tensor]:
+    def read_weight_from_model_path(self, model_path: str, is_merge: bool) -> Dict[str, torch.Tensor]:
         # TODO: support bias and TP
+        weights = {}
+        weight_files = glob.glob(os.path.join(model_path, "model*.safetensors"))
+        for file in weight_files:
+            weights.update(read_from_safetensors(os.path.join(model_path, file)))
 
-        attn_layer_idx_pattern = re.compile(r"model\.layers\.(\d+)\.self_attn")
-        mlp_layer_idx_pattern = re.compile(r"model\.layers\.(\d+)\.mlp")
         layer_name_mapper = {
             "self_attn.o_proj": "self_attn.o_proj.layer",
             "mlp.down_proj": "mlp.down_proj.layer",
         }
-        qkv_proj_list = ["q_proj", "k_proj", "v_proj"]
-        gate_up_list = ["gate_proj", "up_proj"]
-
         prefix_key_list = ["model.embed_tokens.", "model.norm.", "lm_head."]
-        prefix_key_list += [
-            f"model.layers.{i}."
-            for i in range(self.config.num_hidden_layers)
-            if not (self.config.decoder_start_layer_idx <= i < self.config.decoder_end_layer_idx)
-        ]
+        weights = pop_weight_func(
+            prefix_key_list,
+            weights,
+            self.config.num_hidden_layers,
+            self.config.decoder_start_layer_idx,
+            self.config.decoder_end_layer_idx,
+        )
 
         key_list = list(weights.keys())
-        for key in key_list:
-            for prefix_key in prefix_key_list:
-                if key.startswith(prefix_key):
-                    weights.pop(key)
-        if not is_merge:
-            return weights
-
-        key_list = list(weights.keys())
-
-        attn_proj_w = {}  # layer_idx -> {qkv: weight}
-        mlp_w = {}
         for key in key_list:
             for s_key, t_key in layer_name_mapper.items():
                 if s_key in key:
                     # w_list = w.chunk(self.world_size, dim=1)[self.rank]
                     weights[key.replace(s_key, t_key)] = weights.pop(key)
-            attn_res = attn_layer_idx_pattern.findall(key)
-            mlp_res = mlp_layer_idx_pattern.findall(key)
-            if attn_res:
-                layer_idx = int(attn_res[0])
-                if layer_idx not in attn_proj_w:
-                    attn_proj_w[layer_idx] = {}
-            elif mlp_res:
-                layer_idx = int(mlp_res[0])
-                if layer_idx not in mlp_w:
-                    mlp_w[layer_idx] = {}
-            else:
-                continue
 
-            for qkv in qkv_proj_list:
-                if qkv in key:
-                    attn_proj_w[layer_idx].update({qkv: weights.pop(key)})
-            for mlp in gate_up_list:
-                if mlp in key:
-                    mlp_w[layer_idx].update({mlp: weights.pop(key)})
-
-            layer_weights = attn_proj_w.get(layer_idx, [])
-            if len(layer_weights) == 3:
-                name = f"model.layers.{layer_idx}.self_attn.qkv_proj.layer.weight"
-                # torch.chunk(layer_weights[qkv], self.world_size, dim=0)
-                weights[name] = torch.cat([layer_weights[qkv] for qkv in qkv_proj_list], dim=0)
-                attn_proj_w.pop(layer_idx)
-
-            layer_weights = mlp_w.get(layer_idx, [])
-            if len(layer_weights) == 2:
-                name = f"model.layers.{layer_idx}.mlp.gate_up_proj.layer.weight"
-                # torch.chunk(layer_weights[mlp], self.world_size, dim=0)
-                weights[name] = torch.cat([layer_weights[mlp] for mlp in gate_up_list], dim=0)
-                mlp_w.pop(layer_idx)
-
+        if not is_merge:
+            return weights
+        # torch.chunk(layer_weights[qkv], self.world_size, dim=0)
+        weights = default_merge_attn_weight(weights)
+        # torch.chunk(layer_weights[mlp], self.world_size, dim=0)
+        weights = default_merge_mlp_weight(weights)
         return weights
 
     @torch.inference_mode()
@@ -220,12 +187,11 @@ class TLlamaForCausalLM(nn.Module):
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @classmethod
-    def from_pretrained(cls, logger, config, model_path: str, state_dict: Optional[Dict] = None):
+    def from_pretrained(cls, config, model_path: str, state_dict: Optional[Dict] = None):
         model = cls(config)
 
         cls.config = config
         cls.num_layers = config.num_hidden_layers
-        cls.logger = logger
         cls.eos_token_ids = read_eos_token_ids(config)
 
         model_path = get_model_path(model_path)

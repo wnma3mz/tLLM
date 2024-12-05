@@ -1,5 +1,5 @@
 import itertools
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 from safetensors import safe_open
 import torch
@@ -40,24 +40,24 @@ def build_mask(q_len_list: List[int], k_len_list: List[int]) -> torch.Tensor:
     return combined_mask
 
 
-def read_from_safetensors(file_path: str, key_list: List[str]) -> Dict[str, torch.Tensor]:
+def read_from_safetensors(file_path: str, key_list: List[str] = None) -> Dict[str, torch.Tensor]:
     tensors = {}
-    with safe_open(file_path, framework="pt", device="cpu") as f:
-        for key in f.keys():
-            for prefix_key in key_list:
-                if key.startswith(prefix_key):
-                    tensors[key] = f.get_tensor(key)
+    if key_list:
+        with safe_open(file_path, framework="pt", device="cpu") as f:
+            for key in f.keys():
+                for prefix_key in key_list:
+                    if key.startswith(prefix_key):
+                        tensors[key] = f.get_tensor(key)
+    else:
+        with safe_open(file_path, framework="pt", device="cpu") as f:
+            for key in f.keys():
+                tensors[key] = f.get_tensor(key)
     return tensors
 
 
 class EmptyLayer(nn.Module):
     @torch.inference_mode()
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
-        attention_data,
-    ) -> torch.Tensor:
+    def forward(self, hidden_states, position_embeddings, attention_data) -> torch.Tensor:
         return hidden_states
 
 

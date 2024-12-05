@@ -289,12 +289,11 @@ class TinyGradLlamaForCausalLM:
         self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @classmethod
-    def from_pretrained(cls, logger, config, model_path: str, state_dict: Optional[Dict] = None, is_merge: bool = True):
+    def from_pretrained(cls, config, model_path: str, state_dict: Optional[Dict] = None, is_merge: bool = True):
         model = cls(config)
 
         cls.config = config
         cls.num_layers = config.num_hidden_layers
-        cls.logger = logger
         cls.eos_token_ids = read_eos_token_ids(config)
 
         model_path = get_model_path(model_path)

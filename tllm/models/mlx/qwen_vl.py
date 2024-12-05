@@ -103,7 +103,7 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
         self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @classmethod
-    def from_pretrained(cls, logger, config, model_path: str, state_dict: Optional[Any] = None):
+    def from_pretrained(cls, config, model_path: str, state_dict: Optional[Any] = None):
         model = cls(config)
 
         # load processor
@@ -118,7 +118,6 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
 
         cls.config = config
         cls.num_layers = config.num_hidden_layers
-        cls.logger = logger
         cls.eos_token_ids = read_eos_token_ids(config)
 
         if state_dict is None:

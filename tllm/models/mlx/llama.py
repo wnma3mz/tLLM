@@ -11,17 +11,20 @@ from transformers import AutoConfig
 from tllm.commons.cache import AttentionData, CacheManager
 from tllm.models.mlx.helper import (
     build_forward_cache,
-    default_merge_attn_weight,
-    default_merge_mlp_weight,
     empty_func,
     get_last_hidden_states,
-    pop_weight_func,
     quantization_func,
     read_main_state_dict,
     read_state_dict,
 )
 from tllm.models.mlx.layers import MLXTransformerBlock
-from tllm.models.utils import get_model_path, read_eos_token_ids
+from tllm.models.utils import (
+    default_merge_attn_weight,
+    default_merge_mlp_weight,
+    get_model_path,
+    pop_weight_func,
+    read_eos_token_ids,
+)
 from tllm.schemas import SeqInput
 
 
@@ -128,12 +131,11 @@ class MLXLlamaForCausalLM(nn.Module):
         self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @classmethod
-    def from_pretrained(cls, logger, config, model_path: str, state_dict: Optional[Any] = None):
+    def from_pretrained(cls, config, model_path: str, state_dict: Optional[Any] = None):
         model = cls(config)
 
         cls.config = config
         cls.num_layers = config.num_hidden_layers
-        cls.logger = logger
         cls.eos_token_ids = read_eos_token_ids(config)
 
         if state_dict is None:

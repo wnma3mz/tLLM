@@ -24,7 +24,7 @@ if HAS_MLX:
 
     sampling_func = greedy_decode
 else:
-    from tllm.models.torch.torch_helper import greedy_decode
+    from tllm.models.torch.helper import greedy_decode
 
     sampling_func = greedy_decode
 

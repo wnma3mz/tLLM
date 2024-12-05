@@ -59,5 +59,5 @@ def load_master_model(model_path: str, logger) -> Tuple[LLMGenerator, TokenizerU
 
     MY_CausalLM_CLASS, _ = MODEL_REGISTER[arch]
 
-    model = MY_CausalLM_CLASS.from_pretrained(logger, config, model_path, state_dict)
+    model = MY_CausalLM_CLASS.from_pretrained(config, model_path, state_dict)
     return model, tok, config.num_hidden_layers

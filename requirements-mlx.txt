@@ -9,7 +9,6 @@ typing_extensions
 uvicorn
 websockets
 pillow
-accelerate
 huggingface_hub
 tinygrad
 gradio==5.4.0

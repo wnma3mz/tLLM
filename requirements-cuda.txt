@@ -9,7 +9,6 @@ uvicorn
 websockets
 vllm
 pillow
-accelerate
 huggingface_hub
 tinygrad
 gradio==5.4.0
