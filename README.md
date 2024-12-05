@@ -51,6 +51,9 @@ python benchmarks/run_async_requests.py
     - [x] mlx
     - [x] torch
     - [ ] tinygrad
+        - [ ] Multi-Request
+        - [ ] Jit
+        - [ ] Pipeline
 - [x] Communication
     - [x] grpc
 - [x] Attention

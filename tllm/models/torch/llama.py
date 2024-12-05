@@ -1,6 +1,5 @@
 import glob
 import os
-import re
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -82,7 +81,7 @@ def get_last_hidden_states(hidden_states: torch.Tensor, seq_len_list: List[int])
     return torch.cat([x[-1:, :] for x in seq_hidden_states], dim=0)
 
 
-class LlamaModel(nn.Module):
+class HFLlamaModel(nn.Module):
     def __init__(self, config, is_merge: bool = True):
         super().__init__()
         self.dtype = DTYPE
@@ -144,13 +143,13 @@ class LlamaModel(nn.Module):
     @torch.inference_mode()
     def forward(self, hidden_states: torch.Tensor, seq_input: SeqInput) -> torch.Tensor:
         """
-        @param hidden_states: bs x seq_len x hidden_size
+        @param hidden_states: seq_len x hidden_size
         @param seq_input:
             uuid_list: List[str]: 每个请求的 uuid
             seq_len_list: List[int]: 每个请求的 seq_len
             如果 uuid 存在，则使用缓存的 kv cache，否则使用新的 kv cache
 
-        @return: bs x seq_len x hidden_size
+        @return: seq_len x hidden_size
         """
         attention_data = build_forward_cache(seq_input, self.cache_manager, self.num_decoder_layers)
         hidden_states = hidden_states.to(self.device)
@@ -176,7 +175,7 @@ class LlamaModel(nn.Module):
         return hidden_states
 
 
-class TLlamaForCausalLM(nn.Module):
+class HFLlamaForCausalLM(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dtype = DTYPE

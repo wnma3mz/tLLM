@@ -192,8 +192,6 @@ class RequestsCache:
                 kv_cache.key_states, kv_cache.value_states = cur_key, cur_value
             else:
                 kv_cache.key_states = kv_cache.key_states.cat(cur_key, dim=1)
-                # Tensor.cat([kv_cache.key_states, cur_key], dim=1)
-                # kv_cache.value_states = Tensor.cat([kv_cache.value_states, cur_value], dim=1)
                 kv_cache.value_states = kv_cache.value_states.cat(cur_value, dim=1)
 
             kv_cache.set_kv_len(kv_cache.key_states.shape[1])
@@ -202,8 +200,6 @@ class RequestsCache:
             start = end
 
         return key_lst[0], value_lst[0]
-        # return Tensor.cat(key_lst, dim=1), Tensor.cat(value_lst, dim=1)
-        # return key_lst[0].cat(*key_lst[1:], dim=1), value_lst[0].cat(*value_lst[1:], dim=1)
 
 
 class AttentionData:

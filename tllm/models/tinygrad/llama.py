@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 from tinygrad import Device, Tensor, TinyJit, dtypes, nn
 from tinygrad.helpers import getenv
-from tinygrad.nn.state import gguf_load, load_state_dict, safe_load, torch_load
+from tinygrad.nn.state import load_state_dict, safe_load, torch_load
 
 from tllm.commons.cache import AttentionData, CacheManager, RequestsCache
 from tllm.models.utils import get_model_path, read_eos_token_ids
@@ -91,6 +91,7 @@ class Attention:
         freqs_cis: Tensor,
         attention_data: AttentionData,
     ) -> Tensor:
+        # bsz x seq_len x hidden_size
         if getenv("WQKV"):
             if not hasattr(self, "wqkv"):
                 self.wqkv = Tensor.cat(self.q_proj.weight, self.k_proj.weight, self.v_proj.weight)
@@ -108,8 +109,6 @@ class Attention:
         xq, xk = apply_rotary_emb(xq, xk, freqs_cis)
         bsz, seqlen, _, _ = xq.shape
 
-        # update the cache
-        # assert xk.dtype == xv.dtype == cache.dtype, f"{xk.dtype=}, {xv.dtype=}, {cache.dtype=}"
         cache = attention_data.request_cache
         keys, values = cache.update_tinygrad(xk, xv, attention_data.uuid_list, self.layer_idx)
 
@@ -152,9 +151,9 @@ def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_la
     # TODO: support multi request
     start_pos = k_len_list[0] - q_len_list[0]
     seqlen = q_len_list[0]
-    print("start_pos", start_pos, "seqlen", seqlen)
+
     mask = (
-        Tensor.full((1, 1, seqlen, start_pos + seqlen), float("-100000000")).triu(start_pos + 1).realize()
+        Tensor.full((1, 1, seqlen, start_pos + seqlen), float("-inf")).triu(start_pos + 1).realize()
         if seqlen > 1
         else None
     )
@@ -172,7 +171,6 @@ def get_last_hidden_states(hidden_states: Tensor, seq_len_list: List[int]) -> Te
         last_states.append(last_state)
         current_idx += seq_len
     return last_states[0]
-    # return Tensor.cat(last_states, dim=0)
 
 
 class TransformerBlock:
@@ -227,6 +225,17 @@ class TinyGradLlamaModel:
         state_dict = weights
         state_dict = {k: v for k, v in state_dict.items() if k.startswith("model.layers.")}
 
+        # Only Tiny grad
+        def permute(v: Tensor, n_heads: int):
+            return v.reshape(n_heads, 2, v.shape[0] // n_heads // 2, v.shape[1]).transpose(1, 2).reshape(*v.shape[:2])
+
+        key_list = list(weights.keys())
+        for k in key_list:
+            if "q_proj" in k:
+                state_dict[k] = permute(state_dict[k], model.config.num_attention_heads)
+            elif "k_proj" in k:
+                state_dict[k] = permute(state_dict[k], model.config.num_key_value_heads)
+
         state_dict = fix_bf16(state_dict)
         load_state_dict(model, state_dict)
 
@@ -247,12 +256,13 @@ class TinyGradLlamaModel:
         if attention_data.attn_mask is not None:
             attention_data.attn_mask = attention_data.attn_mask.cast(hidden_states.dtype).to(hidden_states.device)
         start_pos, seqlen = attention_data.position_ids
-        freqs_cis = self.freqs_cis.shrink((None, (start_pos, start_pos + seqlen), None, None, None))
 
-        hidden_states = hidden_states.unsqueeze(0)
+        freqs_cis = self.freqs_cis.cast(hidden_states.dtype).realize()
+        freqs_cis = freqs_cis.shrink((None, (start_pos, start_pos + seqlen), None, None, None))
+
         hidden_states = self.model(hidden_states, freqs_cis=freqs_cis, attention_data=attention_data)
-
         hidden_states = hidden_states.squeeze(0)
+
         if self.config.decoder_end_layer_idx == self.config.num_hidden_layers:
             hidden_states = get_last_hidden_states(hidden_states, seq_input.seq_len_list)
 
@@ -263,7 +273,7 @@ class TinyGradLlamaModel:
         return hidden_states
 
     def __call__(self, hidden_states, seq_input):
-        return self.forward(hidden_states, seq_input)
+        return self.forward(hidden_states, seq_input).realize()
 
 
 def load(fn: str):
@@ -274,6 +284,8 @@ def load(fn: str):
         return {k: parts[n][k] for k, n in weight_map.items()}
     elif fn.endswith(".gguf"):
         gguf_tensor = Tensor.empty(os.stat(fn).st_size, dtype=dtypes.uint8, device=f"disk:{fn}").to(Device.DEFAULT)
+        from tinygrad.nn.state import gguf_load
+
         return gguf_load(gguf_tensor)[1]
     elif fn.endswith(".safetensors"):
         return safe_load(fn)
@@ -299,14 +311,12 @@ class TinyGradLlamaForCausalLM:
         model_path = get_model_path(model_path)
 
         if (model_path / "model.safetensors.index.json").exists():
-            weights = load(str(model_path / "model.safetensors.index.json"))
+            state_dict = load(str(model_path / "model.safetensors.index.json"))
         elif (model_path / "model.safetensors").exists():
-            weights = load(str(model_path / "model.safetensors"))
+            state_dict = load(str(model_path / "model.safetensors"))
         else:
             raise FileNotFoundError(f"model.safetensors not found in {model_path}")
 
-        state_dict = weights
-        # state_dict = model.read_weight_from_model_path(state_dict, is_merge)
         state_dict = {k.split("model.")[-1]: v for k, v in state_dict.items() if not k.startswith("model.layers.")}
         has_key_list = list(state_dict.keys())
         if "lm_head.weight" not in state_dict:
@@ -324,7 +334,7 @@ class TinyGradLlamaForCausalLM:
     def get_logits(self, hidden_states: Tensor) -> Tensor:
         hidden_states = hidden_states.cast(self.norm.weight.dtype).to(self.norm.weight.device)
         # (seq_len1+seq_len2) x hidden_size
-        logits = self.lm_head(self.norm(hidden_states)).realize()
+        logits = self.lm_head(self.norm(hidden_states))
         return logits
 
 

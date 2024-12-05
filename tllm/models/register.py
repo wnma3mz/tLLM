@@ -1,14 +1,20 @@
-from tllm.models.torch.llama import LlamaModel, TLlamaForCausalLM
-
-MODEL_REGISTER = {"LlamaForCausalLM": (TLlamaForCausalLM, LlamaModel)}
-
 from tllm import HAS_MLX
+from tllm.models.torch.helper import greedy_decode
+from tllm.models.torch.llama import HFLlamaForCausalLM, HFLlamaModel
+
+sampling_func = greedy_decode
+MODEL_REGISTER = {"LlamaForCausalLM": (HFLlamaForCausalLM, HFLlamaModel)}
+
 
 try:
+    # in testing
+    from tllm.models.tinygrad.helper import greedy_decode
     from tllm.models.tinygrad.llama import TinyGradLlamaForCausalLM, TinyGradLlamaModel
 
     MODEL_REGISTER.update({"TinyGradLlamaForCausalLM": (TinyGradLlamaForCausalLM, TinyGradLlamaModel)})
-except ImportError:
+    # MODEL_REGISTER.update({"LlamaForCausalLM": (TinyGradLlamaForCausalLM, TinyGradLlamaModel)})
+    # sampling_func = greedy_decode
+except ImportError as e:
     pass
 
 if HAS_MLX:
@@ -23,12 +29,3 @@ if HAS_MLX:
     from tllm.models.mlx.helper import greedy_decode
 
     sampling_func = greedy_decode
-else:
-    from tllm.models.torch.helper import greedy_decode
-
-    sampling_func = greedy_decode
-
-    # from tinygrad.tensor import Tensor
-    # from typing import List
-    # def sampling_func(logits: Tensor) -> List[int]:
-    #     return logits.argmax(axis=-1).tolist()

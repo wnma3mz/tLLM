@@ -1,6 +1,6 @@
 import glob
 import os
-from typing import *
+from typing import Dict, Optional
 
 import mlx.core as mx
 import mlx.nn as nn
@@ -62,7 +62,7 @@ class MLXQwen2Model(nn.Module):
         return next(self.parameters()).dtype
 
     @classmethod
-    def from_pretrained(cls, config: AutoConfig, model_path: str, state_dict: Optional[Any] = None):
+    def from_pretrained(cls, config: AutoConfig, model_path: str, state_dict: Optional[Dict] = None):
         is_merge = True
         if getattr(config, "quantization", None) is not None or state_dict is not None:
             is_merge = False
@@ -119,7 +119,7 @@ class MLXQwen2ForCausalLM(nn.Module):
         self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @classmethod
-    def from_pretrained(cls, config, model_path: str, state_dict: Optional[Any] = None):
+    def from_pretrained(cls, config, model_path: str, state_dict: Optional[Dict] = None):
         model = cls(config)
 
         cls.config = config
