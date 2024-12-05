@@ -178,8 +178,6 @@ class RequestsCache:
             return empty_k_cache[:total_end], empty_v_cache[:total_end]
 
     def update_tinygrad(self, key_states, value_states, uuid_list, layer_idx):
-        from tinygrad import Tensor
-
         key_lst, value_lst = [], []
         start = 0
 
@@ -193,15 +191,19 @@ class RequestsCache:
             if kv_cache.key_states is None:
                 kv_cache.key_states, kv_cache.value_states = cur_key, cur_value
             else:
-                kv_cache.key_states = Tensor.cat([kv_cache.key_states, cur_key])
-                kv_cache.value_states = Tensor.cat([kv_cache.value_states, cur_value])
+                kv_cache.key_states = kv_cache.key_states.cat(cur_key, dim=1)
+                # Tensor.cat([kv_cache.key_states, cur_key], dim=1)
+                # kv_cache.value_states = Tensor.cat([kv_cache.value_states, cur_value], dim=1)
+                kv_cache.value_states = kv_cache.value_states.cat(cur_value, dim=1)
 
-            kv_cache.set_kv_len(kv_cache.key_states.shape[0])
+            kv_cache.set_kv_len(kv_cache.key_states.shape[1])
             key_lst.append(kv_cache.key_states)
             value_lst.append(kv_cache.value_states)
             start = end
 
-        return Tensor.cat(key_lst), Tensor.cat(value_lst)
+        return key_lst[0], value_lst[0]
+        # return Tensor.cat(key_lst, dim=1), Tensor.cat(value_lst, dim=1)
+        # return key_lst[0].cat(*key_lst[1:], dim=1), value_lst[0].cat(*value_lst[1:], dim=1)
 
 
 class AttentionData:

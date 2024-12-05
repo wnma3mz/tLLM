@@ -27,3 +27,8 @@ else:
     from tllm.models.torch.torch_helper import greedy_decode
 
     sampling_func = greedy_decode
+
+    # from tinygrad.tensor import Tensor
+    # from typing import List
+    # def sampling_func(logits: Tensor) -> List[int]:
+    #     return logits.argmax(axis=-1).tolist()
