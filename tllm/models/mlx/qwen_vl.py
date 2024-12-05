@@ -5,8 +5,8 @@ import mlx.nn as nn
 import numpy as np
 from transformers import AutoConfig, AutoProcessor
 
-from tllm.commons.mlx_layers import PatchEmbed, PatchMerger, VisionMlp, VisionRotaryEmbedding, VisionSdpaAttention
-from tllm.models.mlx_helper import quantization_func, read_state_dict, tie_embedding_weights
+from tllm.models.mlx.helper import quantization_func, read_state_dict, tie_embedding_weights
+from tllm.models.mlx.layers import PatchEmbed, PatchMerger, VisionMlp, VisionRotaryEmbedding, VisionSdpaAttention
 from tllm.models.utils import get_model_path, read_eos_token_ids
 
 

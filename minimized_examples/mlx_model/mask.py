@@ -5,8 +5,8 @@ import os
 import mlx.core as mx
 from mlx_lm.models.llama import ModelArgs
 
-from tllm.commons.mlx_layers import MyAttention
 from tllm.commons.cache import CacheManager
+from tllm.models.mlx.layers import MyAttention
 from tllm.models.mlx_llama import build_forward_cache, build_mlx_mask
 from tllm.models.protocol import SeqInput
 from tllm.models.utils import build_mask

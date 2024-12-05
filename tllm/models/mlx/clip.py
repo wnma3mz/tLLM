@@ -3,14 +3,13 @@
 
 from dataclasses import dataclass
 
-# only vision model
-from typing import *
-
 import mlx.core as mx
 import mlx.nn as nn
 
-from tllm.commons.mlx_layers import VisionEmbeddings
-from tllm.models.mlx_llama import Decoder
+from tllm.models.mlx.layers import VisionEmbeddings
+from tllm.models.mlx.llama import Decoder
+
+# only vision model
 
 
 @dataclass

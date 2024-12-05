@@ -3,7 +3,7 @@ from typing import *
 import mlx.core as mx
 import mlx.nn as nn
 
-from tllm.commons.mlx_layers import MergeParallelLayer
+from tllm.models.mlx.layers import MergeParallelLayer
 
 
 def setup_seed(seed: int):

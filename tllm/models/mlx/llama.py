@@ -8,31 +8,44 @@ from mlx_lm.models.llama import ModelArgs
 import numpy as np
 from transformers import AutoConfig
 
-from tllm.commons.cache import CacheManager
-from tllm.models.mlx_helper import (
+from tllm.commons.cache import AttentionData, CacheManager
+from tllm.models.mlx.helper import (
     build_forward_cache,
-    default_merge_attn_bias,
     default_merge_attn_weight,
     default_merge_mlp_weight,
+    empty_func,
     get_last_hidden_states,
     pop_weight_func,
     quantization_func,
     read_main_state_dict,
     read_state_dict,
 )
-from tllm.models.mlx_llama import Decoder
+from tllm.models.mlx.layers import MLXTransformerBlock
 from tllm.models.utils import get_model_path, read_eos_token_ids
 from tllm.schemas import SeqInput
 
 
-class MLXQwen2Model(nn.Module):
+class Decoder(nn.Module):
+    def __init__(self, args: ModelArgs, start_layer_idx: int, end_layer_idx: int, is_merge: bool):
+        super().__init__()
+        self.vocab_size = args.vocab_size
+        self.num_hidden_layers = args.num_hidden_layers
+        self.layers = [empty_func] * start_layer_idx + [
+            MLXTransformerBlock(args=args, layer_idx=layer_idx, offset=start_layer_idx, is_merge=is_merge)
+            for layer_idx in range(start_layer_idx, end_layer_idx)
+        ]
+
+    def __call__(self, h: mx.array, mask, cache: AttentionData) -> mx.array:
+        for layer in self.layers:
+            h = layer(h, mask, cache=cache)
+        mx.eval(h)  # just for debug test
+        return h
+
+
+class MLXLlamaModel(nn.Module):
     def __init__(self, config: AutoConfig, is_merge: bool = True):
         super().__init__()
-        config_dict = config.to_dict()
-        config_dict.pop("rope_scaling")  # TODO: remove this line
-        args = ModelArgs.from_dict(config_dict)
-        args.attention_bias = True  # for qwen
-        args.o_proj_bias = False  # for qwen
+        args = ModelArgs.from_dict(config.to_dict())
         self.vocab_size = args.vocab_size
         self.cache_manager = CacheManager()
         self.config = config
@@ -46,6 +59,7 @@ class MLXQwen2Model(nn.Module):
         mask = mask if mask is None else mask.astype(hidden_states.dtype)
         output = self.model(hidden_states, mask=mask, cache=attention_data)
 
+        # TODO 异步保存 cache
         for uuid, seq_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
             self.cache_manager.set(uuid, attention_data.get_kv_cache_list(uuid), attention_data.get_cache_seq_len(uuid))
             self.cache_manager.check_alive()
@@ -59,8 +73,9 @@ class MLXQwen2Model(nn.Module):
         return next(self.parameters()).dtype
 
     @classmethod
-    def from_pretrained(cls, config: AutoConfig, model_path: str, state_dict: Optional[Any] = None):
-        is_merge = True
+    def from_pretrained(
+        cls, config: AutoConfig, model_path: str, state_dict: Optional[Any] = None, is_merge: bool = True
+    ):
         if getattr(config, "quantization", None) is not None or state_dict is not None:
             is_merge = False
         model = cls(config, is_merge)
@@ -81,14 +96,12 @@ class MLXQwen2Model(nn.Module):
 
     def read_weight_from_model_path(self, model_path: str, is_merge: bool = True) -> Dict[str, mx.array]:
         print(f"start_idx: {self.config.decoder_start_layer_idx}, end_idx: {self.config.decoder_end_layer_idx}")
-
         weight_files = glob.glob(os.path.join(model_path, "model*.safetensors"))
 
         weights = {}
         for wf in weight_files:
             weights.update(mx.load(wf))
-
-        prefix_key_list = ["model.embed_tokens.", "model.norm.", "lm_head.", "visual."]
+        prefix_key_list = ["model.embed_tokens.", "model.norm.", "lm_head."]
         weights = pop_weight_func(
             prefix_key_list,
             weights,
@@ -96,17 +109,16 @@ class MLXQwen2Model(nn.Module):
             self.config.decoder_start_layer_idx,
             self.config.decoder_end_layer_idx,
         )
-
         if not is_merge:
             return weights
 
         weights = default_merge_attn_weight(weights)
-        weights = default_merge_attn_bias(weights)
         weights = default_merge_mlp_weight(weights)
+
         return weights
 
 
-class MLXQwen2ForCausalLM(nn.Module):
+class MLXLlamaForCausalLM(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.vocab_size = config.vocab_size
@@ -139,5 +151,5 @@ class MLXQwen2ForCausalLM(nn.Module):
         return self.embed_tokens(mx.array(x))
 
     def get_logits(self, hidden_states: mx.array) -> mx.array:
-        logits = self.lm_head(self.norm(hidden_states))
+        logits = self.lm_head(self.norm(hidden_states.astype(self.dtype)))
         return logits

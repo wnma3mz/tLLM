@@ -163,7 +163,6 @@ class LLMGenerator:
             else:
                 sequence_request.generate_text = generate_text
                 sequence_request.output_text += generate_text  # 不添加 end text
-            print("generate text: ", generate_text)
 
             if sequence_request.is_prefill:
                 sequence_request.ttft_cost_time = time.perf_counter() - s0

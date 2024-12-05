@@ -5,7 +5,7 @@ from transformers import AutoConfig
 
 from tllm.commons.communicator import SingleNodeCommunicator
 from tllm.generate import LLMGenerator, TokenizerUtils
-from tllm.models.register import HAS_MLX, MODEL_REGISTER
+from tllm.models.register import MODEL_REGISTER
 
 
 class ModelManager:
@@ -24,8 +24,6 @@ class ModelManager:
             arch = "MLXLlamaForCausalLM"
         else:
             arch = config.architectures[0]
-            if HAS_MLX:
-                arch = "MLX" + arch
 
             if arch not in MODEL_REGISTER:
                 raise ValueError(f"Model {arch} not supported")
@@ -54,8 +52,6 @@ def load_master_model(model_path: str, logger) -> Tuple[LLMGenerator, TokenizerU
     #     tok = TokenizerUtils(tok_path)
     config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
     arch = config.architectures[0]
-    if HAS_MLX:
-        arch = "MLX" + arch
     if arch not in MODEL_REGISTER:
         raise ValueError(f"Model {arch} not supported")
     tok = TokenizerUtils(model_path)
