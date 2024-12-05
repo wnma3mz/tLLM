@@ -2,7 +2,6 @@ import time
 from typing import AsyncGenerator, Dict, List, Optional
 
 import numpy as np
-import torch
 from transformers import AutoImageProcessor, AutoProcessor
 
 from tllm.models.register import sampling_func
@@ -98,13 +97,12 @@ class LLMGenerator:
             calc_cost_time=sum(calc_cost_time_list),
         )
 
-    @torch.inference_mode()
     async def generate(self, sequence_request_list: List[SequenceRequestData]) -> AsyncGenerator:
         """
         @params:
             sequence_request_list: List[SequenceRequestData]
                 Params:
-                    input_ids: torch.Tensor
+                    input_ids: List[int]
 
         """
         uuid_list, input_ids_list, seq_len_list, mm_input_list = [], [], [], []

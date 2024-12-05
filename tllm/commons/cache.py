@@ -2,8 +2,6 @@
 import time
 from typing import *
 
-import torch
-
 from tllm import HAS_MLX
 from tllm.schemas import MIX_TENSOR
 
@@ -13,6 +11,8 @@ if HAS_MLX:
     cat_func = lambda tensors: mx.concat(tensors, axis=0)
     zeros_func = lambda x0, x1, x2: mx.zeros(shape=(x0, x1, x2), dtype=mx.bfloat16)
 else:
+    import torch
+
     cat_func = lambda tensors: torch.cat(tensors, dim=0)
     zeros_func = lambda x0, x1, x2: torch.zeros(size=(x0, x1, x2), dtype=torch.bfloat16)
 
@@ -208,7 +208,7 @@ class AttentionData:
         uuid_list: List[str],
         request_cache: RequestsCache,
         attn_mask: MIX_TENSOR,
-        position_ids: Optional[torch.Tensor] = None,
+        position_ids=None,
     ) -> None:
         self.uuid_list = uuid_list
         self.request_cache = request_cache

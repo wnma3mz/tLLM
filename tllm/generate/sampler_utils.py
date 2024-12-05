@@ -1,23 +1,23 @@
-from typing import *
-
-import torch
-import torch.nn.functional as F
+from typing import List, Optional
 
 from tllm import HAS_MLX
 from tllm.schemas import MIX_TENSOR, SamplingParams
 
 if HAS_MLX:
     import mlx.core as mx
+else:
+    import torch
+    import torch.nn.functional as F
 
 
-def top_k_sampling(logits: torch.Tensor, k: int = 10) -> torch.Tensor:
+def top_k_sampling(logits: MIX_TENSOR, k: int = 10) -> MIX_TENSOR:
     # logits: [seq_len, vocab_size]
     filtered_logits, top_indices = torch.topk(logits, k, dim=-1)
     probs = torch.zeros_like(logits).scatter_(-1, top_indices, F.softmax(filtered_logits, dim=-1))
     return probs
 
 
-def top_p_sampling(logits: torch.Tensor, p: float = 0.9) -> torch.Tensor:
+def top_p_sampling(logits: MIX_TENSOR, p: float = 0.9) -> MIX_TENSOR:
     # logits: [seq_len, vocab_size]
     # TODO: fix
     sorted_logits, sorted_indices = torch.sort(logits, descending=True, dim=-1)
@@ -32,7 +32,7 @@ def top_p_sampling(logits: torch.Tensor, p: float = 0.9) -> torch.Tensor:
     return sorted_indices.gather(-1, next_token.unsqueeze(-1)).squeeze(-1)
 
 
-def temperature_scaling(logits: torch.Tensor, temperature: float = 1.0) -> torch.Tensor:
+def temperature_scaling(logits: MIX_TENSOR, temperature: float = 1.0) -> MIX_TENSOR:
     return logits / temperature
 
 

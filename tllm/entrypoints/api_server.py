@@ -4,7 +4,7 @@ import logging
 import os
 import signal
 import time
-from typing import *
+from typing import Any
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware

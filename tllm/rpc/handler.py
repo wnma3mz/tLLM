@@ -7,7 +7,6 @@ import time
 import uuid
 
 import grpc
-import torch
 
 from tllm.commons.communicator import Communicator, SingleNodeCommunicator
 from tllm.commons.convert import deserialize_tensor, serialize_tensor
@@ -39,6 +38,8 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
         if comm.rank == 0:
             pass
         else:
+            import torch
+
             while self.comm.world_size > 1:
                 self.comm.broadcast_object(uuid_shape_list)
                 seq_input, hidden_states_shape = uuid_shape_list

@@ -17,13 +17,13 @@ class SingleNodeCommunicator:
     def print_rank0(self, *args):
         print(*args)
 
-    def all_reduce(self, x: torch.Tensor) -> torch.Tensor:
+    def all_reduce(self, x: MIX_TENSOR) -> MIX_TENSOR:
         return x
 
-    def all_gather(self, x: torch.Tensor):
+    def all_gather(self, x: MIX_TENSOR):
         return x
 
-    def gather(self, x: torch.Tensor):
+    def gather(self, x: MIX_TENSOR):
         return x
 
     def broadcast(self, x: MIX_TENSOR):

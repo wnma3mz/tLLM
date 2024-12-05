@@ -1,8 +1,7 @@
-from typing import List, Union
+from typing import List
 
 import lz4.frame
 import numpy as np
-import torch
 
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.rpc.schemas_pb2 import BFloat16Tensor
@@ -13,6 +12,8 @@ try:
 
     HAS_MLX = True
 except:
+    import torch
+
     HAS_MLX = False
 
 
@@ -100,10 +101,10 @@ def serialize_tensor(tensor: MIX_TENSOR) -> BFloat16Tensor:
     tensor_proto = BFloat16Tensor()
     # seq_len x hidden_size
     tensor_proto.shape.extend(tensor.shape)
-    if isinstance(tensor, torch.Tensor):
-        tensor_bytes = tensor.to(torch.float16).cpu().detach().numpy().tobytes()
-    else:
+    if HAS_MLX:
         tensor_bytes = bytes(tensor.astype(mx.float16))
+    else:
+        tensor_bytes = tensor.to(torch.float16).cpu().detach().numpy().tobytes()
     flag = tensor.shape[0] >= 64
     tensor_proto.data = lz4.frame.compress(tensor_bytes) if flag else tensor_bytes
     return tensor_proto

@@ -3,7 +3,6 @@ fastapi
 numpy
 requests
 tabulate
-torch
 tqdm
 typing_extensions
 uvicorn

@@ -10,7 +10,6 @@ uvicorn
 websockets
 pillow
 huggingface_hub
-tinygrad
 gradio==5.4.0
 grpcio==1.66.2
 lz4==4.3.3

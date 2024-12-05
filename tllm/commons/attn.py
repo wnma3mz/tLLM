@@ -1,13 +1,13 @@
 from typing import Callable, Dict, Optional, Tuple, Union
 
-import torch
-
 
 def get_attention_implementation() -> Tuple[Callable, str, int]:
     """
     Get the best available attention implementation.
     Returns a tuple of (attention_func, implementation_name)
     """
+    import torch
+
     try:
         from vllm.vllm_flash_attn import flash_attn_varlen_func
 

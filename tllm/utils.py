@@ -1,9 +1,7 @@
 import argparse
 import logging
 import socket
-from typing import *
-
-import torch
+from typing import Tuple
 
 from tllm.commons.manager import load_master_model
 from tllm.engine import AsyncEngine
@@ -13,6 +11,8 @@ from tllm.rpc.master_handler import MasterHandler, PendingRequests
 
 
 def setup_seed(seed):
+    import torch
+
     torch.manual_seed(seed)
 
 
@@ -30,20 +30,6 @@ def parse_range_string(s):
 
 def get_ip_address() -> str:
     return socket.gethostbyname(socket.gethostname())
-
-
-def tensor_to_list(tensor: Optional[torch.Tensor]) -> List:
-    if tensor is None:
-        return None
-    if not isinstance(tensor, torch.Tensor):
-        return tensor
-    return tensor.float().cpu().detach().numpy().tolist()
-
-
-def list_to_tensor(lst: Optional[List]) -> torch.Tensor:
-    if lst is None:
-        return None
-    return torch.tensor(lst)
 
 
 def setup_logger(name, level=logging.INFO):
