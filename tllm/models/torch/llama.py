@@ -51,7 +51,7 @@ class Decoder(nn.Module):
         return hidden_states
 
 
-class TLlamaRotaryEmbedding(LlamaRotaryEmbedding):
+class HFLlamaRotaryEmbedding(LlamaRotaryEmbedding):
     def forward(self, x, position_ids):
         if "dynamic" in self.rope_type:
             self._dynamic_frequency_update(position_ids, device=x.device)
@@ -92,7 +92,7 @@ class HFLlamaModel(nn.Module):
         self.config = config
         self.model = Decoder(config, config.decoder_start_layer_idx, config.decoder_end_layer_idx, is_merge)
         self.num_decoder_layers = config.decoder_end_layer_idx - config.decoder_start_layer_idx
-        self.rotary_emb = TLlamaRotaryEmbedding(config=config)
+        self.rotary_emb = HFLlamaRotaryEmbedding(config=config)
 
     @classmethod
     def from_pretrained(cls, config, model_path: str, state_dict: Optional[Dict] = None, is_merge: bool = True):

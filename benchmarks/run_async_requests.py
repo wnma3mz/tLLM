@@ -30,11 +30,11 @@ async def main():
     messages2 = [{"role": "user", "content": "Hello, What's your name?"}]
     messages3 = [{"role": "user", "content": "今天天气怎么样"}]
 
-    # messages_list = [messages1, messages2, messages3]
-    # print("异步并发请求结果")
-    # s1 = time.time()
-    # await asyncio.gather(*[requests_func(messages) for messages in messages_list])
-    # print(f"time cost: {time.time() - s1:.4f} s")
+    messages_list = [messages1, messages2, messages3]
+    print("异步并发请求结果")
+    s1 = time.time()
+    await asyncio.gather(*[requests_func(messages) for messages in messages_list])
+    print(f"time cost: {time.time() - s1:.4f} s")
 
     print("单独请求结果")
     s1 = time.time()

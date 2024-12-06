@@ -191,15 +191,15 @@ class RequestsCache:
             if kv_cache.key_states is None:
                 kv_cache.key_states, kv_cache.value_states = cur_key, cur_value
             else:
-                kv_cache.key_states = kv_cache.key_states.cat(cur_key, dim=1)
-                kv_cache.value_states = kv_cache.value_states.cat(cur_value, dim=1)
+                kv_cache.key_states = kv_cache.key_states.cat(cur_key, dim=0)
+                kv_cache.value_states = kv_cache.value_states.cat(cur_value, dim=0)
 
-            kv_cache.set_kv_len(kv_cache.key_states.shape[1])
+            kv_cache.set_kv_len(kv_cache.key_states.shape[0])
             key_lst.append(kv_cache.key_states)
             value_lst.append(kv_cache.value_states)
             start = end
 
-        return key_lst[0], value_lst[0]
+        return key_lst[0].cat(*key_lst[1:], dim=0), value_lst[0].cat(*value_lst[1:], dim=0)
 
 
 class AttentionData:

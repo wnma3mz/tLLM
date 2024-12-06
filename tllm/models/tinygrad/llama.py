@@ -46,24 +46,25 @@ def complex_mult(A, c, d):
 
 
 def apply_rotary_emb(xq: Tensor, xk: Tensor, freqs_cis: Tensor) -> Tuple[Tensor, Tensor]:
+    # check seq len
     assert (
-        freqs_cis.shape[1] == xq.shape[1] == xk.shape[1]
+        freqs_cis.shape[0] == xq.shape[0] == xk.shape[0]
     ), f"freqs_cis shape mismatch {freqs_cis.shape} xq:{xq.shape} xk:{xk.shape}"
     xq = xq.reshape(*xq.shape[0:-1], -1, 2)
     xk = xk.reshape(*xk.shape[0:-1], -1, 2)
-    assert len(xq.shape) == len(xk.shape) == len(freqs_cis.shape) == 5
+    assert len(xq.shape) == len(xk.shape) == len(freqs_cis.shape) == 4
     c, d = freqs_cis[..., 0:1], freqs_cis[..., 1:2]
     xq_out = complex_mult(xq, c, d)
     xk_out = complex_mult(xk, c, d)
-    return xq_out.flatten(3), xk_out.flatten(3)
+    return xq_out.flatten(2), xk_out.flatten(2)
 
 
 def repeat_kv(x: Tensor, n_rep: int) -> Tensor:
-    bs, seqlen, n_kv_heads, head_dim = x.shape
+    seqlen, n_kv_heads, head_dim = x.shape
     if n_rep == 1:
         return x
     # NOTE: this is different from x.repeat((1, 1, n_rep, 1))
-    return x.repeat((1, 1, 1, n_rep)).reshape(bs, seqlen, n_kv_heads * n_rep, head_dim)
+    return x.repeat((1, 1, n_rep)).reshape(seqlen, n_kv_heads * n_rep, head_dim)
 
 
 class Attention:
@@ -85,6 +86,19 @@ class Attention:
         self.v_proj = linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
+    def _rope(self, xq, xk, freqs_cis: List, request_cache: RequestsCache, uuid_list: List[str]):
+        xq_list, xk_list = [], []
+        start = 0
+        import copy
+
+        for uuid, fc in zip(uuid_list, freqs_cis):
+            end = start + request_cache.get_seq_len(uuid)
+            xq_, xk_ = apply_rotary_emb(copy.deepcopy(xq[start:end]), copy.deepcopy(xk[start:end]), fc)
+            xq_list.append(xq_)
+            xk_list.append(xk_)
+            start = end
+        return xq_list[0].cat(*xq_list[1:], dim=0), xk_list[0].cat(*xk_list[1:], dim=0)
+
     def __call__(
         self,
         x: Tensor,
@@ -92,30 +106,33 @@ class Attention:
         attention_data: AttentionData,
     ) -> Tensor:
         # bsz x seq_len x hidden_size
+        L, _ = x.shape
         if getenv("WQKV"):
             if not hasattr(self, "wqkv"):
                 self.wqkv = Tensor.cat(self.q_proj.weight, self.k_proj.weight, self.v_proj.weight)
             xqkv = x @ self.wqkv.T
             xq, xk, xv = xqkv.split(
-                [self.q_proj.weight.shape[0], self.k_proj.weight.shape[0], self.v_proj.weight.shape[0]], dim=2
+                [self.q_proj.weight.shape[0], self.k_proj.weight.shape[0], self.v_proj.weight.shape[0]], dim=1
             )
         else:
             xq, xk, xv = self.q_proj(x), self.k_proj(x), self.v_proj(x)
 
-        xq = xq.reshape(xq.shape[0], xq.shape[1], self.num_heads, self.head_dim)
-        xk = xk.reshape(xk.shape[0], xk.shape[1], self.num_key_value_heads, self.head_dim)
-        xv = xv.reshape(xv.shape[0], xv.shape[1], self.num_key_value_heads, self.head_dim)
+        xq = xq.reshape(L, self.num_heads, self.head_dim)
+        xk = xk.reshape(L, self.num_key_value_heads, self.head_dim)
+        xv = xv.reshape(L, self.num_key_value_heads, self.head_dim)
 
-        xq, xk = apply_rotary_emb(xq, xk, freqs_cis)
-        bsz, seqlen, _, _ = xq.shape
+        xq, xk = self._rope(xq, xk, freqs_cis, attention_data.request_cache, attention_data.uuid_list)
+
+        seqlen, _, _ = xq.shape
 
         cache = attention_data.request_cache
         keys, values = cache.update_tinygrad(xk, xv, attention_data.uuid_list, self.layer_idx)
 
         keys, values = repeat_kv(keys, self.num_key_value_groups), repeat_kv(values, self.num_key_value_groups)
+        xq, keys, values = xq.unsqueeze(0), keys.unsqueeze(0), values.unsqueeze(0)
         xq, keys, values = xq.transpose(1, 2), keys.transpose(1, 2), values.transpose(1, 2)
         attn = xq.scaled_dot_product_attention(keys, values, attention_data.attn_mask).transpose(1, 2)
-        attn = attn.reshape(bsz, seqlen, -1)
+        attn = attn[0].reshape(seqlen, -1)
         return self.o_proj(attn)
 
 
@@ -133,13 +150,28 @@ class FeedForward:
         return self.down_proj(self.gate_proj(x).silu() * self.up_proj(x))  # SwiGLU [arxiv/2002.05202, eq (5)]
 
 
+def build_tinygrad_mask(q_len_list: List[int], k_len_list: List[int]) -> Tensor:
+    mask_list = [
+        Tensor.ones((L, S)).triu(1) if L > 1 else Tensor.zeros((L, S)) for (L, S) in zip(q_len_list, k_len_list)
+    ]
+
+    combined_mask = Tensor.zeros((sum(q_len_list), sum(k_len_list))).contiguous()
+
+    l_index, r_index = 0, 0
+    for mask in mask_list:
+        combined_mask[l_index : l_index + mask.shape[0], r_index : r_index + mask.shape[1]] = mask
+        l_index += mask.shape[0]
+        r_index += mask.shape[1]
+
+    final_mask = Tensor.where(combined_mask, float("-inf"), 0).realize()
+    return final_mask
+
+
 def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_layers: int) -> AttentionData:
     request_cache = RequestsCache(num_layers)
     q_len_list, k_len_list = [], []
     for uuid, q_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
         if uuid in cache_manager.cache_dict:
-            # kv_cache 是整个历史的 kv_cache
-            # 当 q_len 为 1 时，直接使用 kv_cache，使用历史的全部 token kv cache
             layer_cache_list, cache_seq_len = cache_manager.get(uuid)
             k_len_list.append(cache_seq_len + q_len)
         else:
@@ -148,17 +180,11 @@ def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_la
         q_len_list.append(q_len)
         request_cache.add(uuid, q_len, layer_cache_list)
 
-    # TODO: support multi request
-    start_pos = k_len_list[0] - q_len_list[0]
-    seqlen = q_len_list[0]
-
-    mask = (
-        Tensor.full((1, 1, seqlen, start_pos + seqlen), float("-inf")).triu(start_pos + 1).realize()
-        if seqlen > 1
-        else None
-    )
     return AttentionData(
-        request_cache=request_cache, attn_mask=mask, uuid_list=seq_input.uuid_list, position_ids=[start_pos, seqlen]
+        request_cache=request_cache,
+        attn_mask=build_tinygrad_mask(q_len_list, k_len_list),
+        uuid_list=seq_input.uuid_list,
+        position_ids=[q_len_list, k_len_list],
     )
 
 
@@ -170,7 +196,7 @@ def get_last_hidden_states(hidden_states: Tensor, seq_len_list: List[int]) -> Te
         last_state = sequence[-1:]
         last_states.append(last_state)
         current_idx += seq_len
-    return last_states[0]
+    return last_states[0].cat(*last_states[1:], dim=0)
 
 
 class TransformerBlock:
@@ -206,7 +232,7 @@ class TinyGradLlamaModel:
                 self.config.max_position_embeddings * 2,
                 self.config.rope_theta,
                 rope_scaling=self.config.rope_scaling,
-            ).contiguous()
+            ).contiguous()[0]
         return self._freqs_cis
 
     @classmethod
@@ -251,17 +277,20 @@ class TinyGradLlamaModel:
 
         @return: bs x seq_len x hidden_size
         """
+        # Not support multi requests
         attention_data = build_forward_cache(seq_input, self.cache_manager, self.num_decoder_layers)
 
         if attention_data.attn_mask is not None:
             attention_data.attn_mask = attention_data.attn_mask.cast(hidden_states.dtype).to(hidden_states.device)
-        start_pos, seqlen = attention_data.position_ids
+        q_len_list, k_len_list = attention_data.position_ids
 
-        freqs_cis = self.freqs_cis.cast(hidden_states.dtype).realize()
-        freqs_cis = freqs_cis.shrink((None, (start_pos, start_pos + seqlen), None, None, None))
+        freqs_cis = []
+        for q_len, k_len in zip(q_len_list, k_len_list):
+            tmp_freqs_cis = self.freqs_cis.cast(hidden_states.dtype).realize()
+            tmp_freqs_cis = tmp_freqs_cis.shrink(((k_len - q_len, k_len), None, None, None))
+            freqs_cis.append(tmp_freqs_cis)
 
         hidden_states = self.model(hidden_states, freqs_cis=freqs_cis, attention_data=attention_data)
-        hidden_states = hidden_states.squeeze(0)
 
         if self.config.decoder_end_layer_idx == self.config.num_hidden_layers:
             hidden_states = get_last_hidden_states(hidden_states, seq_input.seq_len_list)
@@ -329,7 +358,8 @@ class TinyGradLlamaForCausalLM:
         return model
 
     def get_input_embeddings(self, x: np.ndarray) -> Tensor:
-        return self.embed_tokens(Tensor(x, device=self.embed_tokens.weight.device))
+        # bs x seq_len x hidden_size -> seq_len x hidden_size
+        return self.embed_tokens(Tensor(x, device=self.embed_tokens.weight.device))[0]
 
     def get_logits(self, hidden_states: Tensor) -> Tensor:
         hidden_states = hidden_states.cast(self.norm.weight.dtype).to(self.norm.weight.device)

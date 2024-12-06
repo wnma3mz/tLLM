@@ -11,9 +11,9 @@ try:
     from tllm.models.tinygrad.helper import greedy_decode
     from tllm.models.tinygrad.llama import TinyGradLlamaForCausalLM, TinyGradLlamaModel
 
-    MODEL_REGISTER.update({"TinyGradLlamaForCausalLM": (TinyGradLlamaForCausalLM, TinyGradLlamaModel)})
-    # MODEL_REGISTER.update({"LlamaForCausalLM": (TinyGradLlamaForCausalLM, TinyGradLlamaModel)})
-    # sampling_func = greedy_decode
+    # MODEL_REGISTER.update({"TinyGradLlamaForCausalLM": (TinyGradLlamaForCausalLM, TinyGradLlamaModel)})
+    MODEL_REGISTER.update({"LlamaForCausalLM": (TinyGradLlamaForCausalLM, TinyGradLlamaModel)})
+    sampling_func = greedy_decode
 except ImportError as e:
     pass
 

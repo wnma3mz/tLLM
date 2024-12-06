@@ -49,7 +49,7 @@ class SamplerUtils:
         elif self.method == "sampling":
             return self.sampling_decode(logits, sampling_params)
 
-    def sampling_decode(self, logits: torch.Tensor, sampling_params: SamplingParams) -> List[int]:
+    def sampling_decode(self, logits: MIX_TENSOR, sampling_params: SamplingParams) -> List[int]:
         generate_logits = logits[:, -1]
         top_k = sampling_params.top_k
         top_p = sampling_params.top_p
@@ -67,7 +67,7 @@ class SamplerUtils:
             next_token = torch.multinomial(temperature_scaled_logits, 1).squeeze(-1)
         return next_token.tolist()
 
-    def beam_search_decode(self, logits: torch.Tensor, sampling_params: SamplingParams) -> List[List[int]]:
+    def beam_search_decode(self, logits: MIX_TENSOR, sampling_params: SamplingParams) -> List[List[int]]:
         max_len = sampling_params.max_tokens
         top_k = sampling_params.top_k
         top_p = sampling_params.top_p
