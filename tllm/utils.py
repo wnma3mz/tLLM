@@ -1,5 +1,4 @@
 import logging
-import socket
 from typing import Tuple
 
 from tllm import BACKEND, BackendEnum
@@ -15,10 +14,6 @@ def setup_seed(seed: int = 42):
         import torch
 
         torch.manual_seed(seed)
-
-
-def get_ip_address() -> str:
-    return socket.gethostbyname(socket.gethostname())
 
 
 def setup_logger(name, level=logging.INFO):

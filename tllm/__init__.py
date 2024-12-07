@@ -1,5 +1,5 @@
 from enum import Enum
-import importlib
+import importlib.util
 
 
 class BackendEnum(Enum):

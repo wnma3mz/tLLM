@@ -47,7 +47,7 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
 
                 _ = self.http_client.model.forward(hidden_states, seq_input=seq_input)
 
-    async def start(self, ip_addr: str = "localhost", port: int = 50051):
+    async def start(self, ip_addr: str, port: int = 50051):
         self.server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=10), options=self.grpc_options)
 
         schemas_pb2_grpc.add_RPCServiceServicer_to_server(self, self.server)
@@ -131,17 +131,16 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--host", type=str, default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=50051)
-    parser.add_argument("--master_url", type=str, default="http://localhost:8000", help="master 的地址")
-    parser.add_argument("--ip_addr", type=str, default="localhost", help="提供给 master 连接的 ip, 如 localhost")
+    parser.add_argument("--port", type=int, default=50051, help="gRPC 服务的端口")
+    parser.add_argument("--master_url", type=str, required=True, help="master 的地址")
+    parser.add_argument("--ip_addr", type=str, required=True, help="提供给 master 连接的 ip, 如 localhost")
     parser.add_argument("--is_debug", action="store_true")
     return parser.parse_args()
 
 
 async def run(args):
     comm = Communicator()
-    logger_name = "handler"
+    logger_name = f"handler-{args.ip_addr}:{args.port}"
     logger = setup_logger(logger_name, logging.DEBUG if args.is_debug else logging.INFO)
 
     rpc_servicer = RPCHandler(comm, logger, args.master_url)
