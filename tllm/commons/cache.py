@@ -2,19 +2,19 @@
 import time
 from typing import Dict, List, Optional, Tuple, Union
 
-from tllm import BACKEND, BackendEnum
+from tllm import BACKEND, DTYPE, BackendEnum
 from tllm.schemas import MIX_TENSOR
 
 if BACKEND == BackendEnum.MLX:
     import mlx.core as mx
 
     cat_func = lambda tensors: mx.concat(tensors, axis=0)
-    zeros_func = lambda x0, x1, x2: mx.zeros(shape=(x0, x1, x2), dtype=mx.bfloat16)
+    zeros_func = lambda x0, x1, x2: mx.zeros(shape=(x0, x1, x2), dtype=DTYPE)
 else:
     import torch
 
     cat_func = lambda tensors: torch.cat(tensors, dim=0)
-    zeros_func = lambda x0, x1, x2: torch.zeros(size=(x0, x1, x2), dtype=torch.bfloat16)
+    zeros_func = lambda x0, x1, x2: torch.zeros(size=(x0, x1, x2), dtype=DTYPE)
 
 
 KV_CACHE_TYPE = Tuple[MIX_TENSOR, MIX_TENSOR]

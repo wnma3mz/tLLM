@@ -3,7 +3,7 @@ from typing import List
 import lz4.frame
 import numpy as np
 
-from tllm import BACKEND, BackendEnum
+from tllm import BACKEND, DTYPE, BackendEnum
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.rpc.schemas_pb2 import BFloat16Tensor
 from tllm.schemas import MIX_TENSOR
@@ -12,12 +12,12 @@ if BACKEND == BackendEnum.MLX:
     import mlx.core as mx
 
     serialize_func = lambda tensor: bytes(tensor.astype(mx.float16))
-    deserialize_func = lambda x: mx.array(np.frombuffer(x[1], dtype=np.float16), dtype=mx.bfloat16).reshape(*x[0].shape)
+    deserialize_func = lambda x: mx.array(np.frombuffer(x[1], dtype=np.float16), dtype=DTYPE).reshape(*x[0].shape)
 else:
     import torch
 
     serialize_func = lambda tensor: tensor.to(torch.float16).cpu().detach().numpy().tobytes()
-    deserialize_func = lambda x: torch.frombuffer(x[1], dtype=torch.float16).to(torch.bfloat16).view(*x[0].shape)
+    deserialize_func = lambda x: torch.frombuffer(x[1], dtype=torch.float16).to(DTYPE).view(*x[0].shape)
 
 
 def protobuf_to_list(proto_message):

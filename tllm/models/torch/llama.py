@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 from transformers.models.llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
 
+from tllm import DEVICE, DTYPE
 from tllm.commons.attn import get_attention_implementation
 from tllm.commons.cache import AttentionData, CacheManager
 from tllm.models.torch.helper import EmptyLayer, build_forward_cache
@@ -14,13 +15,6 @@ from tllm.models.weight_helper import default_merge_attn_weight, default_merge_m
 from tllm.schemas import SeqInput
 
 _, attention_type = get_attention_implementation()
-
-DTYPE = torch.bfloat16
-if torch.cuda.is_available():
-    DEVICE = "cuda:0"
-    DTYPE = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-else:
-    DEVICE = "cpu"
 
 
 class Decoder(nn.Module):
@@ -76,8 +70,6 @@ def get_last_hidden_states(hidden_states: torch.Tensor, seq_len_list: List[int])
 class HFLlamaModel(nn.Module):
     def __init__(self, config, is_merge: bool = True):
         super().__init__()
-        self.dtype = DTYPE
-        self.device = DEVICE
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.cache_manager = CacheManager()
@@ -92,7 +84,7 @@ class HFLlamaModel(nn.Module):
         state_dict = model.merge_weights(state_dict, is_merge)
         model.load_state_dict(state_dict)
 
-        model.to(model.dtype).to(model.device)
+        model.to(DTYPE).to(DEVICE)
         model.eval()
         return model
 
@@ -102,20 +94,20 @@ class HFLlamaModel(nn.Module):
             "self_attn.o_proj": "self_attn.o_proj.layer",
             "mlp.down_proj": "mlp.down_proj.layer",
         }
-        key_list = list(weights.keys())
+        key_list = list(state_dict.keys())
         for key in key_list:
             for s_key, t_key in layer_name_mapper.items():
                 if s_key in key:
                     # w_list = w.chunk(self.world_size, dim=1)[self.rank]
-                    weights[key.replace(s_key, t_key)] = weights.pop(key)
+                    state_dict[key.replace(s_key, t_key)] = state_dict.pop(key)
 
         if not is_merge:
-            return weights
-        # torch.chunk(layer_weights[qkv], self.world_size, dim=0)
-        weights = default_merge_attn_weight(weights)
-        # torch.chunk(layer_weights[mlp], self.world_size, dim=0)
-        weights = default_merge_mlp_weight(weights)
-        return weights
+            return state_dict
+        # torch.chunk(state_dict[qkv], self.world_size, dim=0)
+        state_dict = default_merge_attn_weight(state_dict)
+        # torch.chunk(state_dict[mlp], self.world_size, dim=0)
+        state_dict = default_merge_mlp_weight(state_dict)
+        return state_dict
 
     @torch.inference_mode()
     def forward(self, hidden_states: torch.Tensor, seq_input: SeqInput) -> torch.Tensor:
@@ -129,14 +121,14 @@ class HFLlamaModel(nn.Module):
         @return: seq_len x hidden_size
         """
         attention_data = build_forward_cache(seq_input, self.cache_manager, self.num_decoder_layers)
-        hidden_states = hidden_states.to(self.device)
-        position_embeddings = self.rotary_emb(hidden_states, attention_data.position_ids.to(self.device))
+        hidden_states = hidden_states.to(DTYPE).to(DEVICE)
+        position_embeddings = self.rotary_emb(hidden_states, attention_data.position_ids.to(DEVICE))
         if attention_type == "flash_attention":
             attention_data.attn_mask = {
-                k: v.to(self.device) if isinstance(v, torch.Tensor) else v for k, v in attention_data.attn_mask.items()
+                k: v.to(DEVICE) if isinstance(v, torch.Tensor) else v for k, v in attention_data.attn_mask.items()
             }
         else:
-            attention_data.attn_mask = attention_data.attn_mask.to(self.device)
+            attention_data.attn_mask = attention_data.attn_mask.to(DEVICE)
 
         hidden_states = self.model(
             hidden_states, position_embeddings=position_embeddings, attention_data=attention_data
@@ -155,8 +147,6 @@ class HFLlamaModel(nn.Module):
 class HFLlamaForCausalLM(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dtype = DTYPE
-        self.device = DEVICE
         self.vocab_size = config.vocab_size
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -171,17 +161,17 @@ class HFLlamaForCausalLM(nn.Module):
         cls.eos_token_ids = read_eos_token_ids(config)
 
         model.load_state_dict(state_dict)
-        model.to(model.dtype).to(model.device)
+        model.to(DTYPE).to(DEVICE)
         model.eval()
         return model
 
     @torch.inference_mode()
     def get_input_embeddings(self, x: np.ndarray) -> torch.Tensor:
-        return self.embed_tokens(torch.tensor(x, device=self.device))
+        return self.embed_tokens(torch.tensor(x, device=DEVICE))
 
     @torch.inference_mode()
     def get_logits(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = hidden_states.to(self.dtype).to(self.norm.weight.device)
+        hidden_states = hidden_states.to(DTYPE).to(DEVICE)
         # (seq_len1+seq_len2) x hidden_size
         logits = self.lm_head(self.norm(hidden_states))
         return logits
