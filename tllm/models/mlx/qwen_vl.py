@@ -5,6 +5,7 @@ import mlx.nn as nn
 import numpy as np
 from transformers import AutoConfig, AutoProcessor
 
+from tllm import DTYPE
 from tllm.models.mlx.helper import quantization_func
 from tllm.models.mlx.layers import PatchEmbed, PatchMerger, VisionMlp, VisionRotaryEmbedding, VisionSdpaAttention
 from tllm.models.utils import read_eos_token_ids
@@ -96,7 +97,6 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.vocab_size = config.vocab_size
-        self.dtype = mx.bfloat16
         self.visual = Qwen2VisionModel(config.vision_config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -133,36 +133,34 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
         image_grid_thw: Optional[np.ndarray] = None,
         video_grid_thw: Optional[np.ndarray] = None,
     ) -> mx.array:
-        input_ids = mx.array(x)
-        inputs_embeds = self.embed_tokens(input_ids)
+        inputs_embeds = self.embed_tokens(mx.array(x))
 
         if pixel_values is not None:
-            pixel_values = mx.array(pixel_values).astype(self.dtype)
+            pixel_values = mx.array(pixel_values).astype(DTYPE)
             image_embeds = self.visual(pixel_values, grid_thw=mx.array(image_grid_thw))
-            n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
+            n_image_tokens = (x == self.config.image_token_id).sum().item()
             n_image_features = image_embeds.shape[0]
             if n_image_tokens != n_image_features:
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
                 )
-
-            image_mask = input_ids == self.config.image_token_id  # shape: (seq_len, )
+            image_mask = x == self.config.image_token_id  # shape: (seq_len, )
             image_mask_ind = [i for i, val in enumerate(image_mask) if val]
             image_embeds = image_embeds.astype(inputs_embeds.dtype)
 
             inputs_embeds[image_mask_ind] = image_embeds  # mlx not support bool mask
 
         if pixel_values_videos is not None:
-            pixel_values_videos = mx.array(pixel_values_videos).astype(self.dtype)
+            pixel_values_videos = mx.array(pixel_values_videos).astype(DTYPE)
             video_embeds = self.visual(pixel_values_videos, grid_thw=mx.array(video_grid_thw))
-            n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
+            n_video_tokens = (x == self.config.video_token_id).sum().item()
             n_video_features = video_embeds.shape[0]
             if n_video_tokens != n_video_features:
                 raise ValueError(
                     f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
                 )
 
-            video_mask = input_ids == self.config.video_token_id  # shape: (seq_len, )
+            video_mask = x == self.config.video_token_id  # shape: (seq_len, )
             video_mask_ind = [i for i, val in enumerate(video_mask) if val]
             video_embeds = video_embeds.astype(inputs_embeds.dtype)
             inputs_embeds[video_mask_ind] = video_embeds  # mlx not support bool mask

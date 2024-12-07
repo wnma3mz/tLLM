@@ -13,7 +13,6 @@ from tllm.static.gradio_data import GenerationConfig, custom_css
 
 
 def process_response_chunk(chunk: bytes) -> Optional[Dict]:
-    """处理响应的数据块"""
     try:
         response_text = chunk.decode("utf-8").split("data: ")[-1].strip()
         if response_text == "[DONE]":

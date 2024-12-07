@@ -83,6 +83,8 @@ class LLMGenerator:
         self.tok = tok
         self.processor = getattr(model, "processor", None)
         self.mm_config = getattr(model, "mm_config", None)
+        if self.processor is not None:
+            self.logger.info("LLMGenerator Support Multi-Modal")
 
     def update_url(self, url: str, pp_size: int):
         self.manager.update_url(url, pp_size)

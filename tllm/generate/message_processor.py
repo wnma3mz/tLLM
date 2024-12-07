@@ -28,7 +28,7 @@ class MessageProcessor:
             raise NotImplementedError("url is not supported")
         if image.file_path is not None:
             return Image.open(image.file_path)
-        raise ValueError("image must have url or file_path")
+        raise ValueError("image must have url or file_path or base64")
 
     async def parse_mm_input(self, contents: List[MultiModalContent]) -> Tuple[str, Dict[str, ImageFile]]:
         text, mm_input = "", {}
@@ -64,7 +64,6 @@ class MessageProcessor:
                     mm_type = key
                 elif mm_type != key:
                     raise ValueError(f"mm_input must be the same type")
-        print("mm_input_dict", mm_input_dict)
         return new_messages, mm_input_dict
 
     def preprocess(self, messages: List[Dict[str, str]]) -> List[int]:

@@ -51,13 +51,13 @@ def post_process(data: SequenceRequestData):
 
 
 class AsyncEngine:
-    def __init__(self, logger, generator: LLMGenerator):
+    def __init__(self, logger, generator: LLMGenerator, sleep_time: float = 0.0, limit_size: int = 5):
         self.generator = generator
         self.prefill_queue: asyncio.Queue = asyncio.Queue()
         self.decoding_queue: asyncio.Queue = asyncio.Queue()
         self.processing_task = None
-        self.limit_size: int = 5  # 每次最多处理 5 个请求，prefill + decode
-        self.sleep_time: float = 0.0
+        self.limit_size: int = limit_size  # 每次最多处理 5 个请求，prefill + decode
+        self.sleep_time: float = sleep_time
         self.logger = logger
         self.abort_queue: asyncio.Queue = asyncio.Queue()
         self.queue_not_empty: asyncio.Event = asyncio.Event()  # 暂时无效，报错 async attached to a different loop
