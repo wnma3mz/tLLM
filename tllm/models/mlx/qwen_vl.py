@@ -7,7 +7,7 @@ from transformers import AutoConfig, AutoProcessor
 
 from tllm.models.mlx.helper import quantization_func, read_state_dict, tie_embedding_weights
 from tllm.models.mlx.layers import PatchEmbed, PatchMerger, VisionMlp, VisionRotaryEmbedding, VisionSdpaAttention
-from tllm.models.utils import get_model_path, read_eos_token_ids
+from tllm.models.utils import read_eos_token_ids
 
 
 class Qwen2VLVisionBlock(nn.Module):
@@ -107,7 +107,6 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
         model = cls(config)
 
         # load processor
-        model_path = get_model_path(model_path)
         model.processor = AutoProcessor.from_pretrained(model_path, trust_remote_code=True)
         model.mm_config = {
             "vision_start_id": config.vision_start_token_id,

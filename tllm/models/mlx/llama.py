@@ -18,13 +18,8 @@ from tllm.models.mlx.helper import (
     read_state_dict,
 )
 from tllm.models.mlx.layers import MLXTransformerBlock
-from tllm.models.utils import (
-    default_merge_attn_weight,
-    default_merge_mlp_weight,
-    get_model_path,
-    pop_weight_func,
-    read_eos_token_ids,
-)
+from tllm.models.utils import read_eos_token_ids
+from tllm.models.weight_helper import default_merge_attn_weight, default_merge_mlp_weight, pop_weight_func
 from tllm.schemas import SeqInput
 
 
@@ -83,7 +78,6 @@ class MLXLlamaModel(nn.Module):
             is_merge = False
         model = cls(config, is_merge)
         if state_dict is None:
-            model_path = get_model_path(model_path)
             weights = model.read_weight_from_model_path(model_path, is_merge)
         else:
             weights = state_dict

@@ -10,7 +10,7 @@ from tinygrad.helpers import getenv
 from tinygrad.nn.state import load_state_dict, safe_load, torch_load
 
 from tllm.commons.cache import AttentionData, CacheManager, RequestsCache
-from tllm.models.utils import get_model_path, read_eos_token_ids
+from tllm.models.utils import read_eos_token_ids
 from tllm.schemas import SeqInput
 
 # Edited from https://github.com/tinygrad/tinygrad/blob/master/extra/models/llama.py
@@ -238,7 +238,6 @@ class TinyGradLlamaModel:
     @classmethod
     def from_pretrained(cls, config, model_path: str, state_dict: Optional[Dict] = None, is_merge: bool = True):
         model = cls(config)
-        model_path = get_model_path(model_path)
 
         if (model_path / "model.safetensors.index.json").exists():
             weights = load(str(model_path / "model.safetensors.index.json"))
@@ -336,8 +335,6 @@ class TinyGradLlamaForCausalLM:
         cls.config = config
         cls.num_layers = config.num_hidden_layers
         cls.eos_token_ids = read_eos_token_ids(config)
-
-        model_path = get_model_path(model_path)
 
         if (model_path / "model.safetensors.index.json").exists():
             state_dict = load(str(model_path / "model.safetensors.index.json"))

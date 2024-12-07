@@ -7,7 +7,7 @@ import mlx.core as mx
 import mlx.nn as nn
 
 from tllm.commons.cache import AttentionData, CacheManager, RequestsCache
-from tllm.models.utils import get_model_path, get_weight_path
+from tllm.models.file_helper import get_weight_path
 from tllm.schemas import SeqInput
 
 
@@ -88,7 +88,6 @@ def get_last_hidden_states(hidden_states: mx.array, seq_len_list: List[int]) -> 
 
 
 def read_state_dict(model_path: str) -> Dict[str, mx.array]:
-    model_path = get_model_path(model_path)
     file_set, prefix_key_list = get_weight_path(model_path)
     state_dict = {}
     for file in file_set:

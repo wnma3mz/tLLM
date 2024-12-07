@@ -5,6 +5,7 @@ from transformers import AutoConfig
 
 from tllm.commons.communicator import SingleNodeCommunicator
 from tllm.generate import LLMGenerator, TokenizerUtils
+from tllm.models.file_helper import get_model_path
 from tllm.models.register import MODEL_REGISTER
 
 
@@ -14,19 +15,15 @@ class ModelManager:
         self.end_idx = end_idx
 
     def load_model(self, comm: SingleNodeCommunicator, model_path: str):
+        model_path = get_model_path(model_path)
+
         config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
         config.comm = comm
 
         config.decoder_start_layer_idx = self.start_idx
         config.decoder_end_layer_idx = self.end_idx
 
-        if model_path.endswith(".gguf"):
-            arch = "MLXLlamaForCausalLM"
-        else:
-            arch = config.architectures[0]
-
-            if arch not in MODEL_REGISTER:
-                raise ValueError(f"Model {arch} not supported")
+        arch = config.architectures[0]
 
         _, MY_MODEL_CLASS = MODEL_REGISTER[arch]
 
@@ -50,6 +47,8 @@ def load_master_model(model_path: str, logger) -> Tuple[LLMGenerator, TokenizerU
     #     state_dict, config, _ = load_gguf_weight(model_path)
     #     tok_path = ...
     #     tok = TokenizerUtils(tok_path)
+    model_path = get_model_path(model_path)
+
     config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
     arch = config.architectures[0]
     if arch not in MODEL_REGISTER:

@@ -17,13 +17,12 @@ from tllm.models.mlx.helper import (
     read_state_dict,
 )
 from tllm.models.mlx.llama import Decoder
-from tllm.models.utils import (
+from tllm.models.utils import read_eos_token_ids
+from tllm.models.weight_helper import (
     default_merge_attn_bias,
     default_merge_attn_weight,
     default_merge_mlp_weight,
-    get_model_path,
     pop_weight_func,
-    read_eos_token_ids,
 )
 from tllm.schemas import SeqInput
 
@@ -68,7 +67,6 @@ class MLXQwen2Model(nn.Module):
             is_merge = False
         model = cls(config, is_merge)
         if state_dict is None:
-            model_path = get_model_path(model_path)
             weights = model.read_weight_from_model_path(model_path, is_merge)
         else:
             weights = state_dict

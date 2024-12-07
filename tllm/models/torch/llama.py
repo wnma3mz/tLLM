@@ -9,16 +9,11 @@ from transformers.models.llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEm
 
 from tllm.commons.attn import get_attention_implementation
 from tllm.commons.cache import AttentionData, CacheManager
+from tllm.models.file_helper import get_weight_path
 from tllm.models.torch.helper import EmptyLayer, build_forward_cache, read_from_safetensors
 from tllm.models.torch.layers import LlamaDecoderLayer
-from tllm.models.utils import (
-    default_merge_attn_weight,
-    default_merge_mlp_weight,
-    get_model_path,
-    get_weight_path,
-    pop_weight_func,
-    read_eos_token_ids,
-)
+from tllm.models.utils import read_eos_token_ids
+from tllm.models.weight_helper import default_merge_attn_weight, default_merge_mlp_weight, pop_weight_func
 from tllm.schemas import SeqInput
 
 _, attention_type = get_attention_implementation()
@@ -97,7 +92,6 @@ class HFLlamaModel(nn.Module):
     @classmethod
     def from_pretrained(cls, config, model_path: str, state_dict: Optional[Dict] = None, is_merge: bool = True):
         model = cls(config, is_merge)
-        model_path = get_model_path(model_path)
         state_dict = model.read_weight_from_model_path(model_path, is_merge)
         model.load_state_dict(state_dict)
 
@@ -193,7 +187,6 @@ class HFLlamaForCausalLM(nn.Module):
         cls.num_layers = config.num_hidden_layers
         cls.eos_token_ids = read_eos_token_ids(config)
 
-        model_path = get_model_path(model_path)
         file_set, prefix_key_list = get_weight_path(model_path)
         state_dict = {}
         for file in file_set:

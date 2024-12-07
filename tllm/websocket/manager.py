@@ -5,9 +5,10 @@ from typing import Dict, List, Optional, Set, Tuple, Union
 
 from fastapi import WebSocket
 
+from tllm.models.file_helper import parse_model_size, split_model_layers
 from tllm.rpc.manager import ClientRPCManager
 from tllm.schemas import ClientData, InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
-from tllm.websocket.utils import find_continuous_path, parse_model_size, split_model_layers
+from tllm.websocket.utils import find_continuous_path
 
 
 class WebsocketManager:
@@ -24,7 +25,7 @@ class WebsocketManager:
     def get_free_layer(self) -> Tuple[int, int, int]:
         # 返回一个未被注册的start idx 和 end idx，如果所有层都被注册了，则随机返回一个
         if self.has_full_model:
-            pp_rank = random.choice(range(client_size))
+            pp_rank = random.choice(range(self.client_size))
             return self.layer_info[pp_rank]
         else:
             for pp_rank, (start_idx, end_idx, count) in enumerate(self.client_info):
