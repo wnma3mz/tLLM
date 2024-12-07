@@ -2,20 +2,30 @@ import itertools
 from typing import Dict, List
 
 from safetensors import safe_open
-import torch
-import torch.nn as nn
+
+from tllm import BACKEND, BackendEnum
+
+if BACKEND == BackendEnum.TORCH:
+    import torch
+    import torch.nn as nn
+
+    class EmptyLayer(nn.Module):
+        @torch.inference_mode()
+        def forward(self, hidden_states, position_embeddings, attention_data) -> "torch.Tensor":
+            return hidden_states
+
 
 from tllm.commons.attn import get_attention_implementation
 from tllm.commons.cache import AttentionData, CacheManager, RequestsCache
 from tllm.schemas import SeqInput
 
 
-def greedy_decode(logits: torch.Tensor) -> List[int]:
+def greedy_decode(logits: "torch.Tensor") -> List[int]:
     # logits shape: [seq_len, vocab_size]
     return torch.argmax(logits, dim=-1).tolist()
 
 
-def build_mask(q_len_list: List[int], k_len_list: List[int]) -> torch.Tensor:
+def build_mask(q_len_list: List[int], k_len_list: List[int]) -> "torch.Tensor":
     """
     构造多个请求的 casual mask
     @param
@@ -40,7 +50,7 @@ def build_mask(q_len_list: List[int], k_len_list: List[int]) -> torch.Tensor:
     return combined_mask
 
 
-def read_from_safetensors(file_path: str, key_list: List[str] = None) -> Dict[str, torch.Tensor]:
+def read_from_safetensors(file_path: str, key_list: List[str] = None) -> Dict[str, "torch.Tensor"]:
     tensors = {}
     if key_list:
         with safe_open(file_path, framework="pt", device="cpu") as f:
@@ -53,12 +63,6 @@ def read_from_safetensors(file_path: str, key_list: List[str] = None) -> Dict[st
             for key in f.keys():
                 tensors[key] = f.get_tensor(key)
     return tensors
-
-
-class EmptyLayer(nn.Module):
-    @torch.inference_mode()
-    def forward(self, hidden_states, position_embeddings, attention_data) -> torch.Tensor:
-        return hidden_states
 
 
 _, attention_type = get_attention_implementation()

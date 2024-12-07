@@ -2,13 +2,12 @@ import argparse
 import asyncio
 from concurrent import futures
 import logging
-import os
 import time
 import uuid
 
 import grpc
 
-from tllm.commons.communicator import Communicator, SingleNodeCommunicator
+from tllm.commons.communicator import BaseCommunicator, Communicator
 from tllm.commons.convert import deserialize_tensor, serialize_tensor
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.rpc.http_client import HTTPClient
@@ -18,7 +17,7 @@ from tllm.utils import setup_logger
 
 
 class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
-    def __init__(self, comm: Communicator, logger, master_url: str):
+    def __init__(self, comm: BaseCommunicator, logger, master_url: str):
         self.comm = comm
         self.client_id = f"{str(uuid.uuid4())[:8]}"
 
@@ -141,9 +140,7 @@ def parse_args():
 
 
 async def run(args):
-    comm = SingleNodeCommunicator()
-    if "WORLD_SIZE" in os.environ and int(os.environ["WORLD_SIZE"]) > 1:
-        comm = Communicator(is_torchrun=True)
+    comm = Communicator()
     logger_name = "handler"
     logger = setup_logger(logger_name, logging.DEBUG if args.is_debug else logging.INFO)
 

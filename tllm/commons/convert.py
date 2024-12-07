@@ -3,18 +3,21 @@ from typing import List
 import lz4.frame
 import numpy as np
 
+from tllm import BACKEND, BackendEnum
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.rpc.schemas_pb2 import BFloat16Tensor
 from tllm.schemas import MIX_TENSOR
 
-try:
-    import mlx.core as mx  # type: ignore
+if BACKEND == BackendEnum.MLX:
+    import mlx.core as mx
 
-    HAS_MLX = True
-except:
+    serialize_func = lambda tensor: bytes(tensor.astype(mx.float16))
+    deserialize_func = lambda x: mx.array(np.frombuffer(x[1], dtype=np.float16), dtype=mx.bfloat16).reshape(*x[0].shape)
+else:
     import torch
 
-    HAS_MLX = False
+    serialize_func = lambda tensor: tensor.to(torch.float16).cpu().detach().numpy().tobytes()
+    deserialize_func = lambda x: torch.frombuffer(x[1], dtype=torch.float16).to(torch.bfloat16).view(*x[0].shape)
 
 
 def protobuf_to_list(proto_message):
@@ -101,10 +104,7 @@ def serialize_tensor(tensor: MIX_TENSOR) -> BFloat16Tensor:
     tensor_proto = BFloat16Tensor()
     # seq_len x hidden_size
     tensor_proto.shape.extend(tensor.shape)
-    if HAS_MLX:
-        tensor_bytes = bytes(tensor.astype(mx.float16))
-    else:
-        tensor_bytes = tensor.to(torch.float16).cpu().detach().numpy().tobytes()
+    tensor_bytes = serialize_func(tensor)
     flag = tensor.shape[0] >= 64
     tensor_proto.data = lz4.frame.compress(tensor_bytes) if flag else tensor_bytes
     return tensor_proto
@@ -113,9 +113,4 @@ def serialize_tensor(tensor: MIX_TENSOR) -> BFloat16Tensor:
 def deserialize_tensor(tensor_proto: BFloat16Tensor) -> MIX_TENSOR:
     flag = tensor_proto.shape[0] >= 64
     tensor_bytes = lz4.frame.decompress(tensor_proto.data) if flag else tensor_proto.data
-    if HAS_MLX:
-        data = np.frombuffer(tensor_bytes, dtype=np.float16)
-        return mx.array(data, dtype=mx.bfloat16).reshape(*tensor_proto.shape)
-    else:
-        data = torch.frombuffer(tensor_bytes, dtype=torch.float16).to(torch.bfloat16)
-        return data.view(*tensor_proto.shape)
+    return deserialize_func((tensor_proto, tensor_bytes))

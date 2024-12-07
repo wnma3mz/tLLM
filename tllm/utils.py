@@ -3,6 +3,7 @@ import logging
 import socket
 from typing import Tuple
 
+from tllm import BACKEND, BackendEnum
 from tllm.commons.manager import load_master_model
 from tllm.engine import AsyncEngine
 from tllm.generate import FakeLLMGenerator, LLMGenerator, TokenizerUtils
@@ -11,9 +12,10 @@ from tllm.rpc.master_handler import MasterHandler, PendingRequests
 
 
 def setup_seed(seed):
-    import torch
+    if BACKEND == BackendEnum.TORCH:
+        import torch
 
-    torch.manual_seed(seed)
+        torch.manual_seed(seed)
 
 
 def parse_range_string(s):
@@ -55,7 +57,7 @@ async def init_engine(
         generator = FakeLLMGenerator(None, None, None, None)
         master_handler = None
     elif is_local:
-        generator = LLMGenerator(LocalRPCManager(logger, model_path, num_layers), logger, model, tok)
+        generator = LLMGenerator(LocalRPCManager(model_path, num_layers), logger, model, tok)
         master_handler = None
     else:
         pending_requests = PendingRequests()

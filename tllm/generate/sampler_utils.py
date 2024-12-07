@@ -1,11 +1,9 @@
 from typing import List, Optional
 
-from tllm import HAS_MLX
+from tllm import BACKEND, BackendEnum
 from tllm.schemas import MIX_TENSOR, SamplingParams
 
-if HAS_MLX:
-    import mlx.core as mx
-else:
+if BACKEND == BackendEnum.TORCH:
     import torch
     import torch.nn.functional as F
 

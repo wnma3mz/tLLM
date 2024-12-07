@@ -3,7 +3,7 @@ from typing import Tuple
 
 from transformers import AutoConfig
 
-from tllm.commons.communicator import SingleNodeCommunicator
+from tllm.commons.communicator import BaseCommunicator
 from tllm.generate import LLMGenerator, TokenizerUtils
 from tllm.models.file_helper import get_model_path
 from tllm.models.register import MODEL_REGISTER
@@ -14,7 +14,7 @@ class ModelManager:
         self.start_idx = start_idx
         self.end_idx = end_idx
 
-    def load_model(self, comm: SingleNodeCommunicator, model_path: str):
+    def load_model(self, comm: BaseCommunicator, model_path: str):
         model_path = get_model_path(model_path)
 
         config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
@@ -31,7 +31,7 @@ class ModelManager:
         #     weights, config, _ = load_gguf_weight(model_path)
         #     config.decoder_start_layer_idx = self.start_idx
         #     config.decoder_end_layer_idx = self.end_idx
-        #     config.comm = SingleNodeCommunicator()
+        #     config.comm = Communicator()
         s1 = time.perf_counter()
         model = MY_MODEL_CLASS.from_pretrained(config, model_path)
         print(f"Model loaded in {time.perf_counter() - s1:.2f}s")

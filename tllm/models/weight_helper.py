@@ -1,14 +1,14 @@
 import re
 from typing import Dict, List
 
-from tllm import HAS_MLX
+from tllm import BACKEND, BackendEnum
 from tllm.schemas import MIX_TENSOR
 
-if HAS_MLX:
+if BACKEND == BackendEnum.MLX:
     import mlx.core as mx
 
     cat_func = lambda tensors: mx.concat(tensors, axis=0)
-else:
+elif BACKEND == BackendEnum.TORCH:
     import torch
 
     cat_func = lambda tensors: torch.cat(tensors, dim=0)

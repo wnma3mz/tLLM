@@ -1,11 +1,11 @@
 # coding: utf-8
 import time
-from typing import *
+from typing import Dict, List, Optional, Tuple, Union
 
-from tllm import HAS_MLX
+from tllm import BACKEND, BackendEnum
 from tllm.schemas import MIX_TENSOR
 
-if HAS_MLX:
+if BACKEND == BackendEnum.MLX:
     import mlx.core as mx
 
     cat_func = lambda tensors: mx.concat(tensors, axis=0)
