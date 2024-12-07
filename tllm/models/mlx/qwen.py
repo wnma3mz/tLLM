@@ -53,10 +53,10 @@ class MLXQwen2Model(nn.Module):
         if getattr(config, "quantization", None) is not None or state_dict is not None:
             is_merge = False
         model = cls(config, is_merge)
-        weights = model.merge_weights(model_path, is_merge)
+        state_dict = model.merge_weights(state_dict, is_merge)
 
-        model = quantization_func(config, model, weights)
-        model.load_weights(list(weights.items()))  # strict=False
+        model = quantization_func(config, model, state_dict)
+        model.load_weights(list(state_dict.items()))  # strict=False
 
         mx.eval(model.parameters())
         model.eval()

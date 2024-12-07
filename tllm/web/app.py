@@ -1,8 +1,11 @@
 import argparse
+import base64
+from io import BytesIO
 import json
 import time
-from typing import Any, Dict, Generator, List, Optional, Tuple
+from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 
+from PIL import Image
 import gradio as gr
 import requests
 
@@ -24,11 +27,36 @@ def process_response_chunk(chunk: bytes) -> Optional[Dict]:
         return None
 
 
+def resize_image_if_needed(img: Image.Image, max_size=512):
+    width, height = img.size
+
+    if width > max_size or height > max_size:
+        ratio = min(max_size / width, max_size / height)
+
+        new_width = int(width * ratio)
+        new_height = int(height * ratio)
+
+        img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+    return img
+
+
+def pil_image_to_base64(image: Image.Image) -> str:
+    image = resize_image_if_needed(image)
+    buffered = BytesIO()
+    image.save(buffered, format="PNG")
+    img_bytes = buffered.getvalue()
+
+    return base64.b64encode(img_bytes).decode("utf-8")
+
+
 class MessageProcessor:
     def __init__(self, model: str):
         self.model = model
 
-    def _format_chat_history(self, img_path, history: List[List[str]], system_prompt: str) -> List[Dict[str, str]]:
+    def _format_chat_history(
+        self, img: Union[str, Image.Image], history: List[List[str]], system_prompt: str
+    ) -> List[Dict[str, str]]:
         """将聊天历史转换为OpenAI格式"""
         formatted_history = []
 
@@ -37,12 +65,12 @@ class MessageProcessor:
 
         for message in history:
             user_input, assistant_response = message
-            if img_path is None:
+            if img is None:
                 formatted_history.append({"role": "user", "content": user_input})
             else:
                 mm_content = [
                     {"type": "text", "text": user_input},
-                    {"type": "image_url", "image_url": {"url": img_path}},
+                    {"type": "image_url", "image_url": {"base64": pil_image_to_base64(img)}},
                 ]
                 formatted_history.append({"role": "user", "content": mm_content})
             if assistant_response is not None:
@@ -52,7 +80,7 @@ class MessageProcessor:
 
     def prepare_request_data(
         self,
-        img_path: str,
+        img: Union[str, Image.Image],
         history: List[List[str]],
         system_prompt: str,
         temperature: float,
@@ -61,7 +89,7 @@ class MessageProcessor:
         max_tokens: int,
     ) -> Dict[str, Any]:
         return {
-            "messages": self._format_chat_history(img_path, history, system_prompt),
+            "messages": self._format_chat_history(img, history, system_prompt),
             "model": self.model,
             "stream": True,
             "temperature": temperature,
@@ -84,7 +112,7 @@ class ChatInterface:
 
         with gr.Row():
             with gr.Column(scale=0.05):
-                img = gr.Image(type="filepath", label="上传图片", container=True)
+                img = gr.Image(type="pil", label="上传图片", container=True)
             with gr.Column(scale=13):
                 with gr.Row():
                     msg = gr.Textbox(
@@ -114,10 +142,10 @@ class ChatInterface:
         return components
 
     def _handle_bot_response(
-        self, img_path: str, history: List[List[str]], *config: Tuple[str, str, float, float, int, int]
+        self, img: Union[str, Image.Image], history: List[List[str]], *config: Tuple[str, str, float, float, int, int]
     ) -> Generator:
         self.should_stop = False
-        data = self.message_processor.prepare_request_data(img_path, history, *config[1:])
+        data = self.message_processor.prepare_request_data(img, history, *config[1:])
         chat_url = config[0]
         response = requests.post(chat_url, json=data, stream=True)
 

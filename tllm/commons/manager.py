@@ -63,7 +63,7 @@ class WeightManager:
         return state_dict
 
     def _hf_read_master_weight(self):
-        prefix_key_list = ["model.embed_tokens.", "model.norm.", "lm_head."]
+        prefix_key_list = ["model.embed_tokens.", "model.norm.", "lm_head.", "visual."]
         state_dict = self._hf_read_weight(prefix_key_list)
 
         new_state_dict = {}
@@ -136,5 +136,5 @@ def load_master_model(model_path: str) -> Tuple[LLMGenerator, TokenizerUtils, in
 
     MY_CausalLM_CLASS, _ = MODEL_REGISTER[weight_manager.arch]
 
-    model = MY_CausalLM_CLASS.from_pretrained(weight_manager.config, model_path, state_dict)
+    model = MY_CausalLM_CLASS.from_pretrained(weight_manager.config, weight_manager.model_path, state_dict)
     return model, weight_manager.tok, weight_manager.config.num_hidden_layers

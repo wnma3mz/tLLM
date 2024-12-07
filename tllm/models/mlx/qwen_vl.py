@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Dict, Optional
 
 import mlx.core as mx
 import mlx.nn as nn
@@ -103,10 +103,9 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
         self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @classmethod
-    def from_pretrained(cls, config, model_path: str, state_dict: Optional[Any] = None):
+    def from_pretrained(cls, config, model_path: str, state_dict: Dict[str, mx.array]):
         model = cls(config)
 
-        # load processor
         model.processor = AutoProcessor.from_pretrained(model_path, trust_remote_code=True)
         model.mm_config = {
             "vision_start_id": config.vision_start_token_id,

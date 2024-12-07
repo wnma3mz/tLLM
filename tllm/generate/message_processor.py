@@ -1,11 +1,18 @@
-import io
+import base64
+from io import BytesIO
 from typing import Dict, List, Optional, Tuple
 
 from PIL import Image
+from PIL.ImageFile import ImageFile
 
 from tllm.schemas import MESSAGES, MultiModalContent, UrlItem
 
 from .token_utils import TokenizerUtils
+
+
+def base64_to_pil_image(base64_string: str) -> BytesIO:
+    img_bytes = base64.b64decode(base64_string)
+    return BytesIO(img_bytes)
 
 
 class MessageProcessor:
@@ -13,14 +20,17 @@ class MessageProcessor:
         self.tok = tok
         self.role_set = {"user", "system", "assistant"}
 
-    async def read_image(self, image: UrlItem) -> Image:
+    async def read_image(self, image: UrlItem) -> ImageFile:
+        if image.base64 is not None:
+            return Image.open(base64_to_pil_image(image.base64))
         if image.url is not None:
+            print(image.url)
             raise NotImplementedError("url is not supported")
         if image.file_path is not None:
             return Image.open(image.file_path)
         raise ValueError("image must have url or file_path")
 
-    async def parse_mm_input(self, contents: List[MultiModalContent]) -> Tuple[str, Dict[str, io.BytesIO]]:
+    async def parse_mm_input(self, contents: List[MultiModalContent]) -> Tuple[str, Dict[str, ImageFile]]:
         text, mm_input = "", {}
         for content in contents:
             if content.type == "text":
@@ -29,7 +39,7 @@ class MessageProcessor:
                 mm_input["image"] = await self.read_image(content.image_url)
         return text, mm_input
 
-    async def parse_message(self, messages: MESSAGES) -> Tuple[List[Dict[str, str]], Dict[str, io.BytesIO]]:
+    async def parse_message(self, messages: MESSAGES) -> Tuple[List[Dict[str, str]], Dict[str, ImageFile]]:
         new_messages, mm_inputs = [], []
         for msg in messages:
             assert "role" in msg and "content" in msg, ValueError("role and content must be in message")
@@ -54,6 +64,7 @@ class MessageProcessor:
                     mm_type = key
                 elif mm_type != key:
                     raise ValueError(f"mm_input must be the same type")
+        print("mm_input_dict", mm_input_dict)
         return new_messages, mm_input_dict
 
     def preprocess(self, messages: List[Dict[str, str]]) -> List[int]:
