@@ -86,7 +86,7 @@ class MasterHandler(schemas_pb2_grpc.RPCServiceServicer):
 
         schemas_pb2_grpc.add_RPCServiceServicer_to_server(self, self.server)
         self.server.add_insecure_port(f"[::]:{port}")
-        self.logger.info(f"Starting Master gRPC server on port {port}")
+        self.logger.info(f"Starting Master gRPC server on [::]:{port}")
         await self.server.start()
 
     async def stop(self):

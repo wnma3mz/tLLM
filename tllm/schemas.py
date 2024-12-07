@@ -11,6 +11,7 @@ modal_type = Literal["text", "image_url"]
 
 MIX_TENSOR = Union[np.ndarray, "torch.Tensor", "mx.array"]
 
+
 class UrlItem(BaseModel):
     url: Optional[str] = None
     file_path: Optional[str] = None

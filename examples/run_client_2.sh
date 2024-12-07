@@ -1,5 +1,5 @@
 #!/bin/bash
-GRPC_PORT=25001
+GRPC_PORT=25002
 # master 地址，用于连接
 MASTER_URL=http://192.168.124.27:8022
 # 本机地址，用于 master 访问

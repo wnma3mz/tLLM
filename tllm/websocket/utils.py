@@ -44,22 +44,20 @@ def parse_model_size(model_name: str) -> float:
     return model_size
 
 
-# 根据 model size 和 层数来划分客户端数量以及每个客户端的层数
 def split_model_layers(model_size: float, total_layers: int) -> Tuple[int, List[Tuple[int, int]]]:
+    # 根据 model size 和 层数来划分客户端数量以及每个客户端的层数
     if model_size < 4:
-        return 1, [(0, total_layers)]
+        client_size = 2
     elif model_size <= 8:
-        each_client_layers = total_layers // 2
-        return 2, [(0, each_client_layers), (each_client_layers, total_layers)]
+        client_size = 2
     elif model_size <= 32:
-        each_client_layers = total_layers // 4
-        return 4, [
-            (start_idx, start_idx + each_client_layers) for start_idx in range(0, total_layers, each_client_layers)
-        ]
+        client_size = 4
     elif model_size <= 72:
-        each_client_layers = total_layers // 8
-        return 8, [
-            (start_idx, start_idx + each_client_layers) for start_idx in range(0, total_layers, each_client_layers)
-        ]
+        client_size = 8
     else:
         raise ValueError(f"Model size {model_size} is too large")
+
+    each_client_layers = total_layers // client_size
+    return client_size, [
+        (start_idx, start_idx + each_client_layers) for start_idx in range(0, total_layers, each_client_layers)
+    ]

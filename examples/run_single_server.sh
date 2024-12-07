@@ -9,6 +9,6 @@ HTTP_PORT=8022
 
 export PYTHONPATH="./":$PYTHONPATH;
 
-python3 -m tllm.entrypoints.api_server --master_url localhost:25111 --master_handler_port $MASTER_HANDLER_PORT --port $HTTP_PORT --model_path $MODEL_PATH --is_local --is_debug
+/usr/bin/python3 -m tllm.entrypoints.api_server --master_url localhost:25111 --master_handler_port $MASTER_HANDLER_PORT --port $HTTP_PORT --model_path $MODEL_PATH --is_local --is_debug
 
 

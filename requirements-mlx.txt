@@ -10,10 +10,10 @@ uvicorn
 websockets
 pillow
 huggingface_hub
-gradio==5.4.0
+gradio
 grpcio==1.66.2
 lz4==4.3.3
-mlx==0.19.1
+mlx
 mlx_lm==0.19.2
 protobuf==5.28.3
 pydantic==2.9.2
