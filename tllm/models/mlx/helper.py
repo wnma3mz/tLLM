@@ -110,5 +110,7 @@ def read_main_state_dict(state_dict: Dict[str, mx.array]) -> Dict[str, mx.array]
     for k, v in state_dict.items():
         if k.startswith("model.") and not k.startswith("model.layers."):
             new_state_dict[k.split("model.")[-1]] = v
+        else:
+            new_state_dict[k] = v
     state_dict = tie_embedding_weights(new_state_dict)
     return state_dict

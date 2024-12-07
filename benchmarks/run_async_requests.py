@@ -28,7 +28,7 @@ async def requests_func(messages: List[Dict[str, Any]]):
 async def main():
     messages1 = [{"role": "user", "content": "Hello, how are you?"}]
     messages2 = [{"role": "user", "content": "Hello, What's your name?"}]
-    messages3 = [{"role": "user", "content": "今天天气怎么样"}]
+    messages3 = [{"role": "system", "content": "You are a helpful AI assistant."}, {"role": "user", "content": "今天天气怎么样"}]
 
     messages_list = [messages1, messages2, messages3]
     print("异步并发请求结果")
