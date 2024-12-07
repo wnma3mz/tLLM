@@ -1,5 +1,3 @@
-import glob
-import os
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -9,11 +7,10 @@ from transformers.models.llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEm
 
 from tllm.commons.attn import get_attention_implementation
 from tllm.commons.cache import AttentionData, CacheManager
-from tllm.models.file_helper import get_weight_path
-from tllm.models.torch.helper import EmptyLayer, build_forward_cache, read_from_safetensors
+from tllm.models.torch.helper import EmptyLayer, build_forward_cache
 from tllm.models.torch.layers import LlamaDecoderLayer
 from tllm.models.utils import read_eos_token_ids
-from tllm.models.weight_helper import default_merge_attn_weight, default_merge_mlp_weight, pop_weight_func
+from tllm.models.weight_helper import default_merge_attn_weight, default_merge_mlp_weight
 from tllm.schemas import SeqInput
 
 _, attention_type = get_attention_implementation()
@@ -90,35 +87,21 @@ class HFLlamaModel(nn.Module):
         self.rotary_emb = HFLlamaRotaryEmbedding(config=config)
 
     @classmethod
-    def from_pretrained(cls, config, model_path: str, state_dict: Optional[Dict] = None, is_merge: bool = True):
+    def from_pretrained(cls, config, model_path: str, state_dict: Dict[str, torch.Tensor], is_merge: bool = True):
         model = cls(config, is_merge)
-        state_dict = model.read_weight_from_model_path(model_path, is_merge)
+        state_dict = model.merge_weights(state_dict, is_merge)
         model.load_state_dict(state_dict)
 
         model.to(model.dtype).to(model.device)
         model.eval()
         return model
 
-    def read_weight_from_model_path(self, model_path: str, is_merge: bool) -> Dict[str, torch.Tensor]:
+    def merge_weights(self, state_dict: Dict[str, torch.Tensor], is_merge: bool) -> Dict[str, torch.Tensor]:
         # TODO: support bias and TP
-        weights = {}
-        weight_files = glob.glob(os.path.join(model_path, "model*.safetensors"))
-        for file in weight_files:
-            weights.update(read_from_safetensors(os.path.join(model_path, file)))
-
         layer_name_mapper = {
             "self_attn.o_proj": "self_attn.o_proj.layer",
             "mlp.down_proj": "mlp.down_proj.layer",
         }
-        prefix_key_list = ["model.embed_tokens.", "model.norm.", "lm_head."]
-        weights = pop_weight_func(
-            prefix_key_list,
-            weights,
-            self.config.num_hidden_layers,
-            self.config.decoder_start_layer_idx,
-            self.config.decoder_end_layer_idx,
-        )
-
         key_list = list(weights.keys())
         for key in key_list:
             for s_key, t_key in layer_name_mapper.items():
@@ -186,19 +169,6 @@ class HFLlamaForCausalLM(nn.Module):
         cls.config = config
         cls.num_layers = config.num_hidden_layers
         cls.eos_token_ids = read_eos_token_ids(config)
-
-        file_set, prefix_key_list = get_weight_path(model_path)
-        state_dict = {}
-        for file in file_set:
-            weight_path = os.path.join(model_path, file)
-            state_dict.update(read_from_safetensors(weight_path, prefix_key_list))
-
-        state_dict = {k.split("model.")[-1]: v for k, v in state_dict.items()}
-        has_key_list = list(state_dict.keys())
-        if "lm_head.weight" not in state_dict:
-            for key in has_key_list:
-                if key.startswith("embed_tokens."):
-                    state_dict[key.replace("embed_tokens.", "lm_head.")] = state_dict[key]
 
         model.load_state_dict(state_dict)
         model.to(model.dtype).to(model.device)

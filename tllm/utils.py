@@ -34,7 +34,7 @@ def setup_logger(name, level=logging.INFO):
 async def init_engine(
     logger, model_path: str, master_handler_port: int, is_local: bool, is_fake: bool = False
 ) -> Tuple[AsyncEngine, TokenizerUtils, MasterHandler]:
-    model, tok, num_layers = load_master_model(model_path, logger)
+    model, tok, num_layers = load_master_model(model_path)
     if is_fake:
         generator = FakeLLMGenerator(None, None, None, None)
         master_handler = None

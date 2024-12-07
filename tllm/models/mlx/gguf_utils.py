@@ -58,9 +58,15 @@ class GGUFConfig:
     decoder_start_layer_idx: int = 0
     decoder_end_layer_idx: int = 0
     is_merge: bool = False
+    architectures: List[str] = None
 
     def to_dict(self):
         return {k: v for k, v in self.__dict__.items()}
+
+
+arch_mapper = {
+    "llama": "LlamaForCausalLM",
+}
 
 
 def get_config(metadata: dict) -> GGUFConfig:
@@ -75,6 +81,7 @@ def get_config(metadata: dict) -> GGUFConfig:
         "vocab_size": len(metadata["tokenizer.ggml.tokens"]),
         "rope_theta": metadata["llama.rope.freq_base"],
         "rope_traditional": True,
+        "architectures": [arch_mapper[metadata["general.architecture"]]],
     }
     return GGUFConfig(**output)
 
@@ -99,17 +106,6 @@ def translate_weight_names(name):
 def load_gguf_weight(gguf_file: str, repo: str = None):
     # If the gguf_file exists, try to load model from it.
     # Otherwise try to download and cache from the HF repo
-    if not Path(gguf_file).exists():
-        if repo is None:
-            raise ValueError(f"Could not find file {gguf_file}, and no Hugging Face" " repo provided for download.")
-        model_path = snapshot_download(
-            repo_id=repo,
-            allow_patterns=[gguf_file],
-        )
-        if not (Path(model_path) / gguf_file).exists():
-            raise ValueError(f"File {gguf_file} not in repo {repo}.")
-        gguf_file = str(Path(model_path) / gguf_file)
-
     print(f"[INFO] Loading model from {gguf_file}")
     weights, metadata = mx.load(gguf_file, return_metadata=True)
     gguf_ft = metadata["general.file_type"]

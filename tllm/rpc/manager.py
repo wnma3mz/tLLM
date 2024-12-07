@@ -7,7 +7,7 @@ import grpc
 
 from tllm.commons.communicator import Communicator
 from tllm.commons.convert import deserialize_tensor, serialize_tensor
-from tllm.commons.manager import ModelManager
+from tllm.commons.manager import load_client_model
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.rpc.master_handler import PendingRequests
 from tllm.schemas import MIX_TENSOR, SeqInput
@@ -53,8 +53,7 @@ class RPCManager:
 class LocalRPCManager:
     # 并不发生通信，直接调用模型
     def __init__(self, model_path: str, num_hidden_layers: int):
-        model_manager = ModelManager(0, num_hidden_layers)
-        self.model = model_manager.load_model(Communicator(), model_path)
+        self.model = load_client_model(0, num_hidden_layers, Communicator(), model_path)
 
     async def forward(self, hidden_states: MIX_TENSOR, seq_input: SeqInput) -> Tuple[MIX_TENSOR, List[float]]:
         s1 = time.perf_counter()

@@ -1,16 +1,15 @@
 import json
 import os
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import List, Optional, Tuple
 
 from huggingface_hub import constants, snapshot_download
 from huggingface_hub.file_download import repo_folder_name
 
 
-def get_weight_path(model_path: str) -> Tuple[set, List[str]]:
+def find_weight_file(model_path: str, prefix_key_list: List[str]) -> set:
     index_path = os.path.join(model_path, "model.safetensors.index.json")
     file_set = set()
-    prefix_key_list = ["model.embed_tokens.", "model.norm.", "lm_head."]
     if os.path.isfile(index_path):
         with open(index_path, "r") as f:
             index = json.load(f)
@@ -20,7 +19,7 @@ def get_weight_path(model_path: str) -> Tuple[set, List[str]]:
                     file_set.add(file_)
     else:
         file_set.add("model.safetensors")
-    return file_set, prefix_key_list
+    return file_set
 
 
 def get_hf_cache_model_path(repo_id: str, revision: Optional[str] = None) -> Path:

@@ -5,7 +5,7 @@ import mlx.nn as nn
 import numpy as np
 from transformers import AutoConfig, AutoProcessor
 
-from tllm.models.mlx.helper import quantization_func, read_state_dict, tie_embedding_weights
+from tllm.models.mlx.helper import quantization_func
 from tllm.models.mlx.layers import PatchEmbed, PatchMerger, VisionMlp, VisionRotaryEmbedding, VisionSdpaAttention
 from tllm.models.utils import read_eos_token_ids
 
@@ -118,18 +118,6 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
         cls.config = config
         cls.num_layers = config.num_hidden_layers
         cls.eos_token_ids = read_eos_token_ids(config)
-
-        if state_dict is None:
-            state_dict = read_state_dict(model_path)
-
-        new_state_dict = {}
-        for k, v in state_dict.items():
-            if k.startswith("model.layers"):
-                continue
-            if k == "visual.patch_embed.proj.weight":
-                v = v.transpose(0, 2, 3, 4, 1)
-            new_state_dict[k.split("model.")[-1]] = v
-        state_dict = tie_embedding_weights(new_state_dict)
 
         model = quantization_func(config, model, state_dict)
         model.load_weights(list(state_dict.items()))  # , strict=False

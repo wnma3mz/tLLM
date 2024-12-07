@@ -1,5 +1,3 @@
-import glob
-import os
 from typing import Dict, Optional
 
 import mlx.core as mx
@@ -9,21 +7,10 @@ import numpy as np
 from transformers import AutoConfig
 
 from tllm.commons.cache import CacheManager
-from tllm.models.mlx.helper import (
-    build_forward_cache,
-    get_last_hidden_states,
-    quantization_func,
-    read_main_state_dict,
-    read_state_dict,
-)
+from tllm.models.mlx.helper import build_forward_cache, get_last_hidden_states, quantization_func
 from tllm.models.mlx.llama import Decoder
 from tllm.models.utils import read_eos_token_ids
-from tllm.models.weight_helper import (
-    default_merge_attn_bias,
-    default_merge_attn_weight,
-    default_merge_mlp_weight,
-    pop_weight_func,
-)
+from tllm.models.weight_helper import default_merge_attn_bias, default_merge_attn_weight, default_merge_mlp_weight
 from tllm.schemas import SeqInput
 
 
@@ -61,50 +48,28 @@ class MLXQwen2Model(nn.Module):
         return next(self.parameters()).dtype
 
     @classmethod
-    def from_pretrained(cls, config: AutoConfig, model_path: str, state_dict: Optional[Dict] = None):
+    def from_pretrained(cls, config: AutoConfig, model_path: str, state_dict: Dict[str, mx.array]):
         is_merge = True
         if getattr(config, "quantization", None) is not None or state_dict is not None:
             is_merge = False
         model = cls(config, is_merge)
-        if state_dict is None:
-            weights = model.read_weight_from_model_path(model_path, is_merge)
-        else:
-            weights = state_dict
+        weights = model.merge_weights(model_path, is_merge)
 
         model = quantization_func(config, model, weights)
         model.load_weights(list(weights.items()))  # strict=False
-        if getattr(config, "quantization", None) is None:
-            model.set_dtype(mx.bfloat16)
 
         mx.eval(model.parameters())
         model.eval()
         return model
 
-    def read_weight_from_model_path(self, model_path: str, is_merge: bool = True) -> Dict[str, mx.array]:
-        print(f"start_idx: {self.config.decoder_start_layer_idx}, end_idx: {self.config.decoder_end_layer_idx}")
-
-        weight_files = glob.glob(os.path.join(model_path, "model*.safetensors"))
-
-        weights = {}
-        for wf in weight_files:
-            weights.update(mx.load(wf))
-
-        prefix_key_list = ["model.embed_tokens.", "model.norm.", "lm_head.", "visual."]
-        weights = pop_weight_func(
-            prefix_key_list,
-            weights,
-            self.config.num_hidden_layers,
-            self.config.decoder_start_layer_idx,
-            self.config.decoder_end_layer_idx,
-        )
-
+    def merge_weights(self, state_dict: Dict[str, mx.array], is_merge: bool = True) -> Dict[str, mx.array]:
         if not is_merge:
-            return weights
+            return state_dict
 
-        weights = default_merge_attn_weight(weights)
-        weights = default_merge_attn_bias(weights)
-        weights = default_merge_mlp_weight(weights)
-        return weights
+        state_dict = default_merge_attn_weight(state_dict)
+        state_dict = default_merge_attn_bias(state_dict)
+        state_dict = default_merge_mlp_weight(state_dict)
+        return state_dict
 
 
 class MLXQwen2ForCausalLM(nn.Module):
@@ -124,10 +89,6 @@ class MLXQwen2ForCausalLM(nn.Module):
         cls.num_layers = config.num_hidden_layers
         cls.eos_token_ids = read_eos_token_ids(config)
 
-        if state_dict is None:
-            state_dict = read_state_dict(model_path)
-
-        state_dict = read_main_state_dict(state_dict)
         model = quantization_func(config, model, state_dict)
         model.load_weights(list(state_dict.items()))  # , strict=False
 

@@ -239,14 +239,8 @@ class MergedAttention(nn.Module):
         self.head_dim = head_dim = args.head_dim or args.hidden_size // n_heads
 
         self.scale = head_dim**-0.5
-        if hasattr(args, "attention_bias"):
-            attention_bias = args.attention_bias
-        else:
-            attention_bias = False
-        if hasattr(args, "o_proj_bias"):
-            o_proj_bias = args.o_proj_bias
-        else:
-            o_proj_bias = False
+        attention_bias = getattr(args, "attention_bias", False)
+        o_proj_bias = getattr(args, "o_proj_bias", False)
 
         self.qkv_proj = QKVParallelLayer(
             dim, [n_heads * head_dim, n_kv_heads * head_dim, n_kv_heads * head_dim], 1, 0, bias=attention_bias
@@ -311,7 +305,8 @@ class MergedAttention(nn.Module):
 class PlainAttention(Attention):
     def __init__(self, args, layer_idx: int, offset: int):
         super().__init__(args)
-        self.o_proj = nn.Linear(self.n_heads * self.head_dim, args.hidden_size, bias=args.o_proj_bias)
+        o_proj_bias = getattr(args, "o_proj_bias", False)
+        self.o_proj = nn.Linear(self.n_heads * self.head_dim, args.hidden_size, bias=o_proj_bias)
         self.layer_idx = layer_idx
         self.offset = offset
 
@@ -321,8 +316,7 @@ class PlainAttention(Attention):
         start = 0
         for uuid, offset in zip(uuid_list, offset_list):
             end = start + request_cache.get_seq_len(uuid)
-            xs_ = xs[:, start:end]
-            x_list.append(self.rope(xs_, offset))
+            x_list.append(self.rope(xs[start:end].transpose(1, 0, 2), offset).transpose(1, 0, 2))
             start = end
         return cat_func(x_list)
 

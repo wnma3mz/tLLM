@@ -4,7 +4,7 @@ from typing import Optional
 
 import aiohttp
 
-from tllm.commons.manager import ModelManager
+from tllm.commons.manager import load_client_model
 from tllm.schemas import InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
 
 
@@ -85,8 +85,7 @@ class HTTPClient:
             await asyncio.sleep(self.ping_interval)
 
     async def load_model(self, model: str, start_idx: int, end_idx: int):
-        model_manager = ModelManager(start_idx, end_idx)
-        self.model = model_manager.load_model(self.comm, model)
+        self.model = load_client_model(start_idx, end_idx, self.comm, model)
 
     async def connect(self, client_id: str, ip_addr: str, port: int):
         """定期发送连接请求的协程"""

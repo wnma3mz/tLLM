@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from transformers import AutoTokenizer
 
@@ -11,8 +11,12 @@ class TokenizerResult:
 
 
 class TokenizerUtils:
-    def __init__(self, tok_path: str):
-        self.tokenizer = AutoTokenizer.from_pretrained(tok_path, trust_remote_code=True, use_fast=True)
+    def __init__(self, tok_path: Optional[str] = None, tokenizer: Optional[AutoTokenizer] = None):
+        if tokenizer:
+            self.tokenizer = tokenizer
+        else:
+            assert tok_path is not None, "Either tok_path or tokenizer must be provided."
+            self.tokenizer = AutoTokenizer.from_pretrained(tok_path, trust_remote_code=True, use_fast=True)
 
     def preprocess(
         self, text: str = None, messages: List[Dict[str, str]] = None, add_generation_prompt: bool = True

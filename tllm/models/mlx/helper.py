@@ -7,7 +7,6 @@ import mlx.core as mx
 import mlx.nn as nn
 
 from tllm.commons.cache import AttentionData, CacheManager, RequestsCache
-from tllm.models.file_helper import get_weight_path
 from tllm.schemas import SeqInput
 
 
@@ -70,7 +69,7 @@ def empty_func(h, mask, cache):
     return h
 
 
-def read_from_safetensors(file_path: str, key_list: List[str]) -> Dict[str, "mx.array"]:
+def read_from_safetensors(file_path: str, key_list: List[str]) -> Dict[str, mx.array]:
     tensors = {}
     weights = mx.load(file_path)
     for key in weights.keys():
@@ -85,32 +84,3 @@ def get_last_hidden_states(hidden_states: mx.array, seq_len_list: List[int]) -> 
     seq_hidden_states = mx.split(hidden_states, index_list, axis=0)
     hidden_states = mx.concat([x[-1:, :] for x in seq_hidden_states], axis=0)
     return hidden_states
-
-
-def read_state_dict(model_path: str) -> Dict[str, mx.array]:
-    file_set, prefix_key_list = get_weight_path(model_path)
-    state_dict = {}
-    for file in file_set:
-        weight_path = os.path.join(model_path, file)
-        state_dict.update(read_from_safetensors(weight_path, prefix_key_list))
-    return state_dict
-
-
-def tie_embedding_weights(state_dict: Dict[str, mx.array]) -> Dict[str, mx.array]:
-    has_key_list = list(state_dict.keys())
-    if "lm_head.weight" not in state_dict:
-        for key in has_key_list:
-            if key.startswith("embed_tokens."):
-                state_dict[key.replace("embed_tokens.", "lm_head.")] = state_dict[key]
-    return state_dict
-
-
-def read_main_state_dict(state_dict: Dict[str, mx.array]) -> Dict[str, mx.array]:
-    new_state_dict = {}
-    for k, v in state_dict.items():
-        if k.startswith("model.") and not k.startswith("model.layers."):
-            new_state_dict[k.split("model.")[-1]] = v
-        else:
-            new_state_dict[k] = v
-    state_dict = tie_embedding_weights(new_state_dict)
-    return state_dict

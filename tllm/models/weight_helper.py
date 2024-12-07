@@ -7,11 +7,17 @@ from tllm.schemas import MIX_TENSOR
 if BACKEND == BackendEnum.MLX:
     import mlx.core as mx
 
+    from tllm.models.mlx.gguf_utils import load_gguf_weight
+    from tllm.models.mlx.helper import read_from_safetensors
+
     cat_func = lambda tensors: mx.concat(tensors, axis=0)
 elif BACKEND == BackendEnum.TORCH:
     import torch
 
+    from tllm.models.torch.helper import read_from_safetensors
+
     cat_func = lambda tensors: torch.cat(tensors, dim=0)
+    load_gguf_weight = lambda x: None, None, None
 
 
 def pop_weight_func(
@@ -80,3 +86,12 @@ def default_merge_attn_weight(weights: Dict[str, MIX_TENSOR]) -> Dict[str, MIX_T
     attn_list = ["q_proj", "k_proj", "v_proj"]
     attn_name = "model.layers.{layer_idx}.self_attn.qkv_proj.layer.weight"
     return merge_weight_func(attn_pattern, attn_list, attn_name, weights)
+
+
+def tie_embedding_weights(state_dict: Dict[str, MIX_TENSOR]) -> Dict[str, MIX_TENSOR]:
+    has_key_list = list(state_dict.keys())
+    if "lm_head.weight" not in state_dict:
+        for key in has_key_list:
+            if key.startswith("embed_tokens."):
+                state_dict[key.replace("embed_tokens.", "lm_head.")] = state_dict[key]
+    return state_dict
