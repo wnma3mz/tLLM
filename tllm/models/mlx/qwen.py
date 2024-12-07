@@ -43,10 +43,6 @@ class MLXQwen2Model(nn.Module):
             output = get_last_hidden_states(output, seq_input.seq_len_list)
         return output
 
-    @property
-    def dtype(self):
-        return next(self.parameters()).dtype
-
     @classmethod
     def from_pretrained(cls, config: AutoConfig, model_path: str, state_dict: Dict[str, mx.array]):
         is_merge = True
@@ -76,7 +72,6 @@ class MLXQwen2ForCausalLM(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.vocab_size = config.vocab_size
-        self.dtype = mx.bfloat16
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)

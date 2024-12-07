@@ -1,6 +1,7 @@
 #!/bin/bash
 MODEL_PATH=/Users/lujianghu/Documents/Llama-3.2-1B-Instruct
 MODEL_PATH=Qwen/Qwen2-VL-2B-Instruct
+MODEL_PATH=mlx-community/Meta-Llama-3.1-8B-Instruct-4bit
 MASTER_HANDLER_PORT=25111
 MASTER_URL=localhost:$MASTER_HANDLER_PORT
 HTTP_PORT=8022

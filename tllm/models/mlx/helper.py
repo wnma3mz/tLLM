@@ -1,11 +1,11 @@
 import itertools
 import math
-import os
 from typing import Dict, List
 
 import mlx.core as mx
 import mlx.nn as nn
 
+from tllm import DTYPE
 from tllm.commons.cache import AttentionData, CacheManager, RequestsCache
 from tllm.schemas import SeqInput
 
@@ -59,7 +59,7 @@ def quantization_func(config, model, state_dict):
             class_predicate=class_predicate,
         )
     else:
-        model.set_dtype(mx.bfloat16)
+        model.set_dtype(DTYPE)
 
     return model
 

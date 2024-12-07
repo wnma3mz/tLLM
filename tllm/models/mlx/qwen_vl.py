@@ -5,7 +5,6 @@ import mlx.nn as nn
 import numpy as np
 from transformers import AutoConfig, AutoProcessor
 
-from tllm import DTYPE
 from tllm.models.mlx.helper import quantization_func
 from tllm.models.mlx.layers import PatchEmbed, PatchMerger, VisionMlp, VisionRotaryEmbedding, VisionSdpaAttention
 from tllm.models.utils import read_eos_token_ids
@@ -136,7 +135,7 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
         inputs_embeds = self.embed_tokens(mx.array(x))
 
         if pixel_values is not None:
-            pixel_values = mx.array(pixel_values).astype(DTYPE)
+            pixel_values = mx.array(pixel_values).astype(inputs_embeds.dtype)
             image_embeds = self.visual(pixel_values, grid_thw=mx.array(image_grid_thw))
             n_image_tokens = (x == self.config.image_token_id).sum().item()
             n_image_features = image_embeds.shape[0]
@@ -151,7 +150,7 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
             inputs_embeds[image_mask_ind] = image_embeds  # mlx not support bool mask
 
         if pixel_values_videos is not None:
-            pixel_values_videos = mx.array(pixel_values_videos).astype(DTYPE)
+            pixel_values_videos = mx.array(pixel_values_videos).astype(inputs_embeds.dtype)
             video_embeds = self.visual(pixel_values_videos, grid_thw=mx.array(video_grid_thw))
             n_video_tokens = (x == self.config.video_token_id).sum().item()
             n_video_features = video_embeds.shape[0]

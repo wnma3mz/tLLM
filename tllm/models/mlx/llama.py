@@ -27,7 +27,6 @@ class Decoder(nn.Module):
     def __call__(self, h: mx.array, mask, cache: AttentionData) -> mx.array:
         for layer in self.layers:
             h = layer(h, mask, cache=cache)
-        mx.eval(h)  # just for debug test
         return h
 
 
@@ -57,10 +56,6 @@ class MLXLlamaModel(nn.Module):
             output = get_last_hidden_states(output, seq_input.seq_len_list)
         return output
 
-    @property
-    def dtype(self):
-        return next(self.parameters()).dtype
-
     @classmethod
     def from_pretrained(
         cls, config: AutoConfig, model_path: str, state_dict: Dict[str, mx.array], is_merge: bool = True
@@ -89,7 +84,6 @@ class MLXLlamaForCausalLM(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.vocab_size = config.vocab_size
-        self.dtype = mx.bfloat16
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -113,5 +107,5 @@ class MLXLlamaForCausalLM(nn.Module):
         return self.embed_tokens(mx.array(x))
 
     def get_logits(self, hidden_states: mx.array) -> mx.array:
-        logits = self.lm_head(self.norm(hidden_states.astype(self.dtype)))
+        logits = self.lm_head(self.norm(hidden_states.astype(self.norm.weight.dtype)))
         return logits

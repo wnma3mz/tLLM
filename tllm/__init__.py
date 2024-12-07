@@ -28,5 +28,5 @@ if BACKEND == BackendEnum.TORCH:
 else:
     import mlx.core as mx
 
-    DTYPE = mx.float16
+    DTYPE = mx.bfloat16
     DEVICE = None
