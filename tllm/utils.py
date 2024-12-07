@@ -1,4 +1,3 @@
-import argparse
 import logging
 import socket
 from typing import Tuple
@@ -11,23 +10,11 @@ from tllm.rpc.manager import LocalRPCManager, RPCManager
 from tllm.rpc.master_handler import MasterHandler, PendingRequests
 
 
-def setup_seed(seed):
+def setup_seed(seed: int = 42):
     if BACKEND == BackendEnum.TORCH:
         import torch
 
         torch.manual_seed(seed)
-
-
-def parse_range_string(s):
-    try:
-        ranges = s.split(",")
-        result = []
-        for r in ranges:
-            start, end = map(int, r.split("-"))
-            result.append((start, end))
-        return result
-    except:
-        raise argparse.ArgumentTypeError("参数必须是形如 '1-2,3-4' 的范围字符串")
 
 
 def get_ip_address() -> str:

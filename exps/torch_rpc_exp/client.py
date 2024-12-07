@@ -12,7 +12,7 @@ from transformers.models.llama.modeling_llama import LlamaRMSNorm
 from worker import ModelManager
 
 from tllm.schemas import NodeConfig
-from tllm.utils import call_remote_forward, call_remote_init, parse_range_string, setup_seed, tokenize_message
+from tllm.utils import call_remote_forward, call_remote_init, setup_seed, tokenize_message
 
 # 使用 torch.dist 实现 张量并行，使用 torch.dist.rpc 实现流水并行，通信时仅通信输入
 
@@ -187,7 +187,6 @@ def parse_args():
     parser.add_argument("--ip", type=str, default="localhost", help="ip")
     parser.add_argument("--rpc_port", type=int, default=29605, help="rpc port")
     parser.add_argument("--model_path", type=str, help="model path")
-    parser.add_argument("--pp_ranges", type=parse_range_string, default="1-2,3-4", help="pp ranges")
     return parser.parse_args()
 
 
@@ -198,6 +197,6 @@ if __name__ == "__main__":
     world_size = args.world_size
     init_method = f"tcp://{args.ip}:{args.rpc_port}"
     model_path = args.model_path
-    pp_ranges = args.pp_ranges
+    pp_ranges = [(1, 2), (3, 4)]
 
     mp.spawn(run_client, args=(world_size, model_path, pp_ranges, init_method), nprocs=world_size, join=True)

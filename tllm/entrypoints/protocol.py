@@ -1,7 +1,7 @@
 # Adapted from
 # https://github.com/vllm-project/vllm/blob/35bd2151684ffb20cdad825abe33e0e6f0cc005a/vllm/entrypoints/openai/protocol.py
 import time
-from typing import *
+from typing import Any, Dict, List, Literal, Optional, Union
 import uuid
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator

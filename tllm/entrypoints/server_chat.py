@@ -1,7 +1,7 @@
 import asyncio
 import os
 import time
-from typing import *
+from typing import AsyncIterator
 
 from fastapi import HTTPException, Request
 

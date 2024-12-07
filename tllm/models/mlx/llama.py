@@ -1,6 +1,6 @@
 import glob
 import os
-from typing import *
+from typing import Any, Dict, Optional
 
 import mlx.core as mx
 import mlx.nn as nn

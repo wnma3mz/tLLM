@@ -211,7 +211,7 @@ async def serve_http(app: FastAPI, loop: asyncio.AbstractEventLoop, master_handl
 
 
 async def run_server(args) -> None:
-    setup_seed(42)
+    setup_seed()
     global app
     global logger, engine, ws_manager, pp_manager, openai_serving_chat
     global is_local
@@ -225,10 +225,10 @@ async def run_server(args) -> None:
     engine, tok, master_handler = await init_engine(
         logger, args.model_path, args.master_handler_port, args.is_local, args.is_fake
     )
-
-    logger.info(f"init cost time {time.time() - s1}")
-    openai_serving_chat = OpenAIServing(engine, tok, args)
     total_layers = engine.generator.model.num_layers
+
+    logger.info(f"Engine init Cost Time: {time.time() - s1:.4f}s. Total Layers: {total_layers}")
+    openai_serving_chat = OpenAIServing(engine, tok, args)
     ws_manager = WebsocketManager(total_layers, args.model_path)
     pp_manager = PipelineManager(ws_manager.client_size)
 

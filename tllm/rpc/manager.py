@@ -1,7 +1,7 @@
 # coding: utf-8
 import asyncio
 import time
-from typing import *
+from typing import Dict, List, Tuple
 
 import grpc
 

@@ -1,7 +1,7 @@
 import asyncio
 import time
 import traceback
-from typing import *
+from typing import List
 
 from tllm.generate import LLMGenerator
 from tllm.schemas import SequenceRequestData

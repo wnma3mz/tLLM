@@ -1,6 +1,6 @@
 import itertools
 import math
-from typing import *
+from typing import List, Optional
 
 import mlx.core as mx
 import mlx.nn as nn

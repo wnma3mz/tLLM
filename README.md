@@ -21,7 +21,7 @@
     - edit `examples/run_single_server.sh`
 
     ```bash
-    bash examples/run_single_server.sh 1
+    bash examples/run_single_server.sh
     ```
 
     3.2 (with communication)
@@ -32,10 +32,10 @@
 
     ```bash
     # first in one terminal
-    bash examples/run_server.sh 1
+    bash examples/run_server.sh
 
     # in another terminal
-    bash examples/run_client.sh 1
+    bash examples/run_client.sh
     ```
 
 4. testing
