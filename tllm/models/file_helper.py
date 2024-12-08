@@ -32,6 +32,7 @@ def get_hf_cache_model_path(repo_id: str, revision: Optional[str] = None) -> Pat
     storage_folder = os.path.join(cache_dir, repo_folder_name(repo_id=repo_id, repo_type=repo_type))
 
     ref_path = os.path.join(storage_folder, "refs", revision)
+    commit_hash = None
     if os.path.exists(ref_path):
         # retrieve commit_hash from refs file
         with open(ref_path) as f:

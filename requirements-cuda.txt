@@ -12,7 +12,7 @@ pillow
 huggingface_hub
 tinygrad
 gradio==5.4.0
-grpcio==1.66.2
+grpcio==1.68.1
 lz4==4.3.3
 protobuf==5.28.3
 pydantic==2.9.2

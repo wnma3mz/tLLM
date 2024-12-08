@@ -8,14 +8,15 @@ from tllm.entrypoints.image_protocol import Text2ImageRequest
 from tllm.entrypoints.protocol import ChatCompletionRequest
 from tllm.entrypoints.server_chat import OpenAIServing
 from tllm.entrypoints.server_image import ImageServing
+from tllm.generate import ImageGenerator, LLMGenerator
 from tllm.img_helper import base64_to_pil_image
 from tllm.utils import init_engine, setup_logger
 
 
 @dataclass
 class Args:
-    # model_path: str = "/Users/lujianghu/Documents/Llama-3.2-1B-Instruct"
-    model_path: str = "/Users/lujianghu/Documents/mflux/schnell_4bit"
+    model_path: str = "/Users/lujianghu/Documents/Llama-3.2-1B-Instruct"
+    # model_path: str = "/Users/lujianghu/Documents/mflux/schnell_4bit"
     # model_path: str= "mlx-community/Qwen2.5-0.5B-Instruct-bf16"
     # model_path: str = "Qwen/Qwen2-VL-2B-Instruct"
     is_local: bool = True
@@ -27,7 +28,7 @@ async def llm_generate():
     args = Args()
 
     logger = setup_logger("engine", logging.DEBUG if args.is_debug else logging.INFO)
-    engine, tok, _ = await init_engine(logger, args.model_path, 25111, args.is_local, args.is_fake)
+    engine, tok, _ = await init_engine(logger, args.model_path, 25111, args.is_local, args.is_fake, LLMGenerator)
     _ = await engine.start()
     messages = [{"role": "user", "content": "Hello, how are you?"}]
     openai_serving_chat = OpenAIServing(engine, tok, args)
@@ -41,7 +42,7 @@ async def mllm_generate():
     args = Args()
 
     logger = setup_logger("engine", logging.DEBUG if args.is_debug else logging.INFO)
-    engine, tok, _ = await init_engine(logger, args.model_path, 25111, args.is_local, args.is_fake)
+    engine, tok, _ = await init_engine(logger, args.model_path, 25111, args.is_local, args.is_fake, LLMGenerator)
     _ = await engine.start()
     messages = [
         {
@@ -70,7 +71,7 @@ async def image_generate():
     }
 
     logger = setup_logger("engine", logging.DEBUG if args.is_debug else logging.INFO)
-    engine, _, _ = await init_engine(logger, args.model_path, 25111, args.is_local, args.is_fake)
+    engine, _, _ = await init_engine(logger, args.model_path, 25111, args.is_local, args.is_fake, ImageGenerator)
     _ = await engine.start()
 
     image_serving = ImageServing(engine, args)
@@ -82,5 +83,5 @@ async def image_generate():
 
 
 if __name__ == "__main__":
-    # asyncio.run(llm_generate())
-    asyncio.run(image_generate())
+    asyncio.run(llm_generate())
+    # asyncio.run(image_generate())

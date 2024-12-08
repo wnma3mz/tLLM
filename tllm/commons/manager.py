@@ -181,7 +181,7 @@ def load_master_model(model_path: str) -> Tuple[LLMGenerator, TokenizerUtils]:
 
     kwargs = {}
     if weight_manager.arch == "Qwen2VLForConditionalGeneration":
-        kwargs.update({"model_path": model_path})
+        kwargs.update({"model_path": weight_manager.model_path})
     elif weight_manager.arch == "FLUX":
         kwargs.update({"quantization_level": weight_manager.config.quantization_level})
 

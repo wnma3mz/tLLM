@@ -104,7 +104,7 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
     @classmethod
     def from_pretrained(cls, config, state_dict: Dict[str, mx.array], **kwargs):
         model = cls(config)
-        assert kwargs.get("model_path", None) is None
+        assert kwargs.get("model_path", None) is not None
         model.processor = AutoProcessor.from_pretrained(kwargs["model_path"], trust_remote_code=True)
         model.mm_config = {
             "vision_start_id": config.vision_start_token_id,
