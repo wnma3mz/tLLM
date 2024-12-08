@@ -44,7 +44,7 @@ class MLXQwen2Model(nn.Module):
         return output
 
     @classmethod
-    def from_pretrained(cls, config: AutoConfig, model_path: str, state_dict: Dict[str, mx.array]):
+    def from_pretrained(cls, config: AutoConfig, state_dict: Dict[str, mx.array], **kwargs):
         is_merge = True
         if getattr(config, "quantization", None) is not None or state_dict is not None:
             is_merge = False
@@ -77,7 +77,7 @@ class MLXQwen2ForCausalLM(nn.Module):
         self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @classmethod
-    def from_pretrained(cls, config, model_path: str, state_dict: Optional[Dict] = None):
+    def from_pretrained(cls, config, state_dict: Optional[Dict], **kwargs):
         model = cls(config)
 
         cls.config = config

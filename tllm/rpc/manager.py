@@ -1,5 +1,6 @@
 # coding: utf-8
 import asyncio
+import math
 import time
 from typing import Dict, List, Tuple
 
@@ -49,15 +50,55 @@ class RPCManager:
 
         return deserialize_tensor(output), await asyncio.wait_for(status_future, timeout=100.0)
 
+    async def rpc_image_forward(
+        self,
+        request_id: str,
+        hidden_states: schemas_pb2.BFloat16Tensor,
+        text_embeddings: schemas_pb2.BFloat16Tensor,
+        image_rotary_emb: schemas_pb2.BFloat16Tensor,
+    ):
+        forward_request = {
+            "uuid": request_id,
+            "hidden_states": hidden_states,
+            "text_embeddings": text_embeddings,
+            "image_rotary_emb": image_rotary_emb,
+        }
+        self.stub.ImageForward(schemas_pb2.ImageForwardRequest(**forward_request))
+
+    async def image_forward(
+        self, hidden_states: MIX_TENSOR, text_embeddings: MIX_TENSOR, image_rotary_emb: MIX_TENSOR, request_id: str
+    ) -> Tuple[MIX_TENSOR, List[float]]:
+        hidden_states = serialize_tensor(hidden_states)
+        text_embeddings = serialize_tensor(text_embeddings)
+        image_rotary_emb = serialize_tensor(image_rotary_emb)
+        forward_future, status_future = self.pending_requests.add_request(
+            "-".join(x for x in [request_id]), self.pp_size
+        )
+        asyncio.create_task(self.rpc_image_forward(request_id, hidden_states, text_embeddings, image_rotary_emb))
+        await asyncio.sleep(0)
+        try:
+            output = await asyncio.wait_for(forward_future, timeout=100.0)
+        except asyncio.CancelledError:
+            raise asyncio.CancelledError
+
+        return deserialize_tensor(output), await asyncio.wait_for(status_future, timeout=100.0)
+
 
 class LocalRPCManager:
     # 并不发生通信，直接调用模型
-    def __init__(self, model_path: str, num_hidden_layers: int):
-        self.model = load_client_model(0, num_hidden_layers, Communicator(), model_path)
+    def __init__(self, model_path: str):
+        self.model = load_client_model(0, math.inf, Communicator(), model_path)
 
     async def forward(self, hidden_states: MIX_TENSOR, seq_input: SeqInput) -> Tuple[MIX_TENSOR, List[float]]:
         s1 = time.perf_counter()
         output_hidden_states = self.model(hidden_states, seq_input)
+        return output_hidden_states, [time.perf_counter() - s1]
+
+    async def image_forward(
+        self, hidden_states: MIX_TENSOR, text_embeddings: MIX_TENSOR, image_rotary_emb: MIX_TENSOR, request_id: str
+    ) -> Tuple[MIX_TENSOR, List[float]]:
+        s1 = time.perf_counter()
+        output_hidden_states = self.model(hidden_states, text_embeddings, image_rotary_emb)
         return output_hidden_states, [time.perf_counter() - s1]
 
 
@@ -99,3 +140,19 @@ class MasterRPCManager:
         status_request = {"uuid": uuid, "seq_len": seq_len, "pp_idx": self.pp_idx, "cost_time": cost_time}
         self.master_stub.Status(schemas_pb2.StatusRequest(**status_request))
         self.forward_stub.Forward(schemas_pb2.ForwardRequest(**forward_request))
+
+    async def rpc_image_func(
+        self,
+        request: schemas_pb2.ImageForwardRequest,
+        hidden_states: schemas_pb2.BFloat16Tensor,
+        cost_time: float,
+    ):
+        forward_request = {
+            "uuid": request.uuid,
+            "hidden_states": hidden_states,
+            "text_embeddings": request.text_embeddings,
+            "image_rotary_emb": request.image_rotary_emb,
+        }
+        status_request = {"uuid": request.uuid, "pp_idx": self.pp_idx, "cost_time": cost_time}
+        self.master_stub.Status(schemas_pb2.StatusRequest(**status_request))
+        self.forward_stub.ImageForward(schemas_pb2.ImageForwardRequest(**forward_request))

@@ -99,3 +99,36 @@ class SetConfigResponse(_message.Message):
     msg: str
     status: int
     def __init__(self, msg: _Optional[str] = ..., status: _Optional[int] = ...) -> None: ...
+
+class ImageForwardRequest(_message.Message):
+    __slots__ = ("uuid", "hidden_states", "encoder_hidden_states", "text_embeddings", "image_rotary_emb")
+    UUID_FIELD_NUMBER: _ClassVar[int]
+    HIDDEN_STATES_FIELD_NUMBER: _ClassVar[int]
+    ENCODER_HIDDEN_STATES_FIELD_NUMBER: _ClassVar[int]
+    TEXT_EMBEDDINGS_FIELD_NUMBER: _ClassVar[int]
+    IMAGE_ROTARY_EMB_FIELD_NUMBER: _ClassVar[int]
+    uuid: _containers.RepeatedScalarFieldContainer[str]
+    hidden_states: BFloat16Tensor
+    encoder_hidden_states: BFloat16Tensor
+    text_embeddings: BFloat16Tensor
+    image_rotary_emb: BFloat16Tensor
+    def __init__(
+        self,
+        uuid: _Optional[_Iterable[str]] = ...,
+        hidden_states: _Optional[_Union[BFloat16Tensor, _Mapping]] = ...,
+        encoder_hidden_states: _Optional[_Union[BFloat16Tensor, _Mapping]] = ...,
+        text_embeddings: _Optional[_Union[BFloat16Tensor, _Mapping]] = ...,
+        image_rotary_emb: _Optional[_Union[BFloat16Tensor, _Mapping]] = ...,
+    ) -> None: ...
+
+class ImageForwardResponse(_message.Message):
+    __slots__ = ("msg", "status", "image")
+    MSG_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    IMAGE_FIELD_NUMBER: _ClassVar[int]
+    msg: str
+    status: int
+    image: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(
+        self, msg: _Optional[str] = ..., status: _Optional[int] = ..., image: _Optional[_Iterable[str]] = ...
+    ) -> None: ...

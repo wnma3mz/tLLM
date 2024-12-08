@@ -32,20 +32,20 @@ def setup_logger(name, level=logging.INFO):
 
 
 async def init_engine(
-    logger, model_path: str, master_handler_port: int, is_local: bool, is_fake: bool = False
+    logger, model_path: str, master_handler_port: int, is_local: bool, is_fake: bool, Generator
 ) -> Tuple[AsyncEngine, TokenizerUtils, MasterHandler]:
-    model, tok, num_layers = load_master_model(model_path)
+    model, tok = load_master_model(model_path)
     if is_fake:
-        generator = FakeLLMGenerator(None, None, None, None)
+        generator = Generator(None, None, None, None)
         master_handler = None
     elif is_local:
-        generator = LLMGenerator(LocalRPCManager(model_path, num_layers), logger, model, tok)
+        generator = Generator(LocalRPCManager(model_path), logger, model, tok)
         master_handler = None
     else:
         pending_requests = PendingRequests()
         master_handler = MasterHandler(logger, pending_requests)
         await master_handler.start(master_handler_port)
 
-        generator = LLMGenerator(RPCManager(pending_requests), logger, model, tok)
+        generator = Generator(RPCManager(pending_requests), logger, model, tok)
     engine = AsyncEngine(logger, generator)
     return engine, tok, master_handler

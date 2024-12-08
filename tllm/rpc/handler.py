@@ -125,7 +125,39 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
         await asyncio.sleep(0)
         return schemas_pb2.ForwardResponse(msg="Forward Completed", status=200)
 
-    def Health(self, request, context):
+    async def image_forward_func(self, request: schemas_pb2.ImageForwardRequest):
+        s1 = time.perf_counter()
+        hidden_states = deserialize_tensor(request.hidden_states)
+        text_embeddings = deserialize_tensor(request.text_embeddings)
+        image_rotary_emb = deserialize_tensor(request.image_rotary_emb)
+
+        self.logger.debug(f"deserialize_tensor cost time: {time.perf_counter() - s1:.4f}")
+
+        s1 = time.perf_counter()
+        output_hidden_states = self.http_client.model(hidden_states, text_embeddings, image_rotary_emb)
+        cost_time = time.perf_counter() - s1
+        self.logger.debug(f"forward cost time: {cost_time:.4f}")
+
+        s1 = time.perf_counter()
+        output = serialize_tensor(output_hidden_states)
+        self.logger.debug(f"serialize_tensor cost time: {time.perf_counter() - s1:.4f}")
+        self.logger.debug("=" * 20)
+
+        await self.manager.rpc_image_func(request, output, cost_time)
+
+    async def ImageForward(
+        self, request: schemas_pb2.ImageForwardRequest, context: grpc.ServicerContext
+    ) -> schemas_pb2.ImageForwardResponse:
+        if not hasattr(self.http_client, "model") and self.http_client is None:
+            return schemas_pb2.ForwardResponse(msg="Model not initialized", status=400)
+        if hasattr(self.manager, "master_stub") is None:
+            return schemas_pb2.ForwardResponse(msg="Manager not initialized", status=400)
+        asyncio.create_task(self.image_forward_func(request))
+
+        await asyncio.sleep(0)
+        return schemas_pb2.ForwardResponse(msg="Forward Completed", status=200)
+
+    async def Health(self, request, context):
         return schemas_pb2.HealthResponse(msg="Healthy", status=200)
 
 

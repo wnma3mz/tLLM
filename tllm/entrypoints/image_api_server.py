@@ -12,14 +12,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 import uvicorn
 
-from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionResponse
-from tllm.entrypoints.server_chat import OpenAIServing
+from tllm.entrypoints.image_protocol import Text2ImageRequest, Text2ImageResponse
+from tllm.entrypoints.server_image import ImageServing
 from tllm.schemas import InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
 from tllm.utils import init_engine, setup_logger, setup_seed
 from tllm.websocket.manager import PipelineManager, WebsocketManager
 
 engine: None
-openai_serving_chat: OpenAIServing = None
+image_serving: ImageServing = None
 ws_manager: WebsocketManager = None
 
 
@@ -44,32 +44,20 @@ async def get_index():
     return HTMLResponse(content=html_content)
 
 
-@app.post("/v1/chat/completions")
-async def create_chat_completion(request: ChatCompletionRequest, raw_request: Request) -> ChatCompletionResponse:
+@app.post("/v1/create_image")
+async def create_image(request: Text2ImageRequest, raw_request: Request) -> Text2ImageResponse:
     if not ws_manager.has_full_model and not is_local:
         raise ValueError("No available Full Node to process the request")
     try:
-        generator = await openai_serving_chat.create_chat_completion(request, raw_request)
+        generator = await image_serving.create_image(request, raw_request)
         if request.stream:
             return StreamingResponse(content=generator, media_type="text/event-stream")
         else:
-            assert isinstance(generator, ChatCompletionResponse)
+            assert isinstance(generator, Text2ImageResponse)
             return JSONResponse(content=generator.model_dump())
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}")
         return JSONResponse(content={"error": str(e)}, status_code=499)
-
-
-@app.post("/v1/completions")
-async def create_completion(request: ChatCompletionRequest, raw_request: Request) -> ChatCompletionResponse:
-    if not ws_manager.has_full_model and not is_local:
-        raise ValueError("No available Full Node to process the request")
-    generator = await openai_serving_chat.create_chat_completion(request, raw_request)
-    if request.stream:
-        return StreamingResponse(content=generator, media_type="text/event-stream")
-    else:
-        assert isinstance(generator, ChatCompletionResponse)
-        return JSONResponse(content=generator.model_dump())
 
 
 @app.get("/health")
@@ -84,12 +72,6 @@ async def health(background_tasks: BackgroundTasks):
         background_tasks.add_task(update_model_url)
 
     return Response(status_code=200)
-
-
-@app.get("/v1/models")
-async def show_available_models():  #
-    models = await openai_serving_chat.show_available_models()
-    return JSONResponse(content=models.model_dump())
 
 
 @app.get("/version")
@@ -118,7 +100,7 @@ async def update_model_url():
     host_list = ws_manager.set_connect_clients()
     if len(host_list) > 0:
         clients = ws_manager.connect_clients
-        openai_serving_chat.engine.update_url(clients[0].host, len(clients))
+        image_serving.engine.update_url(clients[0].host, len(clients))
         pp_manager.update_url(host_list)
         await pp_manager.send_config(args.master_url, host_list)
         # 后台持续进行健康检查，如果有节点挂掉，需要重新分配
@@ -214,7 +196,7 @@ async def serve_http(app: FastAPI, loop: asyncio.AbstractEventLoop, master_handl
 async def run_server(args) -> None:
     setup_seed()
     global app
-    global logger, engine, ws_manager, pp_manager, openai_serving_chat
+    global logger, engine, ws_manager, pp_manager, image_serving
     global is_local
     is_local = args.is_local
 
@@ -223,20 +205,16 @@ async def run_server(args) -> None:
     logger.info("args: %s", args)
 
     s1 = time.time()
-    from tllm.generate import FakeLLMGenerator, LLMGenerator
+    from tllm.generate import ImageGenerator
 
-    if args.is_fake:
-        generator = FakeLLMGenerator
-    else:
-        generator = LLMGenerator
-    engine, tok, master_handler = await init_engine(
-        logger, args.model_path, args.master_handler_port, args.is_local, args.is_fake, generator
+    engine, _, master_handler = await init_engine(
+        logger, args.model_path, args.master_handler_port, args.is_local, args.is_fake, ImageGenerator
     )
     total_layers = engine.generator.model.num_layers
 
     logger.info(f"Engine init Cost Time: {time.time() - s1:.4f}s. Total Layers: {total_layers}")
-    openai_serving_chat = OpenAIServing(engine, tok, args)
-    ws_manager = WebsocketManager(total_layers, args.model_path)
+    image_serving = ImageServing(engine, args)
+    ws_manager = WebsocketManager(total_layers, args.model_path, skip_parse=True)
     pp_manager = PipelineManager(ws_manager.client_size)
 
     loop = await engine.start()

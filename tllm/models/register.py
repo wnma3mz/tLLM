@@ -1,3 +1,5 @@
+import importlib.util
+
 from tllm import BACKEND, BackendEnum
 from tllm.models.torch.helper import greedy_decode
 
@@ -21,6 +23,12 @@ if BackendEnum.MLX == BACKEND:
     MODEL_REGISTER.update({"LlamaForCausalLM": (MLXLlamaForCausalLM, MLXLlamaModel)})
     MODEL_REGISTER.update({"Qwen2ForCausalLM": (MLXQwen2ForCausalLM, MLXQwen2Model)})
     MODEL_REGISTER.update({"Qwen2VLForConditionalGeneration": (MLXQwen2VLForConditionalGeneration, MLXQwen2Model)})
+
+    if importlib.util.find_spec("mflux"):
+        from tllm.models.mlx.flux.flux import Flux1
+        from tllm.models.mlx.flux.transformer import FLUXModel
+
+        MODEL_REGISTER.update({"FLUX": (Flux1, FLUXModel)})
 
     from tllm.models.mlx.helper import greedy_decode
 

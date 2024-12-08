@@ -1,6 +1,6 @@
 import os
 import time
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from transformers import AutoConfig
 
@@ -14,14 +14,53 @@ from tllm.models.weight_helper import load_gguf_weight, read_from_safetensors, t
 class WeightManager:
     def __init__(self, model_path: str):
         self.model_path = get_model_path(model_path)
-        if str(self.model_path).endswith(".gguf"):
-            self.read_master_weight = self._gguf_read_master_weight
-            self.read_client_weight = self._gguf_read_client_weight
-        else:
-            self.read_master_weight = self._hf_read_master_weight
-            self.read_client_weight = self._hf_read_client_weight
         self.state_dict = None
-        self.tok, self.arch, self.config = self._post_init()
+
+        if "flux" in str(self.model_path).lower():
+            from mflux import ModelConfig
+
+            print("load flux model weight")
+            self.read_master_weight = self._read_flux_master_weight
+            self.read_client_weight = self._read_flux_client_weight
+
+            if "schnell" in str(self.model_path).lower():
+                config = ModelConfig.from_alias("schnell")
+            elif "dev" in str(self.model_path).lower():
+                config = ModelConfig.from_alias("dev")
+            else:
+                raise ValueError("ModelConfig not found")
+
+            config.num_hidden_layers = 38
+            self.config = config
+
+            self.tok, self.arch = None, "FLUX"
+        else:
+            if str(self.model_path).endswith(".gguf"):
+                self.read_master_weight = self._gguf_read_master_weight
+                self.read_client_weight = self._gguf_read_client_weight
+            else:
+                self.read_master_weight = self._hf_read_master_weight
+                self.read_client_weight = self._hf_read_client_weight
+            self.tok, self.arch, self.config = self._post_init()
+
+    def _read_flux_master_weight(self):
+        from mflux.weights.weight_handler import WeightHandler
+
+        weights = WeightHandler(local_path=self.model_path, lora_paths=None, lora_scales=None)
+
+        self.config.quantization_level = weights.quantization_level
+        return weights
+
+    def _read_flux_client_weight(self, start_idx: int, end_idx: int):
+        from mflux.weights.weight_handler import WeightHandler
+
+        weights, self.config.quantization_level = WeightHandler.load_transformer(root_path=self.model_path)
+
+        class TransformerWeightHandler:
+            def __init__(self, weights):
+                self.transformer = weights
+
+        return TransformerWeightHandler(weights)
 
     def _post_init(self):
         if str(self.model_path).endswith(".gguf"):
@@ -108,27 +147,31 @@ class WeightManager:
 
 def load_client_model(start_idx: int, end_idx: int, comm: BaseCommunicator, model_path: str):
     weight_manager = WeightManager(model_path)
+    config = weight_manager.config
+
+    end_idx = min(end_idx, config.num_hidden_layers)
+
     state_dict = weight_manager.read_client_weight(start_idx, end_idx)
     if weight_manager.arch not in MODEL_REGISTER:
         raise ValueError(f"Model {weight_manager.arch} not supported")
-
-    config = weight_manager.config
 
     config.comm = comm
     config.decoder_start_layer_idx = start_idx
     config.decoder_end_layer_idx = end_idx
 
-    arch = config.architectures[0]
+    _, MY_MODEL_CLASS = MODEL_REGISTER[weight_manager.arch]
 
-    _, MY_MODEL_CLASS = MODEL_REGISTER[arch]
+    kwargs = {}
+    if weight_manager.arch == "FLUX":
+        kwargs.update({"quantization_level": weight_manager.config.quantization_level})
 
     s1 = time.perf_counter()
-    model = MY_MODEL_CLASS.from_pretrained(config, model_path, state_dict)
+    model = MY_MODEL_CLASS.from_pretrained(config, state_dict, **kwargs)
     print(f"Model loaded in {time.perf_counter() - s1:.2f}s")
     return model
 
 
-def load_master_model(model_path: str) -> Tuple[LLMGenerator, TokenizerUtils, int]:
+def load_master_model(model_path: str) -> Tuple[LLMGenerator, TokenizerUtils]:
     weight_manager = WeightManager(model_path)
     state_dict = weight_manager.read_master_weight()
     if weight_manager.arch not in MODEL_REGISTER:
@@ -136,5 +179,11 @@ def load_master_model(model_path: str) -> Tuple[LLMGenerator, TokenizerUtils, in
 
     MY_CausalLM_CLASS, _ = MODEL_REGISTER[weight_manager.arch]
 
-    model = MY_CausalLM_CLASS.from_pretrained(weight_manager.config, weight_manager.model_path, state_dict)
-    return model, weight_manager.tok, weight_manager.config.num_hidden_layers
+    kwargs = {}
+    if weight_manager.arch == "Qwen2VLForConditionalGeneration":
+        kwargs.update({"model_path": model_path})
+    elif weight_manager.arch == "FLUX":
+        kwargs.update({"quantization_level": weight_manager.config.quantization_level})
+
+    model = MY_CausalLM_CLASS.from_pretrained(weight_manager.config, state_dict, **kwargs)
+    return model, weight_manager.tok

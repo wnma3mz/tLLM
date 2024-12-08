@@ -57,9 +57,7 @@ class MLXLlamaModel(nn.Module):
         return output
 
     @classmethod
-    def from_pretrained(
-        cls, config: AutoConfig, model_path: str, state_dict: Dict[str, mx.array], is_merge: bool = True
-    ):
+    def from_pretrained(cls, config: AutoConfig, state_dict: Dict[str, mx.array], is_merge: bool = True, **kwargs):
         if getattr(config, "quantization", None) is not None or state_dict is not None:
             is_merge = False
 
@@ -89,7 +87,7 @@ class MLXLlamaForCausalLM(nn.Module):
         self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @classmethod
-    def from_pretrained(cls, config, model_path: str, state_dict: Optional[Any] = None):
+    def from_pretrained(cls, config, state_dict: Optional[Any], **kwargs):
         model = cls(config)
 
         cls.config = config

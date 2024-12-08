@@ -5,7 +5,7 @@ from typing import AsyncIterator
 
 from fastapi import HTTPException, Request
 
-from tllm.engine import AsyncEngine, SequenceRequestData
+from tllm.engine import AsyncEngine
 from tllm.entrypoints.protocol import (
     ChatCompletionRequest,
     ChatCompletionResponse,
@@ -21,7 +21,7 @@ from tllm.entrypoints.protocol import (
     random_uuid,
 )
 from tllm.generate import MessageProcessor, TokenizerUtils
-from tllm.schemas import RequestOutput
+from tllm.schemas import RequestOutput, SequenceRequestData
 
 
 def create_error_response(message: str) -> ChatCompletionResponse:

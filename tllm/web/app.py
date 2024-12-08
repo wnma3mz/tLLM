@@ -9,6 +9,7 @@ from PIL import Image
 import gradio as gr
 import requests
 
+from tllm.img_helper import pil_image_to_base64, resize_image_if_needed
 from tllm.static.gradio_data import GenerationConfig, custom_css
 
 
@@ -24,29 +25,6 @@ def process_response_chunk(chunk: bytes) -> Optional[Dict]:
     except:
         print("Error decoding chunk", chunk)
         return None
-
-
-def resize_image_if_needed(img: Image.Image, max_size=512):
-    width, height = img.size
-
-    if width > max_size or height > max_size:
-        ratio = min(max_size / width, max_size / height)
-
-        new_width = int(width * ratio)
-        new_height = int(height * ratio)
-
-        img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-
-    return img
-
-
-def pil_image_to_base64(image: Image.Image) -> str:
-    image = resize_image_if_needed(image)
-    buffered = BytesIO()
-    image.save(buffered, format="PNG")
-    img_bytes = buffered.getvalue()
-
-    return base64.b64encode(img_bytes).decode("utf-8")
 
 
 class MessageProcessor:
@@ -69,7 +47,7 @@ class MessageProcessor:
             else:
                 mm_content = [
                     {"type": "text", "text": user_input},
-                    {"type": "image_url", "image_url": {"base64": pil_image_to_base64(img)}},
+                    {"type": "image_url", "image_url": {"base64": pil_image_to_base64(resize_image_if_needed(img))}},
                 ]
                 formatted_history.append({"role": "user", "content": mm_content})
             if assistant_response is not None:

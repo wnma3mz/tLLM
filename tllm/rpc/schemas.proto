@@ -49,7 +49,19 @@ message SetConfigResponse {
     int32 status = 2;
 }
 
+message ImageForwardRequest {
+    repeated string uuid = 1;
+    BFloat16Tensor hidden_states = 2;
+    BFloat16Tensor encoder_hidden_states = 3;
+    BFloat16Tensor text_embeddings = 4;
+    BFloat16Tensor image_rotary_emb = 5;
+}
 
+message ImageForwardResponse {
+    string msg = 1;
+    int32 status = 2;
+    repeated string image = 3;
+}
 
 
 service RPCService {
@@ -57,4 +69,5 @@ service RPCService {
     rpc Forward (ForwardRequest) returns (ForwardResponse);
     rpc Health (Empty) returns (HealthResponse);
     rpc SetConfig (SetConfigRequest) returns (SetConfigResponse);
+    rpc ImageForward (ImageForwardRequest) returns (ImageForwardResponse);
 }

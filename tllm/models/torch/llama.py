@@ -79,7 +79,7 @@ class HFLlamaModel(nn.Module):
         self.rotary_emb = HFLlamaRotaryEmbedding(config=config)
 
     @classmethod
-    def from_pretrained(cls, config, model_path: str, state_dict: Dict[str, torch.Tensor], is_merge: bool = True):
+    def from_pretrained(cls, config, state_dict: Dict[str, torch.Tensor], is_merge: bool = True, **kwargs):
         model = cls(config, is_merge)
         state_dict = model.merge_weights(state_dict, is_merge)
         model.load_state_dict(state_dict)
@@ -153,7 +153,7 @@ class HFLlamaForCausalLM(nn.Module):
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @classmethod
-    def from_pretrained(cls, config, model_path: str, state_dict: Optional[Dict] = None):
+    def from_pretrained(cls, config, state_dict: Optional[Dict] = None, **kwargs):
         model = cls(config)
 
         cls.config = config

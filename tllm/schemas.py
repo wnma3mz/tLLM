@@ -115,6 +115,35 @@ class ForwardResult:
 
 
 @dataclass
+class ImageResponseOutput:
+    outputs: List[str]
+
+
+@dataclass
+class ImageRequestData:
+    request_id: str
+
+    prompt: str
+    config: "ImageGenerationConfig"
+    seed: int
+    generate_iter: int = 0
+    input_embeds: Optional[Tuple[MIX_TENSOR, MIX_TENSOR, MIX_TENSOR]] = None
+    runtime_config = None
+
+    is_stop: bool = False
+    finish_reason_list: Optional[List[str]] = None
+    condition: asyncio.Condition = field(default_factory=asyncio.Condition)
+    timeout: int = 100000  # 请求的总超时时间
+    start_time: Optional[float] = None
+
+    output_base64: str = ""
+
+    def to_request_output(self) -> RequestOutput:
+        # TODO: streaming support
+        return ImageResponseOutput([self.output_base64])
+
+
+@dataclass
 class SequenceRequestData:
     # 每个请求在输入输出模型的数据
     request_id: str

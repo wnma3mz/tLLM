@@ -102,10 +102,10 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
         self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @classmethod
-    def from_pretrained(cls, config, model_path: str, state_dict: Dict[str, mx.array]):
+    def from_pretrained(cls, config, state_dict: Dict[str, mx.array], **kwargs):
         model = cls(config)
-
-        model.processor = AutoProcessor.from_pretrained(model_path, trust_remote_code=True)
+        assert kwargs.get("model_path", None) is None
+        model.processor = AutoProcessor.from_pretrained(kwargs["model_path"], trust_remote_code=True)
         model.mm_config = {
             "vision_start_id": config.vision_start_token_id,
             "vision_end_id": config.vision_end_token_id,

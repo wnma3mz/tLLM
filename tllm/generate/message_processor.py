@@ -1,18 +1,12 @@
-import base64
-from io import BytesIO
 from typing import Dict, List, Optional, Tuple
 
 from PIL import Image
 from PIL.ImageFile import ImageFile
 
+from tllm.img_helper import base64_to_pil_image
 from tllm.schemas import MESSAGES, MultiModalContent, UrlItem
 
 from .token_utils import TokenizerUtils
-
-
-def base64_to_pil_image(base64_string: str) -> BytesIO:
-    img_bytes = base64.b64decode(base64_string)
-    return BytesIO(img_bytes)
 
 
 class MessageProcessor:

@@ -12,14 +12,17 @@ from tllm.websocket.utils import find_continuous_path
 
 
 class WebsocketManager:
-    def __init__(self, total_layers: int, model_name: str):
+    def __init__(self, total_layers: int, model_name: str, skip_parse: bool = False):
         self.total_layers = total_layers
         self.model_name = model_name
         self.clients: Dict[str, ClientData] = {}  # 连接的客户端, client_id -> ClientData
         self.monitor_websockets: Set[WebSocket] = set()  # 前端页面的websocket连接
 
         self.connect_clients = []
-        self.client_size, self.layer_info = split_model_layers(parse_model_size(model_name), total_layers)
+        if skip_parse:
+            self.client_size, self.layer_info = split_model_layers(1, total_layers)
+        else:
+            self.client_size, self.layer_info = split_model_layers(parse_model_size(model_name), total_layers)
         self.client_info = [[start_idx, end_idx, 0] for start_idx, end_idx in self.layer_info]  # 统计连接情况
 
     def get_free_layer(self) -> Tuple[int, int, int]:

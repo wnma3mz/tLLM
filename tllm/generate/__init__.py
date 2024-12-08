@@ -1,3 +1,4 @@
+from .image_generator import ImageGenerator
 from .llm_generator import FakeLLMGenerator, LLMGenerator
 from .message_processor import MessageProcessor
 from .sampler_utils import SamplerUtils

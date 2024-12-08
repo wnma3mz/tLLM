@@ -99,16 +99,16 @@ class LLMGenerator:
             calc_cost_time=sum(calc_cost_time_list),
         )
 
-    async def generate(self, sequence_request_list: List[SequenceRequestData]) -> AsyncGenerator:
+    async def generate(self, request_list: List[SequenceRequestData]):
         """
         @params:
-            sequence_request_list: List[SequenceRequestData]
+            request_list: List[SequenceRequestData]
                 Params:
                     input_ids: List[int]
 
         """
         uuid_list, input_ids_list, seq_len_list, mm_input_list = [], [], [], []
-        for sequence_request in sequence_request_list:
+        for sequence_request in request_list:
             uuid_list.append(sequence_request.request_id)
             # 如果是 prefilling，则为 input_ids; 否则，为 output_ids[-1]
             # input_ids: seq_len
@@ -139,7 +139,7 @@ class LLMGenerator:
         s1 = time.perf_counter()
         seq_logits: List[MIX_TENSOR] = self.model.get_logits(forward_result.hidden_states)
         self.logger.debug(f"logits cost time: {time.perf_counter() - s1:.4f}s")
-        assert seq_logits.shape[0] == len(sequence_request_list)
+        assert seq_logits.shape[0] == len(request_list)
 
         s1 = time.perf_counter()
         # TODO: batch decode by group
@@ -147,9 +147,7 @@ class LLMGenerator:
         seq_generate_ids: List[int] = sampling_func(seq_logits)
         seq_generate_texts = self.tok.decode(seq_generate_ids)
 
-        for generate_id, generate_text, sequence_request in zip(
-            seq_generate_ids, seq_generate_texts, sequence_request_list
-        ):
+        for generate_id, generate_text, sequence_request in zip(seq_generate_ids, seq_generate_texts, request_list):
             sequence_request.output_ids.append(generate_id)
 
             end = is_generate_end(
@@ -177,9 +175,9 @@ class LLMGenerator:
 
 class FakeLLMGenerator(LLMGenerator):
 
-    async def generate(self, sequence_request_list: List[SequenceRequestData]) -> AsyncGenerator:
+    async def generate(self, request_list: List[SequenceRequestData]):
         generate_id, generate_text = 0, "fake "
-        for sequence_request in sequence_request_list:
+        for sequence_request in request_list:
             sequence_request.output_ids.append(generate_id)
             if len(sequence_request.output_ids) == sequence_request.sampling_params.max_tokens:
                 sequence_request.finish_reason_list = ["length"]
