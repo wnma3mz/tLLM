@@ -56,15 +56,17 @@ class RPCManager:
         request_id: str,
         hidden_states: schemas_pb2.BFloat16Tensor,
         text_embeddings: schemas_pb2.BFloat16Tensor,
-        image_rotary_emb: schemas_pb2.BFloat16Tensor,
-        len_: int,
+        seq_len: int,
+        height: int,
+        width: int,
     ):
         forward_request = {
             "uuid": request_id,
             "hidden_states": hidden_states,
             "text_embeddings": text_embeddings,
-            "image_rotary_emb": image_rotary_emb,
-            "length": len_,
+            "seq_len": seq_len,
+            "height": height,
+            "width": width,
         }
         self.stub.ImageForward(schemas_pb2.ImageForwardRequest(**forward_request))
 
@@ -72,9 +74,10 @@ class RPCManager:
         self,
         hidden_states: MIX_TENSOR,
         text_embeddings: MIX_TENSOR,
-        image_rotary_emb: MIX_TENSOR,
+        seq_len: int,
+        height: int,
+        width: int,
         request_id: str,
-        len_: int,
     ) -> Tuple[MIX_TENSOR, List[float]]:
         import mlx.core as mx
         import numpy as np
@@ -83,12 +86,11 @@ class RPCManager:
 
         hidden_states = convertor.serialize(hidden_states)
         text_embeddings = convertor.serialize(text_embeddings)
-        image_rotary_emb = convertor.serialize(image_rotary_emb)
         forward_future, status_future = self.pending_requests.add_request(
             "-".join(x for x in [request_id]), self.pp_size
         )
         asyncio.create_task(
-            self.rpc_image_forward([request_id], hidden_states, text_embeddings, image_rotary_emb, len_)
+            self.rpc_image_forward([request_id], hidden_states, text_embeddings, seq_len, height, width)
         )
         await asyncio.sleep(0)
         try:
@@ -109,10 +111,16 @@ class LocalRPCManager:
         return output_hidden_states, [time.perf_counter() - s1]
 
     async def image_forward(
-        self, hidden_states: MIX_TENSOR, text_embeddings: MIX_TENSOR, image_rotary_emb: MIX_TENSOR, request_id: str
+        self,
+        hidden_states: MIX_TENSOR,
+        text_embeddings: MIX_TENSOR,
+        seq_len: int,
+        height: int,
+        width: int,
+        request_id: str,
     ) -> Tuple[MIX_TENSOR, List[float]]:
         s1 = time.perf_counter()
-        output_hidden_states = self.model(hidden_states, text_embeddings, image_rotary_emb)
+        output_hidden_states = self.model(hidden_states, text_embeddings, seq_len, height, width, [request_id])
         return output_hidden_states, [time.perf_counter() - s1]
 
 

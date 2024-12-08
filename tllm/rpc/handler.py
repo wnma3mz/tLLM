@@ -135,13 +135,13 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
 
         hidden_states = convertor.deserialize(request.hidden_states)
         text_embeddings = convertor.deserialize(request.text_embeddings)
-        image_rotary_emb = convertor.deserialize(request.image_rotary_emb)
 
         self.logger.debug(f"deserialize_tensor cost time: {time.perf_counter() - s1:.4f}")
 
         s1 = time.perf_counter()
-        output_hidden_states = self.http_client.model(hidden_states, text_embeddings, image_rotary_emb)
-        output_hidden_states = output_hidden_states[:, request.length :, ...]  # 最后一个 PP 截断返回
+        output_hidden_states = self.http_client.model(
+            hidden_states, text_embeddings, request.seq_len, request.height, request.width, request.uuid
+        )
         cost_time = time.perf_counter() - s1
         self.logger.debug(f"forward cost time: {cost_time:.4f}")
 

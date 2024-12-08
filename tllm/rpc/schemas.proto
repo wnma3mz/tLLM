@@ -54,8 +54,9 @@ message ImageForwardRequest {
     BFloat16Tensor hidden_states = 2;
     BFloat16Tensor encoder_hidden_states = 3;
     BFloat16Tensor text_embeddings = 4;
-    BFloat16Tensor image_rotary_emb = 5;
-    int32 length = 6;
+    int32 seq_len = 5;
+    int32 height = 6;
+    int32 width = 7;
 }
 
 

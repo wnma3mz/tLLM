@@ -11,13 +11,14 @@ from tllm.img_helper import base64_to_pil_image
 
 async def requests_func(prompt: str):
     url = "http://localhost:8022/v1/create_image"
+    h = w = 512
     data = {
         "model": "test",
         "prompt": prompt,
         "config": {
             "num_inference_steps": 2,
-            "height": 512,
-            "width": 512,
+            "height": h,
+            "width": w,
         },
     }
     async with aiohttp.ClientSession() as session:

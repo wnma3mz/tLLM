@@ -127,7 +127,7 @@ class ImageRequestData:
     config: "ImageGenerationConfig"
     seed: int
     generate_iter: int = 0
-    input_embeds: Optional[Tuple[MIX_TENSOR, MIX_TENSOR, MIX_TENSOR]] = None
+    input_embeds: Optional["EmbeddingResult"] = None
     runtime_config = None
 
     is_stop: bool = False

@@ -1,4 +1,6 @@
+from dataclasses import dataclass
 import os
+from typing import Tuple
 
 from mflux.config.config import Config
 from mflux.config.model_config import ModelConfig
@@ -21,6 +23,13 @@ from tllm.models.mlx.flux.transformer import Transformer
 
 # from mflux.models.transformer.transformer import Transformer
 # from mflux.tokenizer.tokenizer_handler import TokenizerHandler
+
+
+@dataclass
+class EmbeddingResult:
+    latents: mx.array
+    prompt_embeds: mx.array
+    pooled_prompt_embeds: mx.array
 
 
 class TokenizerHandler:
@@ -98,7 +107,7 @@ class Flux1:
             # fmt: on
             self._set_model_weights(weights)
 
-    def get_embedding(self, seed: int, prompt: str, config: Config) -> tuple:
+    def get_embedding(self, seed: int, prompt: str, config: Config) -> Tuple[RuntimeConfig, EmbeddingResult]:
         config = RuntimeConfig(Config(**config.dict()), self.model_config)
 
         # 1. Create the initial latents
@@ -109,25 +118,21 @@ class Flux1:
         prompt_embeds = self.t5_text_encoder.forward(t5_tokens)
         pooled_prompt_embeds = self.clip_text_encoder.forward(clip_tokens)
 
-        return config, latents, prompt_embeds, pooled_prompt_embeds
+        return config, EmbeddingResult(latents, prompt_embeds, pooled_prompt_embeds)
 
-    def get_encoder_hidden_states(self, t: int, config, latents, prompt_embeds, pooled_prompt_embeds):
+    def get_encoder_hidden_states(self, t: int, config, embedding_result: EmbeddingResult) -> mx.array:
         # 3.t Predict the noise
         return self.transformer.predict(
             t=t,
-            prompt_embeds=prompt_embeds,
-            pooled_prompt_embeds=pooled_prompt_embeds,
-            hidden_states=latents,
+            prompt_embeds=embedding_result.prompt_embeds,
+            pooled_prompt_embeds=embedding_result.pooled_prompt_embeds,
+            hidden_states=embedding_result.latents,
             config=config,
         )
 
-    def get_noise(self, t: int, config, hidden_states, text_embeddings, latents) -> mx.array:
+    def get_noise(self, t: int, config, noise, latents) -> mx.array:
         # 4.t Take one denoise step
-        noise = self.transformer.get_noise(hidden_states=hidden_states, text_embeddings=text_embeddings)
-        dt = config.sigmas[t + 1] - config.sigmas[t]
-        latents += noise * dt
-
-        return latents
+        return latents + noise * (config.sigmas[t + 1] - config.sigmas[t])
 
     def get_images(
         self, latents, config: RuntimeConfig, seed: int, prompt: str, generation_time: float
