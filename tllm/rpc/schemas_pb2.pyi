@@ -120,15 +120,3 @@ class ImageForwardRequest(_message.Message):
         text_embeddings: _Optional[_Union[BFloat16Tensor, _Mapping]] = ...,
         image_rotary_emb: _Optional[_Union[BFloat16Tensor, _Mapping]] = ...,
     ) -> None: ...
-
-class ImageForwardResponse(_message.Message):
-    __slots__ = ("msg", "status", "image")
-    MSG_FIELD_NUMBER: _ClassVar[int]
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    IMAGE_FIELD_NUMBER: _ClassVar[int]
-    msg: str
-    status: int
-    image: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(
-        self, msg: _Optional[str] = ..., status: _Optional[int] = ..., image: _Optional[_Iterable[str]] = ...
-    ) -> None: ...

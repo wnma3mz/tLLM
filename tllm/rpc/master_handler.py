@@ -114,6 +114,22 @@ class MasterHandler(schemas_pb2_grpc.RPCServiceServicer):
         finally:
             return schemas_pb2.ForwardResponse(msg="Forward Completed", status=200)
 
+    async def ImageForward(
+        self, request: schemas_pb2.ImageForwardRequest, context: grpc.ServicerContext
+    ) -> schemas_pb2.ForwardResponse:
+        """处理从最后一个节点返回的结果"""
+        request_id = "-".join(x for x in list(request.uuid))
+        self.logger.debug(f"Received result request id: {request_id}")
+
+        try:
+            self.pending_requests.complete_forward_request(request_id, request.hidden_states)
+        except Exception as e:
+            self.logger.debug("error")
+        except BaseException as e:
+            self.logger.debug("base error")
+        finally:
+            return schemas_pb2.ForwardResponse(msg="Forward Completed", status=200)
+
     async def Status(
         self, request: schemas_pb2.StatusRequest, context: grpc.ServicerContext
     ) -> schemas_pb2.StatusResponse:

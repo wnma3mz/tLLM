@@ -17,13 +17,17 @@ class ImageGenerator:
     async def forward(
         self, inputs_embeds: Tuple[MIX_TENSOR, MIX_TENSOR, MIX_TENSOR], image_request: ImageRequestData
     ) -> ForwardResult:
-        s1 = time.perf_counter()
+        s0 = time.perf_counter()
         hidden_states, text_embeddings, image_rotary_emb, len_ = self.model.get_encoder_hidden_states(
             image_request.generate_iter, image_request.runtime_config, *inputs_embeds
         )
+        self.logger.debug(f"get_encoder_hidden_states cost time: {time.perf_counter() - s0:.4f}s")
+        s1 = time.perf_counter()
         hidden_states, calc_cost_time_list = await self.manager.image_forward(
             hidden_states, text_embeddings, image_rotary_emb, image_request.request_id
         )
+        comm_cost_time = time.perf_counter() - s1 - sum(calc_cost_time_list)
+        s0 = time.perf_counter()
         hidden_states = self.model.get_noise(
             image_request.generate_iter,
             image_request.runtime_config,
@@ -32,7 +36,7 @@ class ImageGenerator:
             len_,
             inputs_embeds[0],
         )
-        comm_cost_time = time.perf_counter() - s1 - sum(calc_cost_time_list)
+        self.logger.debug(f"get_noise cost time: {time.perf_counter() - s0:.4f}s")
         return ForwardResult(
             hidden_states=hidden_states,
             comm_cost_time=comm_cost_time,

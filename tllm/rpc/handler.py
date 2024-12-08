@@ -8,7 +8,7 @@ import uuid
 import grpc
 
 from tllm.commons.communicator import BaseCommunicator, Communicator
-from tllm.commons.convert import deserialize_tensor, serialize_tensor
+from tllm.commons.convert import Convertor
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.rpc.http_client import HTTPClient
 from tllm.rpc.manager import MasterRPCManager
@@ -81,7 +81,8 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
 
     async def forward_func(self, request: schemas_pb2.ForwardRequest):
         s1 = time.perf_counter()
-        hidden_states = deserialize_tensor(request.hidden_states)
+        convertor = Convertor()
+        hidden_states = convertor.deserialize(request.hidden_states)
 
         seq_input = SeqInput(uuid_list=list(request.uuid), seq_len_list=list(request.seq_len))
         self.comm.broadcast_object([seq_input, tuple(hidden_states.shape)])
@@ -94,7 +95,7 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
         self.logger.debug(f"forward cost time: {cost_time:.4f}")
 
         s1 = time.perf_counter()
-        output = serialize_tensor(output_hidden_states)
+        output = convertor.serialize(output_hidden_states)
         self.logger.debug(f"serialize_tensor cost time: {time.perf_counter() - s1:.4f}")
         self.logger.debug("=" * 20)
 
@@ -127,9 +128,14 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
 
     async def image_forward_func(self, request: schemas_pb2.ImageForwardRequest):
         s1 = time.perf_counter()
-        hidden_states = deserialize_tensor(request.hidden_states)
-        text_embeddings = deserialize_tensor(request.text_embeddings)
-        image_rotary_emb = deserialize_tensor(request.image_rotary_emb)
+        import mlx.core as mx
+        import numpy as np
+
+        convertor = Convertor(mx.float32, np.float32, mx.float32)
+
+        hidden_states = convertor.deserialize(request.hidden_states)
+        text_embeddings = convertor.deserialize(request.text_embeddings)
+        image_rotary_emb = convertor.deserialize(request.image_rotary_emb)
 
         self.logger.debug(f"deserialize_tensor cost time: {time.perf_counter() - s1:.4f}")
 
@@ -139,7 +145,7 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
         self.logger.debug(f"forward cost time: {cost_time:.4f}")
 
         s1 = time.perf_counter()
-        output = serialize_tensor(output_hidden_states)
+        output = convertor.serialize(output_hidden_states)
         self.logger.debug(f"serialize_tensor cost time: {time.perf_counter() - s1:.4f}")
         self.logger.debug("=" * 20)
 
@@ -147,7 +153,7 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
 
     async def ImageForward(
         self, request: schemas_pb2.ImageForwardRequest, context: grpc.ServicerContext
-    ) -> schemas_pb2.ImageForwardResponse:
+    ) -> schemas_pb2.ForwardResponse:
         if not hasattr(self.http_client, "model") and self.http_client is None:
             return schemas_pb2.ForwardResponse(msg="Model not initialized", status=400)
         if hasattr(self.manager, "master_stub") is None:

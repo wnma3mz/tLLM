@@ -1,3 +1,5 @@
+import os
+
 from mflux.config.config import Config
 from mflux.config.model_config import ModelConfig
 from mflux.config.runtime_config import RuntimeConfig
@@ -10,14 +12,36 @@ from mflux.post_processing.generated_image import GeneratedImage
 from mflux.post_processing.image_util import ImageUtil
 from mflux.tokenizer.clip_tokenizer import TokenizerCLIP
 from mflux.tokenizer.t5_tokenizer import TokenizerT5
-from mflux.tokenizer.tokenizer_handler import TokenizerHandler
 from mflux.weights.model_saver import ModelSaver
 from mlx import nn
 import mlx.core as mx
+from transformers import CLIPTokenizer, T5Tokenizer
 
 from tllm.models.mlx.flux.transformer import Transformer
 
 # from mflux.models.transformer.transformer import Transformer
+# from mflux.tokenizer.tokenizer_handler import TokenizerHandler
+
+
+class TokenizerHandler:
+    def __init__(
+        self,
+        root_path: str,
+        max_t5_length: int = 256,
+    ):
+
+        self.clip = CLIPTokenizer.from_pretrained(
+            os.path.join(root_path, "tokenizer"),
+            local_files_only=True,
+            max_length=TokenizerCLIP.MAX_TOKEN_LENGTH,
+            trust_remote_code=True,
+        )
+        self.t5 = T5Tokenizer.from_pretrained(
+            os.path.join(root_path, "tokenizer_2"),
+            local_files_only=True,
+            max_length=max_t5_length,
+            trust_remote_code=True,
+        )
 
 
 class Flux1:
@@ -25,7 +49,6 @@ class Flux1:
     def __init__(
         self,
         model_config: ModelConfig,
-        local_path: str | None = None,
         lora_paths: list[str] | None = None,
         lora_scales: list[float] | None = None,
     ):
@@ -34,7 +57,7 @@ class Flux1:
         self.model_config = model_config
 
         # Load and initialize the tokenizers from disk, huggingface cache, or download from huggingface
-        tokenizers = TokenizerHandler(model_config.model_name, self.model_config.max_sequence_length, local_path)
+        tokenizers = TokenizerHandler(model_config.model_name, self.model_config.max_sequence_length)
         self.t5_tokenizer = TokenizerT5(tokenizers.t5, max_length=self.model_config.max_sequence_length)
         self.clip_tokenizer = TokenizerCLIP(tokenizers.clip)
 

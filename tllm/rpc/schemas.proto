@@ -57,11 +57,6 @@ message ImageForwardRequest {
     BFloat16Tensor image_rotary_emb = 5;
 }
 
-message ImageForwardResponse {
-    string msg = 1;
-    int32 status = 2;
-    repeated string image = 3;
-}
 
 
 service RPCService {
@@ -69,5 +64,5 @@ service RPCService {
     rpc Forward (ForwardRequest) returns (ForwardResponse);
     rpc Health (Empty) returns (HealthResponse);
     rpc SetConfig (SetConfigRequest) returns (SetConfigResponse);
-    rpc ImageForward (ImageForwardRequest) returns (ImageForwardResponse);
+    rpc ImageForward (ImageForwardRequest) returns (ForwardResponse);
 }

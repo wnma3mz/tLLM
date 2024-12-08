@@ -63,7 +63,7 @@ class RPCServiceStub(object):
         self.ImageForward = channel.unary_unary(
             "/schemas.RPCService/ImageForward",
             request_serializer=tllm_dot_rpc_dot_schemas__pb2.ImageForwardRequest.SerializeToString,
-            response_deserializer=tllm_dot_rpc_dot_schemas__pb2.ImageForwardResponse.FromString,
+            response_deserializer=tllm_dot_rpc_dot_schemas__pb2.ForwardResponse.FromString,
             _registered_method=True,
         )
 
@@ -127,7 +127,7 @@ def add_RPCServiceServicer_to_server(servicer, server):
         "ImageForward": grpc.unary_unary_rpc_method_handler(
             servicer.ImageForward,
             request_deserializer=tllm_dot_rpc_dot_schemas__pb2.ImageForwardRequest.FromString,
-            response_serializer=tllm_dot_rpc_dot_schemas__pb2.ImageForwardResponse.SerializeToString,
+            response_serializer=tllm_dot_rpc_dot_schemas__pb2.ForwardResponse.SerializeToString,
         ),
     }
     generic_handler = grpc.method_handlers_generic_handler("schemas.RPCService", rpc_method_handlers)
@@ -277,7 +277,7 @@ class RPCService(object):
             target,
             "/schemas.RPCService/ImageForward",
             tllm_dot_rpc_dot_schemas__pb2.ImageForwardRequest.SerializeToString,
-            tllm_dot_rpc_dot_schemas__pb2.ImageForwardResponse.FromString,
+            tllm_dot_rpc_dot_schemas__pb2.ForwardResponse.FromString,
             options,
             channel_credentials,
             insecure,

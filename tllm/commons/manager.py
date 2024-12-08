@@ -31,6 +31,7 @@ class WeightManager:
                 raise ValueError("ModelConfig not found")
 
             config.num_hidden_layers = 38
+            config.model_name = str(self.model_path)
             self.config = config
 
             self.tok, self.arch = None, "FLUX"

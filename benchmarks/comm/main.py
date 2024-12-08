@@ -9,7 +9,7 @@ import lz4.frame
 import tabulate
 import torch
 
-from tllm.commons.convert import deserialize_tensor, serialize_tensor
+from tllm.commons.convert import Convertor
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.rpc.schemas_pb2 import BFloat16Tensor
 
@@ -73,7 +73,8 @@ class PerformanceTester:
         tensor = torch.randn(*matrix_shape)
         size_mb = tensor.nbytes / (1024 * 1024)
 
-        byte_tensor = serialize_tensor(tensor)
+        convertor = Convertor()
+        byte_tensor = convertor.serialize(tensor)
         transmission_times = []
         calc_times = []
 

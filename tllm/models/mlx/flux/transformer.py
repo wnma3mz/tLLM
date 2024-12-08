@@ -46,7 +46,6 @@ class FLUXModel(nn.Module):
         cls.num_layers = config.num_hidden_layers
 
         model._quantization_func(kwargs.get("quantization_level", None), state_dict)
-        # model.load_weights(list(state_dict.items()))
 
         mx.eval(model.parameters())
         model.eval()
@@ -55,7 +54,6 @@ class FLUXModel(nn.Module):
     def _quantization_func(self, quantization_level, weights):
         # Set the loaded weights if they are not quantized
         if quantization_level is None:
-            print("-" * 20)
             self._set_model_weights(weights)
 
         # Optionally quantize the model here at initialization (also required if about to load quantized weights)
@@ -68,7 +66,9 @@ class FLUXModel(nn.Module):
             self._set_model_weights(weights)
 
     def __call__(self, hidden_states, text_embeddings, image_rotary_emb, controlnet_single_block_samples=None):
-        return self.transformer(hidden_states, text_embeddings, image_rotary_emb)
+        hidden_states = self.transformer(hidden_states, text_embeddings, image_rotary_emb)
+        mx.eval(hidden_states)
+        return hidden_states
 
     def _set_model_weights(self, weights):
         self.transformer.update(weights.transformer)

@@ -1,5 +1,5 @@
 #!/bin/bash
-MODEL_PATH=/Users/lujianghu/Documents/mflux/schnell_4bit
+MODEL_PATH=/Users/lujianghu/Documents/flux/schnell_4bit
 MASTER_HANDLER_PORT=25111
 MASTER_URL=localhost:$MASTER_HANDLER_PORT
 HTTP_PORT=8022

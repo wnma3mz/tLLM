@@ -7,7 +7,7 @@ from typing import Dict, List, Tuple
 import grpc
 
 from tllm.commons.communicator import Communicator
-from tllm.commons.convert import deserialize_tensor, serialize_tensor
+from tllm.commons.convert import Convertor
 from tllm.commons.manager import load_client_model
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.rpc.master_handler import PendingRequests
@@ -36,7 +36,8 @@ class RPCManager:
         self.stub.Forward(schemas_pb2.ForwardRequest(**forward_request))
 
     async def forward(self, hidden_states: MIX_TENSOR, seq_input: SeqInput) -> Tuple[MIX_TENSOR, List[float]]:
-        hidden_states = serialize_tensor(hidden_states)
+        convertor = Convertor()
+        hidden_states = convertor.serialize(hidden_states)
         # 发送完请求前，准备等待返回结果
         forward_future, status_future = self.pending_requests.add_request(
             "-".join(x for x in seq_input.uuid_list), self.pp_size
@@ -48,7 +49,7 @@ class RPCManager:
         except asyncio.CancelledError:
             raise asyncio.CancelledError
 
-        return deserialize_tensor(output), await asyncio.wait_for(status_future, timeout=100.0)
+        return convertor.deserialize(output), await asyncio.wait_for(status_future, timeout=100.0)
 
     async def rpc_image_forward(
         self,
@@ -68,20 +69,24 @@ class RPCManager:
     async def image_forward(
         self, hidden_states: MIX_TENSOR, text_embeddings: MIX_TENSOR, image_rotary_emb: MIX_TENSOR, request_id: str
     ) -> Tuple[MIX_TENSOR, List[float]]:
-        hidden_states = serialize_tensor(hidden_states)
-        text_embeddings = serialize_tensor(text_embeddings)
-        image_rotary_emb = serialize_tensor(image_rotary_emb)
+        import mlx.core as mx
+        import numpy as np
+
+        convertor = Convertor(mx.float32, np.float32, mx.float32)
+
+        hidden_states = convertor.serialize(hidden_states)
+        text_embeddings = convertor.serialize(text_embeddings)
+        image_rotary_emb = convertor.serialize(image_rotary_emb)
         forward_future, status_future = self.pending_requests.add_request(
             "-".join(x for x in [request_id]), self.pp_size
         )
-        asyncio.create_task(self.rpc_image_forward(request_id, hidden_states, text_embeddings, image_rotary_emb))
+        asyncio.create_task(self.rpc_image_forward([request_id], hidden_states, text_embeddings, image_rotary_emb))
         await asyncio.sleep(0)
         try:
             output = await asyncio.wait_for(forward_future, timeout=100.0)
         except asyncio.CancelledError:
             raise asyncio.CancelledError
-
-        return deserialize_tensor(output), await asyncio.wait_for(status_future, timeout=100.0)
+        return convertor.deserialize(output), await asyncio.wait_for(status_future, timeout=100.0)
 
 
 class LocalRPCManager:
@@ -153,6 +158,6 @@ class MasterRPCManager:
             "text_embeddings": request.text_embeddings,
             "image_rotary_emb": request.image_rotary_emb,
         }
-        status_request = {"uuid": request.uuid, "pp_idx": self.pp_idx, "cost_time": cost_time}
+        status_request = {"uuid": request.uuid, "seq_len": [-1], "pp_idx": self.pp_idx, "cost_time": cost_time}
         self.master_stub.Status(schemas_pb2.StatusRequest(**status_request))
         self.forward_stub.ImageForward(schemas_pb2.ImageForwardRequest(**forward_request))
