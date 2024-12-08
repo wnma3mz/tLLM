@@ -121,9 +121,9 @@ class Flux1:
             config=config,
         )
 
-    def get_noise(self, t: int, config, hidden_states, text_embeddings, len_, latents) -> mx.array:
+    def get_noise(self, t: int, config, hidden_states, text_embeddings, latents) -> mx.array:
         # 4.t Take one denoise step
-        noise = self.transformer.get_noise(hidden_states=hidden_states, text_embeddings=text_embeddings, len_=len_)
+        noise = self.transformer.get_noise(hidden_states=hidden_states, text_embeddings=text_embeddings)
         dt = config.sigmas[t + 1] - config.sigmas[t]
         latents += noise * dt
 

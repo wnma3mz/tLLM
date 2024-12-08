@@ -123,8 +123,7 @@ class Transformer(nn.Module):
         len_ = encoder_hidden_states.shape[1]
         return hidden_states, text_embeddings, image_rotary_emb, len_
 
-    def get_noise(self, hidden_states, text_embeddings, len_) -> mx.array:
-        hidden_states = hidden_states[:, len_:, ...]
+    def get_noise(self, hidden_states, text_embeddings) -> mx.array:
         hidden_states = self.norm_out.forward(hidden_states, text_embeddings)
         hidden_states = self.proj_out(hidden_states)
         noise = hidden_states

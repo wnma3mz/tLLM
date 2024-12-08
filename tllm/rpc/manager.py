@@ -57,17 +57,24 @@ class RPCManager:
         hidden_states: schemas_pb2.BFloat16Tensor,
         text_embeddings: schemas_pb2.BFloat16Tensor,
         image_rotary_emb: schemas_pb2.BFloat16Tensor,
+        len_: int,
     ):
         forward_request = {
             "uuid": request_id,
             "hidden_states": hidden_states,
             "text_embeddings": text_embeddings,
             "image_rotary_emb": image_rotary_emb,
+            "length": len_,
         }
         self.stub.ImageForward(schemas_pb2.ImageForwardRequest(**forward_request))
 
     async def image_forward(
-        self, hidden_states: MIX_TENSOR, text_embeddings: MIX_TENSOR, image_rotary_emb: MIX_TENSOR, request_id: str
+        self,
+        hidden_states: MIX_TENSOR,
+        text_embeddings: MIX_TENSOR,
+        image_rotary_emb: MIX_TENSOR,
+        request_id: str,
+        len_: int,
     ) -> Tuple[MIX_TENSOR, List[float]]:
         import mlx.core as mx
         import numpy as np
@@ -80,7 +87,9 @@ class RPCManager:
         forward_future, status_future = self.pending_requests.add_request(
             "-".join(x for x in [request_id]), self.pp_size
         )
-        asyncio.create_task(self.rpc_image_forward([request_id], hidden_states, text_embeddings, image_rotary_emb))
+        asyncio.create_task(
+            self.rpc_image_forward([request_id], hidden_states, text_embeddings, image_rotary_emb, len_)
+        )
         await asyncio.sleep(0)
         try:
             output = await asyncio.wait_for(forward_future, timeout=100.0)
@@ -152,12 +161,13 @@ class MasterRPCManager:
         hidden_states: schemas_pb2.BFloat16Tensor,
         cost_time: float,
     ):
+        # 最后一个 PP 不需要返回 text_embeddings 和 image_rotary_emb
         forward_request = {
             "uuid": request.uuid,
             "hidden_states": hidden_states,
-            "text_embeddings": request.text_embeddings,
-            "image_rotary_emb": request.image_rotary_emb,
+            # "text_embeddings": request.text_embeddings,
+            # "image_rotary_emb": request.image_rotary_emb,
         }
-        status_request = {"uuid": request.uuid, "seq_len": [-1], "pp_idx": self.pp_idx, "cost_time": cost_time}
-        self.master_stub.Status(schemas_pb2.StatusRequest(**status_request))
-        self.forward_stub.ImageForward(schemas_pb2.ImageForwardRequest(**forward_request))
+        status_request = {"uuid": request.uuid, "pp_idx": self.pp_idx, "cost_time": cost_time}
+        await self.master_stub.Status(schemas_pb2.StatusRequest(**status_request))
+        await self.forward_stub.ImageForward(schemas_pb2.ImageForwardRequest(**forward_request))

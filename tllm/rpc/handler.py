@@ -141,6 +141,7 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
 
         s1 = time.perf_counter()
         output_hidden_states = self.http_client.model(hidden_states, text_embeddings, image_rotary_emb)
+        output_hidden_states = output_hidden_states[:, request.length :, ...]  # 最后一个 PP 截断返回
         cost_time = time.perf_counter() - s1
         self.logger.debug(f"forward cost time: {cost_time:.4f}")
 

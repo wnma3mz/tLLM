@@ -29,7 +29,7 @@ class WebsocketManager:
         # 返回一个未被注册的start idx 和 end idx，如果所有层都被注册了，则随机返回一个
         if self.has_full_model:
             pp_rank = random.choice(range(self.client_size))
-            return self.layer_info[pp_rank]
+            return pp_rank, *self.layer_info[pp_rank]
         else:
             for pp_rank, (start_idx, end_idx, count) in enumerate(self.client_info):
                 if count == 0:

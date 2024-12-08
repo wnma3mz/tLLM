@@ -24,7 +24,7 @@ class ImageGenerator:
         self.logger.debug(f"get_encoder_hidden_states cost time: {time.perf_counter() - s0:.4f}s")
         s1 = time.perf_counter()
         hidden_states, calc_cost_time_list = await self.manager.image_forward(
-            hidden_states, text_embeddings, image_rotary_emb, image_request.request_id
+            hidden_states, text_embeddings, image_rotary_emb, image_request.request_id, len_
         )
         comm_cost_time = time.perf_counter() - s1 - sum(calc_cost_time_list)
         s0 = time.perf_counter()
@@ -33,7 +33,6 @@ class ImageGenerator:
             image_request.runtime_config,
             hidden_states,
             text_embeddings,
-            len_,
             inputs_embeds[0],
         )
         self.logger.debug(f"get_noise cost time: {time.perf_counter() - s0:.4f}s")
