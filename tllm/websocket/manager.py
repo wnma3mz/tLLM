@@ -8,6 +8,7 @@ from fastapi import WebSocket
 from tllm.models.file_helper import parse_model_size, split_model_layers
 from tllm.rpc.manager import ClientRPCManager
 from tllm.schemas import ClientData, InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
+from tllm.websocket.network import tcp_ping_test
 from tllm.websocket.utils import find_continuous_path
 
 
@@ -37,8 +38,13 @@ class WebsocketManager:
         raise ValueError("No free layer")
 
     async def register_client(self, request: RegisterClientRequest, model_path: str) -> RegisterClientResponse:
+        ip, delay = tcp_ping_test(request.host, request.port)
+        if ip is None:
+            return RegisterClientResponse(msg="ping failed", pp_rank=-1, start_idx=-1, end_idx=-1)
+        host = f"{ip}:{request.port}"
+        print(f"ping {host} delay: {delay:.2f}ms")
         if request.pp_rank == -1:
-            self.clients[request.client_id] = ClientData(client_id=request.client_id, host=request.host)
+            self.clients[request.client_id] = ClientData(client_id=request.client_id, host=host)
 
             pp_rank, start_idx, end_idx = self.get_free_layer()
             return RegisterClientResponse(
@@ -52,7 +58,7 @@ class WebsocketManager:
             # 二次连接
             self.clients[request.client_id] = ClientData(
                 client_id=request.client_id,
-                host=request.host,
+                host=host,
                 pp_rank=request.pp_rank,
                 start_idx=request.start_idx,
                 end_idx=request.end_idx,

@@ -1,0 +1,19 @@
+{
+    "server": {
+        "grpc": 25001,
+        "http": 8022,
+        "ip_addr": "mac-mini"
+    },
+    "client": [
+        {
+            "grpc": 25002,
+            "ip_addr": "m3pro",
+            "master_addr": "http://mac-mini:8022"
+        },
+        {
+            "grpc": 25003,
+            "ip_addr": "m3",
+            "master_addr": "http://mac-mini:8022"
+        }
+    ]
+}

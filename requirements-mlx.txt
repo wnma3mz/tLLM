@@ -10,6 +10,7 @@ websockets
 pillow
 huggingface_hub
 gradio
+psutil
 grpcio==1.68.1
 lz4==4.3.3
 mlx

@@ -56,7 +56,9 @@ python benchmarks/run_async_requests.py
         - [ ] Pipeline
 - [x] Communication
     - [x] grpc
-    - [ ] Auto Find Node
+    - [x] Auto Find Node
+        - [x] Simple Get Ip
+        - [x] Test Ping
 - [x] Attention
     - [x] xformers
     - [x] flash-attn

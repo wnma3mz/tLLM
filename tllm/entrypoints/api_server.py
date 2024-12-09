@@ -1,4 +1,3 @@
-import argparse
 import asyncio
 import json
 import logging
@@ -14,6 +13,7 @@ import uvicorn
 
 from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionResponse
 from tllm.entrypoints.server_chat import OpenAIServing
+from tllm.entrypoints.utils import parse_args
 from tllm.schemas import InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
 from tllm.utils import init_engine, setup_logger, setup_seed
 from tllm.websocket.manager import PipelineManager, WebsocketManager
@@ -120,7 +120,7 @@ async def update_model_url():
         clients = ws_manager.connect_clients
         openai_serving_chat.engine.update_url(clients[0].host, len(clients))
         pp_manager.update_url(host_list)
-        await pp_manager.send_config(args.master_url, host_list)
+        await pp_manager.send_config(f"{args.ip_addr}:{args.grpc_port}", host_list)
         # 后台持续进行健康检查，如果有节点挂掉，需要重新分配
         await pp_manager.start_health_check()
 
@@ -147,18 +147,6 @@ async def init_model_func(
     response = await ws_manager.init_client(request)
     background_tasks.add_task(update_model_url)
     return response
-
-
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--master_url", type=str, required=True)
-    parser.add_argument("--master_handler_port", type=int, required=True)
-    parser.add_argument("--model_path", type=str, required=True)
-    parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--is_local", action="store_true")
-    parser.add_argument("--is_debug", action="store_true")
-    parser.add_argument("--is_fake", action="store_true")
-    return parser.parse_args()
 
 
 async def serve_http(app: FastAPI, loop: asyncio.AbstractEventLoop, master_handler, **uvicorn_kwargs: Any):
@@ -218,6 +206,13 @@ async def run_server(args) -> None:
     global is_local
     is_local = args.is_local
 
+    if args.config:
+        with open(args.config, "r") as f:
+            config = json.load(f)
+        args.ip_addr = config["server"]["ip_addr"]
+        args.http_port = config["server"]["http_port"]
+        args.grpc_port = config["server"]["grpc_port"]
+
     logger = setup_logger("master", logging.DEBUG if args.is_debug else logging.INFO)
 
     logger.info("args: %s", args)
@@ -230,7 +225,7 @@ async def run_server(args) -> None:
     else:
         generator = LLMGenerator
     engine, tok, master_handler = await init_engine(
-        logger, args.model_path, args.master_handler_port, args.is_local, args.is_fake, generator
+        logger, args.model_path, args.grpc_port, args.is_local, args.is_fake, generator
     )
     total_layers = engine.generator.model.num_layers
 
@@ -240,7 +235,7 @@ async def run_server(args) -> None:
     pp_manager = PipelineManager(ws_manager.client_size)
 
     loop = await engine.start()
-    uvicorn_kwargs = {"host": ["::", "0.0.0.0"], "port": args.port}
+    uvicorn_kwargs = {"host": ["::", "0.0.0.0"], "port": args.http_port}
     shutdown_task = await serve_http(app, loop, master_handler, **uvicorn_kwargs)
     await shutdown_task
 

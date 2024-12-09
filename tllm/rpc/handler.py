@@ -1,8 +1,10 @@
 import argparse
 import asyncio
 from concurrent import futures
+import json
 import logging
 import time
+from typing import List
 import uuid
 
 import grpc
@@ -14,6 +16,7 @@ from tllm.rpc.http_client import HTTPClient
 from tllm.rpc.manager import MasterRPCManager
 from tllm.schemas import SeqInput
 from tllm.utils import setup_logger
+from tllm.websocket.network import get_ips
 
 
 class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
@@ -47,7 +50,7 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
 
                 _ = self.http_client.model.forward(hidden_states, seq_input=seq_input)
 
-    async def start(self, ip_addr: str, port: int = 50051):
+    async def start(self, ip_addr_list: List[str], port: int = 50051):
         self.server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=10), options=self.grpc_options)
 
         schemas_pb2_grpc.add_RPCServiceServicer_to_server(self, self.server)
@@ -56,8 +59,8 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
         await self.server.start()
 
         self.http_client.is_running = True
-        connection_task = asyncio.create_task(self.http_client.connect(self.client_id, ip_addr, port))
-        ping_task = asyncio.create_task(self.http_client.maintain_connection(self.client_id, ip_addr, port))
+        connection_task = asyncio.create_task(self.http_client.connect(self.client_id, ip_addr_list, port))
+        ping_task = asyncio.create_task(self.http_client.maintain_connection(self.client_id, ip_addr_list, port))
 
         try:
             await self.server.wait_for_termination()
@@ -170,23 +173,40 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=50051, help="gRPC 服务的端口")
-    parser.add_argument("--master_url", type=str, required=True, help="master 的地址")
-    parser.add_argument("--ip_addr", type=str, required=True, help="提供给 master 连接的 ip, 如 localhost")
+    parser.add_argument("--port", type=int, default=25002, help="gRPC 服务的端口")
+    parser.add_argument(
+        "--master_addr", type=str, required=True, help="master 的 http 地址, 如 http://192.168.x.y:8022"
+    )
+    parser.add_argument("--ip_addr", type=str, default=None, help="提供给 master 连接的 ip, 如 192.168.x.y")
     parser.add_argument("--is_debug", action="store_true")
+    parser.add_argument("--config", type=str, default=None, help="config file path")
     return parser.parse_args()
 
 
 async def run(args):
     comm = Communicator()
-    logger_name = f"handler-{args.ip_addr}:{args.port}"
+    if args.config:
+        with open(args.config, "r") as f:
+            config = json.load(f)
+        # TODO
+        args.port = config["client"][0]["grpc"]
+        args.master_addr = config["client"][0]["master_addr"]
+        args.ip_addr = config["client"][0]["ip_addr"]
+
+    ip_addr_list = get_ips()
+    if args.ip_addr and isinstance(args.ip_addr, str):
+        ip_addr_list = [args.ip_addr]
+    if len(ip_addr_list) == 0:
+        raise ValueError("No available ip address")
+
+    logger_name = f"handler-{args.port}"
     logger = setup_logger(logger_name, logging.DEBUG if args.is_debug else logging.INFO)
 
-    rpc_servicer = RPCHandler(comm, logger, args.master_url)
+    rpc_servicer = RPCHandler(comm, logger, args.master_addr)
 
     try:
         if comm.rank == 0:
-            await rpc_servicer.start(args.ip_addr, args.port)
+            await rpc_servicer.start(ip_addr_list, args.port)
     except Exception as e:
         await rpc_servicer.stop()
         logger.error(f"Error occurred: {str(e)}")

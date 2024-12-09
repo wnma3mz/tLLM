@@ -11,6 +11,7 @@ vllm
 pillow
 huggingface_hub
 tinygrad
+psutil
 gradio==5.4.0
 grpcio==1.68.1
 lz4==4.3.3

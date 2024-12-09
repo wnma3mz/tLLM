@@ -16,9 +16,9 @@ from tllm.utils import init_engine, setup_logger
 @dataclass
 class Args:
     # model_path: str = "/Users/lujianghu/Documents/Llama-3.2-1B-Instruct"
-    model_path: str = "/Users/lujianghu/Documents/flux/schnell_4bit"
+    # model_path: str = "/Users/lujianghu/Documents/flux/schnell_4bit"
     # model_path: str= "mlx-community/Qwen2.5-0.5B-Instruct-bf16"
-    # model_path: str = "Qwen/Qwen2-VL-2B-Instruct"
+    model_path: str = "Qwen/Qwen2-VL-2B-Instruct"
     is_local: bool = True
     is_debug: bool = True
     is_fake: bool = False
@@ -84,5 +84,5 @@ async def image_generate():
 
 
 if __name__ == "__main__":
-    # asyncio.run(llm_generate())
-    asyncio.run(image_generate())
+    asyncio.run(llm_generate())
+    # asyncio.run(image_generate())

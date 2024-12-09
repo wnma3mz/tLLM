@@ -231,13 +231,14 @@ class RegisterClientResponse(BaseModel):
 
 class RegisterClientRequest(BaseModel):
     client_id: str
-    host: str
+    host: List[str]
+    port: int
     pp_rank: Optional[int] = -1
     start_idx: Optional[int] = -1
     end_idx: Optional[int] = -1
 
     def __repr__(self):
-        return f"ip={self.host} pp_rank={self.pp_rank} layer={self.start_idx}-{self.end_idx}"
+        return f"ip={self.host} port={self.port} pp_rank={self.pp_rank} layer={self.start_idx}-{self.end_idx}"
 
     def __str__(self):
         return self.__repr__()

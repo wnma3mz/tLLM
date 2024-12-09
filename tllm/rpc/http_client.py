@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 import aiohttp
 
@@ -44,7 +44,7 @@ class HTTPClient:
     async def register_client(self, request_data: RegisterClientRequest):
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                f"{self.master_url}/register_client", json=request_data.dict(), timeout=3
+                f"{self.master_url}/register_client", json=request_data.dict(), timeout=30
             ) as response:
                 return RegisterClientResponse(**await response.json())
 
@@ -53,7 +53,7 @@ class HTTPClient:
             async with session.post(f"{self.master_url}/init_model", json=request_data.dict(), timeout=3) as response:
                 return InitModelResponse(**await response.json())
 
-    async def maintain_connection(self, client_id: str, ip_addr: str, port: int):
+    async def maintain_connection(self, client_id: str, ip_addr_list: List[str], port: int):
         """
         维护连接的协程，定期发送ping请求
         """
@@ -67,7 +67,7 @@ class HTTPClient:
                 while retry_count < self.max_retry_attempts and self.is_running:
                     try:
                         # 尝试重新注册
-                        await self.connect(client_id, ip_addr, port)
+                        await self.connect(client_id, ip_addr_list, port)
                         if await self.ping():
                             self.logger.info("Reconnection successful")
                             break
@@ -87,12 +87,15 @@ class HTTPClient:
     async def load_model(self, model: str, start_idx: int, end_idx: int):
         self.model = load_client_model(start_idx, end_idx, self.comm, model)
 
-    async def connect(self, client_id: str, ip_addr: str, port: int):
+    async def connect(self, client_id: str, ip_addr_list: List[str], port: int):
         """定期发送连接请求的协程"""
         try:
             if not self.init_model_info:
-                register_request = RegisterClientRequest(client_id=client_id, host=f"{ip_addr}:{port}")
+                register_request = RegisterClientRequest(client_id=client_id, host=ip_addr_list, port=port)
                 response: RegisterClientResponse = await self.register_client(register_request)
+                if response.start_idx == -1:
+                    self.logger.error(f"Connection failed")
+                    raise Exception("Connection failed")
 
                 await self.load_model(response.model, response.start_idx, response.end_idx)
 
@@ -107,12 +110,16 @@ class HTTPClient:
             else:
                 register_request = RegisterClientRequest(
                     client_id=client_id,
-                    host=f"{ip_addr}:{port}",
+                    host=ip_addr_list,
+                    port=port,
                     pp_rank=self.init_model_info["pp_rank"],
                     start_idx=self.init_model_info["start_idx"],
                     end_idx=self.init_model_info["end_idx"],
                 )
                 response: RegisterClientResponse = await self.register_client(register_request)
+                if response.start_idx == -1:
+                    self.logger.error(f"Connection failed")
+                    raise Exception("Connection failed")
 
         except Exception as e:
             self.logger.error(f"Connection failed")
