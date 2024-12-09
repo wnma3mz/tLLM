@@ -30,6 +30,7 @@ class EmbeddingResult:
     latents: mx.array
     prompt_embeds: mx.array
     pooled_prompt_embeds: mx.array
+    image_rotary_emb: mx.array
 
 
 class TokenizerHandler:
@@ -71,7 +72,7 @@ class Flux1:
         self.clip_tokenizer = TokenizerCLIP(tokenizers.clip)
 
         # Initialize the models
-        self.vae = VAE()
+        self.vae = VAE()  # for img2img
         self.transformer = Transformer(model_config)
         self.t5_text_encoder = T5Encoder()
         self.clip_text_encoder = CLIPEncoder()
@@ -118,16 +119,22 @@ class Flux1:
         prompt_embeds = self.t5_text_encoder.forward(t5_tokens)
         pooled_prompt_embeds = self.clip_text_encoder.forward(clip_tokens)
 
-        return config, EmbeddingResult(latents, prompt_embeds, pooled_prompt_embeds)
+        h, w, seq_len = config.height, config.width, prompt_embeds.shape[1]
+        return config, EmbeddingResult(
+            latents, prompt_embeds, pooled_prompt_embeds, self.get_image_rotary_emb(h, w, seq_len)
+        )
+
+    def get_image_rotary_emb(self, h: int, w: int, seq_len: int) -> mx.array:
+        return self.transformer.get_image_rotary_emb(h, w, seq_len)
 
     def get_encoder_hidden_states(self, t: int, config, embedding_result: EmbeddingResult) -> mx.array:
         # 3.t Predict the noise
+        text_embeddings = self.transformer.get_text_embeddings(t, config, embedding_result.pooled_prompt_embeds)
         return self.transformer.predict(
-            t=t,
             prompt_embeds=embedding_result.prompt_embeds,
-            pooled_prompt_embeds=embedding_result.pooled_prompt_embeds,
             hidden_states=embedding_result.latents,
-            config=config,
+            text_embeddings=text_embeddings,
+            image_rotary_emb=embedding_result.image_rotary_emb,
         )
 
     def get_noise(self, t: int, config, noise, latents) -> mx.array:

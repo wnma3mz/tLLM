@@ -64,10 +64,11 @@ async def image_generate():
     args = Args()
 
     prompt = "a little dog"
+    prompt = "germanic romanticism painting of an obscure winter forest in a geocore landscape. Ambient landscape lighting, heavy shading, crystal night sky, stunning stars, topography"
     config = {
-        "num_inference_steps": 2,
-        "height": 512,
-        "width": 512,
+        "num_inference_steps": 3,
+        "height": 768,
+        "width": 768,
     }
 
     logger = setup_logger("engine", logging.DEBUG if args.is_debug else logging.INFO)

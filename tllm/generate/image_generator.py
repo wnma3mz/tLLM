@@ -15,15 +15,18 @@ class ImageGenerator:
         self.manager.update_url(url, pp_size)
 
     async def forward(self, image_request: ImageRequestData) -> ForwardResult:
+        height, width = image_request.runtime_config.height, image_request.runtime_config.width
+        seq_len = image_request.input_embeds.prompt_embeds.shape[1]
+
         s0 = time.perf_counter()
         hidden_states, text_embeddings = self.model.get_encoder_hidden_states(
             image_request.generate_iter, image_request.runtime_config, image_request.input_embeds
         )
+        import mlx.core as mx
+
+        mx.eval(hidden_states)
         self.logger.debug(f"get_encoder_hidden_states cost time: {time.perf_counter() - s0:.4f}s")
         s1 = time.perf_counter()
-
-        height, width = image_request.runtime_config.height, image_request.runtime_config.width
-        seq_len = image_request.input_embeds.prompt_embeds.shape[1]
 
         hidden_states, calc_cost_time_list = await self.manager.image_forward(
             hidden_states, text_embeddings, seq_len, height, width, image_request.request_id

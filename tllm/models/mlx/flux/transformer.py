@@ -14,6 +14,21 @@ import mlx.core as mx
 from tllm.commons.cache import CacheManager
 
 
+def prepare_latent_image_ids(height: int, width: int) -> mx.array:
+    latent_width = width // 16
+    latent_height = height // 16
+    latent_image_ids = mx.zeros((latent_height, latent_width, 3))
+    latent_image_ids = latent_image_ids.at[:, :, 1].add(mx.arange(0, latent_height)[:, None])
+    latent_image_ids = latent_image_ids.at[:, :, 2].add(mx.arange(0, latent_width)[None, :])
+    latent_image_ids = mx.repeat(latent_image_ids[None, :], 1, axis=0)
+    latent_image_ids = mx.reshape(latent_image_ids, (1, latent_width * latent_height, 3))
+    return latent_image_ids
+
+
+def prepare_text_ids(seq_len: mx.array) -> mx.array:
+    return mx.zeros((1, seq_len, 3))
+
+
 class SingleTransformer(nn.Module):
     def __init__(self, start_idx: int = 0, end_idx: int = 38, num_hidden_layers: int = 38):
         super().__init__()
@@ -59,7 +74,7 @@ class FLUXModel(nn.Module):
         super().__init__()
         self.num_hidden_layers = 38
         self.transformer = SingleTransformer(0, self.num_hidden_layers, self.num_hidden_layers)
-        self.embedding_cache_dict = CacheManager()
+        self.cache_dict = CacheManager()
 
     @classmethod
     def from_pretrained(cls, config, state_dict, **kwargs):
@@ -99,11 +114,13 @@ class FLUXModel(nn.Module):
         controlnet_single_block_samples=None,
     ) -> mx.array:
 
-        # TODO: 对于每个请求，不需要重新计算
-        txt_ids = Transformer.prepare_text_ids(seq_len=seq_len)
-        img_ids = Transformer.prepare_latent_image_ids(height, width)
-        ids = mx.concatenate((txt_ids, img_ids), axis=1)
-        image_rotary_emb = self.transformer.pos_embed.forward(ids)
+        request_id = request_id_list[0]
+        if request_id in self.cache_dict.cache_dict:
+            image_rotary_emb, _ = self.cache_dict.get(request_id)
+        else:
+            image_rotary_emb = self.get_image_rotary_emb(height, width, seq_len)
+            self.cache_dict.set(request_id, image_rotary_emb, -1)
+            self.cache_dict.check_alive()
 
         hidden_states = self.transformer(hidden_states, text_embeddings, image_rotary_emb, seq_len)
         mx.eval(hidden_states)
@@ -112,20 +129,12 @@ class FLUXModel(nn.Module):
     def _set_model_weights(self, weights):
         self.transformer.update(weights.transformer)
 
-    @staticmethod
-    def prepare_latent_image_ids(height: int, width: int) -> mx.array:
-        latent_width = width // 16
-        latent_height = height // 16
-        latent_image_ids = mx.zeros((latent_height, latent_width, 3))
-        latent_image_ids = latent_image_ids.at[:, :, 1].add(mx.arange(0, latent_height)[:, None])
-        latent_image_ids = latent_image_ids.at[:, :, 2].add(mx.arange(0, latent_width)[None, :])
-        latent_image_ids = mx.repeat(latent_image_ids[None, :], 1, axis=0)
-        latent_image_ids = mx.reshape(latent_image_ids, (1, latent_width * latent_height, 3))
-        return latent_image_ids
-
-    @staticmethod
-    def prepare_text_ids(seq_len: mx.array) -> mx.array:
-        return mx.zeros((1, seq_len, 3))
+    def get_image_rotary_emb(self, h: int, w: int, seq_len: int) -> mx.array:
+        txt_ids = prepare_text_ids(seq_len=seq_len)
+        img_ids = prepare_latent_image_ids(h, w)
+        ids = mx.concatenate((txt_ids, img_ids), axis=1)
+        image_rotary_emb = self.transformer.pos_embed.forward(ids)
+        return image_rotary_emb
 
 
 class Transformer(nn.Module):
@@ -137,26 +146,32 @@ class Transformer(nn.Module):
         self.context_embedder = nn.Linear(4096, 3072)
         self.transformer_blocks = [JointTransformerBlock(i) for i in range(19)]
 
+    def get_image_rotary_emb(self, h: int, w: int, seq_len: int) -> mx.array:
+        txt_ids = prepare_text_ids(seq_len=seq_len)
+        img_ids = prepare_latent_image_ids(h, w)
+        ids = mx.concatenate((txt_ids, img_ids), axis=1)
+        image_rotary_emb = self.pos_embed.forward(ids)
+        return image_rotary_emb
+
+    def get_text_embeddings(self, t: int, config: RuntimeConfig, pooled_prompt_embeds: mx.array) -> mx.array:
+        time_step = config.sigmas[t] * config.num_train_steps
+        time_step = mx.broadcast_to(time_step, (1,)).astype(config.precision)
+        guidance = mx.broadcast_to(config.guidance * config.num_train_steps, (1,)).astype(config.precision)
+        text_embeddings = self.time_text_embed.forward(time_step, pooled_prompt_embeds, guidance)
+        return text_embeddings
+
     def predict(
         self,
-        t: int,
         prompt_embeds: mx.array,
-        pooled_prompt_embeds: mx.array,
         hidden_states: mx.array,
-        config: RuntimeConfig,
+        text_embeddings: mx.array,
+        image_rotary_emb: mx.array,
         controlnet_block_samples: list[mx.array] | None = None,
         controlnet_single_block_samples: list[mx.array] | None = None,
     ) -> mx.array:
-        time_step = config.sigmas[t] * config.num_train_steps
-        time_step = mx.broadcast_to(time_step, (1,)).astype(config.precision)
+
         hidden_states = self.x_embedder(hidden_states)
-        guidance = mx.broadcast_to(config.guidance * config.num_train_steps, (1,)).astype(config.precision)
-        text_embeddings = self.time_text_embed.forward(time_step, pooled_prompt_embeds, guidance)
         encoder_hidden_states = self.context_embedder(prompt_embeds)
-        txt_ids = Transformer.prepare_text_ids(seq_len=prompt_embeds.shape[1])
-        img_ids = Transformer.prepare_latent_image_ids(config.height, config.width)
-        ids = mx.concatenate((txt_ids, img_ids), axis=1)
-        image_rotary_emb = self.pos_embed.forward(ids)
 
         for idx, block in enumerate(self.transformer_blocks):
             encoder_hidden_states, hidden_states = block.forward(
@@ -173,18 +188,3 @@ class Transformer(nn.Module):
         hidden_states = mx.concatenate([encoder_hidden_states, hidden_states], axis=1)
 
         return hidden_states, text_embeddings
-
-    @staticmethod
-    def prepare_latent_image_ids(height: int, width: int) -> mx.array:
-        latent_width = width // 16
-        latent_height = height // 16
-        latent_image_ids = mx.zeros((latent_height, latent_width, 3))
-        latent_image_ids = latent_image_ids.at[:, :, 1].add(mx.arange(0, latent_height)[:, None])
-        latent_image_ids = latent_image_ids.at[:, :, 2].add(mx.arange(0, latent_width)[None, :])
-        latent_image_ids = mx.repeat(latent_image_ids[None, :], 1, axis=0)
-        latent_image_ids = mx.reshape(latent_image_ids, (1, latent_width * latent_height, 3))
-        return latent_image_ids
-
-    @staticmethod
-    def prepare_text_ids(seq_len: mx.array) -> mx.array:
-        return mx.zeros((1, seq_len, 3))
