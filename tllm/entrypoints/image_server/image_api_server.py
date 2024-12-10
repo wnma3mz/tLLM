@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import time
+from typing import Union
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,14 +15,13 @@ from tllm.entrypoints.image_server.image_protocol import Text2ImageRequest, Text
 from tllm.entrypoints.image_server.server_image import ImageServing
 from tllm.entrypoints.utils import parse_args, serve_http
 from tllm.generate import ImageGenerator
-from tllm.network.manager import WebsocketManager
+from tllm.network.manager import LocalRPCManager, RPCManager, WebsocketManager
 from tllm.schemas import InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
 from tllm.utils import init_rpc_manager, setup_logger, setup_seed
 
-engine: None
 image_serving: ImageServing = None
 ws_manager: WebsocketManager = None
-
+rpc_manager: Union[RPCManager, LocalRPCManager]
 
 app = FastAPI()
 
@@ -64,10 +64,10 @@ async def create_image(request: Text2ImageRequest, raw_request: Request) -> Text
 async def health(background_tasks: BackgroundTasks):
     # 检查是否需要重新更新节点的状态
     # 如果没有请求 health，那么状态不会被更新
-    health_status = await pp_manager.get_status()
+    health_status = await rpc_manager.get_status()
     if len(health_status["last_check_result"]) > 0:
         logger.info(f"health check result: {health_status}")
-        pp_manager.stop_health_check()
+        rpc_manager.stop_health_check()
         ws_manager.unset_connect_clients(health_status["last_check_result"])
         background_tasks.add_task(update_model_url)
 
@@ -99,10 +99,10 @@ async def update_model_url():
         return
     host_list = ws_manager.set_connect_clients()
     if len(host_list) > 0:
-        pp_manager.update_url(host_list)
-        await pp_manager.send_config(f"{args.ip_addr}:{args.grpc_port}", host_list)
+        rpc_manager.update_url(host_list)
+        await rpc_manager.send_config(f"{args.ip_addr}:{args.grpc_port}", host_list)
         # 后台持续进行健康检查，如果有节点挂掉，需要重新分配
-        await pp_manager.start_health_check()
+        await rpc_manager.start_health_check()
 
 
 @app.post("/register_client")
@@ -132,7 +132,7 @@ async def init_model_func(
 async def run_server(args) -> None:
     setup_seed()
     global app
-    global logger, engine, ws_manager, pp_manager, image_serving
+    global logger, ws_manager, rpc_manager, image_serving
     global is_local
     is_local = args.is_local
 

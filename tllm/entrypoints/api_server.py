@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import time
+from typing import Union
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,12 +16,13 @@ from tllm.entrypoints.server_chat import OpenAIServing
 from tllm.entrypoints.utils import parse_args, serve_http
 from tllm.generate import LLMGenerator
 from tllm.network.helper import get_free_port
-from tllm.network.manager import WebsocketManager
+from tllm.network.manager import LocalRPCManager, RPCManager, WebsocketManager
 from tllm.schemas import InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
 from tllm.utils import init_rpc_manager, setup_logger, setup_seed
 
 openai_serving_chat: OpenAIServing = None
 ws_manager: WebsocketManager = None
+rpc_manager: Union[RPCManager, LocalRPCManager]
 
 app = FastAPI()
 
@@ -149,7 +151,7 @@ async def init_model_func(
 async def run_server(args) -> None:
     setup_seed()
     global app
-    global logger, engine, ws_manager, rpc_manager, openai_serving_chat
+    global logger, ws_manager, rpc_manager, openai_serving_chat
     global is_local
     is_local = args.is_local
 
