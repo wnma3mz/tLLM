@@ -22,7 +22,6 @@ from tllm.network.manager import WebsocketManager
 from tllm.schemas import InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
 from tllm.utils import init_rpc_manager, setup_logger, setup_seed
 
-engine: None
 openai_serving_chat: OpenAIServing = None
 ws_manager: WebsocketManager = None
 
@@ -150,7 +149,7 @@ async def init_model_func(
     return response
 
 
-async def serve_http(app: FastAPI, loop: asyncio.AbstractEventLoop, master_handler, **uvicorn_kwargs: Any):
+async def serve_http(app: FastAPI, loop: asyncio.AbstractEventLoop, engine, master_handler, **uvicorn_kwargs: Any):
     config = uvicorn.Config(app, **uvicorn_kwargs)
     server = uvicorn.Server(config)
 
@@ -168,8 +167,8 @@ async def serve_http(app: FastAPI, loop: asyncio.AbstractEventLoop, master_handl
                 logger.error(f"Error stopping master handler: {e}")
 
         try:
-            await engine.stop()
             await server.shutdown()
+            await engine.stop()
         except Exception as e:
             logger.error(f"Error stopping engine: {e}")
         finally:
@@ -190,14 +189,14 @@ async def serve_http(app: FastAPI, loop: asyncio.AbstractEventLoop, master_handl
 
     try:
         await server_task
-        return dummy_shutdown()
     except asyncio.CancelledError:
         logger.info("Shutting down FastAPI HTTP server.")
         await shutdown_handler()
     except Exception as e:
         logger.error(f"Unexpected error in server task: {e}")
         await shutdown_handler()
-        raise
+    finally:
+        return dummy_shutdown()
 
 
 async def run_server(args) -> None:
@@ -239,7 +238,7 @@ async def run_server(args) -> None:
 
     loop = await engine.start()
     uvicorn_kwargs = {"host": ["::", "0.0.0.0"], "port": args.http_port}
-    shutdown_task = await serve_http(app, loop, master_handler, **uvicorn_kwargs)
+    shutdown_task = await serve_http(app, loop, engine, master_handler, **uvicorn_kwargs)
     await shutdown_task
 
 

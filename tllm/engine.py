@@ -62,7 +62,8 @@ class AsyncEngine:
         self.sleep_time: float = sleep_time
         self.logger = logger
         self.abort_queue: asyncio.Queue = asyncio.Queue()
-        self.queue_not_empty: asyncio.Event = asyncio.Event()  # 暂时无效，报错 async attached to a different loop
+        self.queue_not_empty: asyncio.Event = asyncio.Event()
+        self._loop = None
 
     async def fetch_data(self):
         aborting_request_ids = set()
@@ -188,10 +189,12 @@ class AsyncEngine:
             raise asyncio.CancelledError("UnknownBaseException")
 
     async def start(self) -> asyncio.AbstractEventLoop:
-        if self.processing_task is None:
-            loop = asyncio.get_running_loop()
-            self.processing_task = loop.create_task(self._generate())
-            return loop
+        if self.processing_task is not None:
+            raise RuntimeError("Engine is already running")
+
+        self._loop = asyncio.get_running_loop()
+        self.processing_task = self._loop.create_task(self._generate())
+        return self._loop
 
     async def stop(self):
         self.logger.info("Stopping processing request_data")
@@ -199,8 +202,8 @@ class AsyncEngine:
             self.processing_task.cancel()
             try:
                 await asyncio.wait_for(self.processing_task, timeout=5.0)
-            except asyncio.CancelledError:
-                self.logger.debug("CancelledError")
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                self.logger.debug("Task cancelled successfully")
             finally:
                 self.processing_task = None
 

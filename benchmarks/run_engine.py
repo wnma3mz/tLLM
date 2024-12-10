@@ -4,10 +4,10 @@ import logging
 
 from PIL import Image
 
-from tllm.entrypoints.image_protocol import Text2ImageRequest
+from tllm.entrypoints.image_server.image_protocol import Text2ImageRequest
+from tllm.entrypoints.image_server.server_image import ImageServing
 from tllm.entrypoints.protocol import ChatCompletionRequest
 from tllm.entrypoints.server_chat import OpenAIServing
-from tllm.entrypoints.server_image import ImageServing
 from tllm.generate import ImageGenerator, LLMGenerator
 from tllm.img_helper import base64_to_pil_image
 from tllm.utils import init_engine, setup_logger

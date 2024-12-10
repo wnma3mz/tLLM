@@ -6,7 +6,7 @@ from typing import AsyncIterator
 from fastapi import HTTPException, Request
 
 from tllm.engine import AsyncEngine, ImageGenerator
-from tllm.entrypoints.image_protocol import Text2ImageRequest, Text2ImageResponse
+from tllm.entrypoints.image_server.image_protocol import Text2ImageRequest, Text2ImageResponse
 from tllm.entrypoints.protocol import random_uuid
 from tllm.schemas import ImageRequestData, RequestOutput
 

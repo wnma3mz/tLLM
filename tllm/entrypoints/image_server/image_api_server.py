@@ -13,8 +13,8 @@ import uvicorn
 
 from tllm.commons.manager import load_master_model
 from tllm.engine import AsyncEngine
-from tllm.entrypoints.image_protocol import Text2ImageRequest, Text2ImageResponse
-from tllm.entrypoints.server_image import ImageServing
+from tllm.entrypoints.image_server.image_protocol import Text2ImageRequest, Text2ImageResponse
+from tllm.entrypoints.image_server.server_image import ImageServing
 from tllm.entrypoints.utils import parse_args
 from tllm.generate import ImageGenerator
 from tllm.network.manager import WebsocketManager
