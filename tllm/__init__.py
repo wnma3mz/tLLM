@@ -39,3 +39,5 @@ GRPC_OPTIONS = [
     ("grpc.max_send_message_length", 128 * 1024 * 1024),
     ("grpc.max_receive_message_length", 128 * 1024 * 1024),
 ]
+
+PP_TIMEOUT = 10  # TTFT 不超过 10s，且单个 token 生成时间不超过 10s

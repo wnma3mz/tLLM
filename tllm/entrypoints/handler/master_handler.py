@@ -90,14 +90,13 @@ class MasterHandler(schemas_pb2_grpc.RPCServiceServicer):
                 await self.server.wait_for_termination()
             except Exception as e:
                 print("master handler error", str(e))
-                pass
 
     async def Forward(
         self, request: schemas_pb2.ForwardRequest, context: grpc.ServicerContext
     ) -> schemas_pb2.ForwardResponse:
         """处理从最后一个节点返回的结果"""
         request_id = "-".join(x for x in list(request.uuid))
-        self.logger.debug(f"Received result request id: {request_id}")
+        # self.logger.debug(f"Received result request id: {request_id}")
 
         try:
             self.pending_requests.complete_forward_request(request_id, request.hidden_states)
@@ -113,7 +112,7 @@ class MasterHandler(schemas_pb2_grpc.RPCServiceServicer):
     ) -> schemas_pb2.ForwardResponse:
         """处理从最后一个节点返回的结果"""
         request_id = "-".join(x for x in list(request.uuid))
-        self.logger.debug(f"Received result request id: {request_id}")
+        # self.logger.debug(f"Received result request id: {request_id}")
 
         try:
             self.pending_requests.complete_forward_request(request_id, request.hidden_states)

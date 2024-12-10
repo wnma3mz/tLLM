@@ -2,20 +2,17 @@ import asyncio
 import json
 import logging
 import os
-import signal
 import time
-from typing import Any
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
-import uvicorn
 
 from tllm.commons.manager import load_master_model
 from tllm.engine import AsyncEngine
 from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionResponse
 from tllm.entrypoints.server_chat import OpenAIServing
-from tllm.entrypoints.utils import parse_args
+from tllm.entrypoints.utils import parse_args, serve_http
 from tllm.generate import LLMGenerator
 from tllm.network.helper import get_free_port
 from tllm.network.manager import WebsocketManager
@@ -149,56 +146,6 @@ async def init_model_func(
     return response
 
 
-async def serve_http(app: FastAPI, loop: asyncio.AbstractEventLoop, engine, master_handler, **uvicorn_kwargs: Any):
-    config = uvicorn.Config(app, **uvicorn_kwargs)
-    server = uvicorn.Server(config)
-
-    asyncio.set_event_loop(loop)
-    server_task = loop.create_task(server.serve())
-
-    # Setup graceful shutdown handlers
-    async def shutdown_handler():
-        server.should_exit = True
-
-        if master_handler:
-            try:
-                await master_handler.stop()
-            except Exception as e:
-                logger.error(f"Error stopping master handler: {e}")
-
-        try:
-            await server.shutdown()
-            await engine.stop()
-        except Exception as e:
-            logger.error(f"Error stopping engine: {e}")
-        finally:
-            loop.stop()
-
-        logger.info("Shutdown sequence completed")
-
-    async def signal_handler() -> None:
-        # prevents the uvicorn signal handler to exit early
-        server_task.cancel()
-        await shutdown_handler()
-
-    async def dummy_shutdown() -> None:
-        pass
-
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(signal_handler()))
-
-    try:
-        await server_task
-    except asyncio.CancelledError:
-        logger.info("Shutting down FastAPI HTTP server.")
-        await shutdown_handler()
-    except Exception as e:
-        logger.error(f"Unexpected error in server task: {e}")
-        await shutdown_handler()
-    finally:
-        return dummy_shutdown()
-
-
 async def run_server(args) -> None:
     setup_seed()
     global app
@@ -237,8 +184,8 @@ async def run_server(args) -> None:
     openai_serving_chat = OpenAIServing(engine, tok, args)
 
     loop = await engine.start()
-    uvicorn_kwargs = {"host": ["::", "0.0.0.0"], "port": args.http_port}
-    shutdown_task = await serve_http(app, loop, engine, master_handler, **uvicorn_kwargs)
+    uvicorn_kwargs = {"host": ["::", "0.0.0.0"], "port": args.http_port, "timeout_graceful_shutdown": 5}
+    shutdown_task = await serve_http(app, loop, engine, master_handler, logger, **uvicorn_kwargs)
     await shutdown_task
 
 

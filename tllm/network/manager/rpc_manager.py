@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import grpc
 
-from tllm import GRPC_OPTIONS
+from tllm import GRPC_OPTIONS, PP_TIMEOUT
 from tllm.commons.convert import Convertor
 from tllm.entrypoints.handler.master_handler import PendingRequests
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
@@ -99,11 +99,11 @@ class RPCManager:
         asyncio.create_task(rpc_forward(self.stub_list[0], seq_input.uuid_list, seq_input.seq_len_list, hidden_states))
         await asyncio.sleep(0)
         try:
-            output = await asyncio.wait_for(forward_future, timeout=100.0)  # 所有节点的总处理时间不超过 100s
+            output = await asyncio.wait_for(forward_future, timeout=PP_TIMEOUT)
         except asyncio.CancelledError:
             raise asyncio.CancelledError
 
-        return convertor.deserialize(output), await asyncio.wait_for(status_future, timeout=100.0)
+        return convertor.deserialize(output), await asyncio.wait_for(status_future, timeout=PP_TIMEOUT)
 
     async def image_forward(
         self,
@@ -129,10 +129,10 @@ class RPCManager:
         )
         await asyncio.sleep(0)
         try:
-            output = await asyncio.wait_for(forward_future, timeout=100.0)
+            output = await asyncio.wait_for(forward_future, timeout=PP_TIMEOUT)
         except asyncio.CancelledError:
             raise asyncio.CancelledError
-        return convertor.deserialize(output), await asyncio.wait_for(status_future, timeout=100.0)
+        return convertor.deserialize(output), await asyncio.wait_for(status_future, timeout=PP_TIMEOUT)
 
     async def start_health_check(self, interval: float = 10):
         if self.task and not self.task.done():
