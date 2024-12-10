@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List
 
 import lz4.frame
 import numpy as np
@@ -11,8 +11,6 @@ from tllm.schemas import MIX_TENSOR
 if BACKEND == BackendEnum.MLX:
     import mlx.core as mx
 
-    # serialize_func = lambda tensor: bytes(tensor.astype(mx.float16))
-    # deserialize_func = lambda x: mx.array(np.frombuffer(x[1], dtype=np.float16), dtype=DTYPE).reshape(*x[0].shape)
     serialize_func = lambda tensor, dtype: bytes(tensor.astype(dtype))
     deserialize_func = lambda proto, x, dtype, des_dtype: mx.array(
         np.frombuffer(x, dtype=des_dtype), dtype=dtype

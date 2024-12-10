@@ -1,21 +1,8 @@
 import logging
-import socket
-from typing import Tuple
 
 from tllm import BACKEND, BackendEnum
-from tllm.commons.manager import load_master_model
-from tllm.engine import AsyncEngine
-from tllm.generate import FakeLLMGenerator, LLMGenerator, TokenizerUtils
-from tllm.rpc.manager import LocalRPCManager, RPCManager
-from tllm.rpc.master_handler import MasterHandler, PendingRequests
-
-
-def get_free_port():
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind(("", 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
+from tllm.entrypoints.handler.master_handler import MasterHandler, PendingRequests
+from tllm.network.manager import LocalRPCManager, RPCManager
 
 
 def setup_seed(seed: int = 42):
@@ -27,10 +14,10 @@ def setup_seed(seed: int = 42):
 
 def setup_logger(name, level=logging.INFO):
     logger = logging.getLogger(name)
-    logger.setLevel(level)  # 或者其他日志级别
+    logger.setLevel(level)
 
     ch = logging.StreamHandler()
-    ch.setLevel(level)  # 控制台输出日志级别
+    ch.setLevel(level)
 
     formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     ch.setFormatter(formatter)
@@ -40,21 +27,15 @@ def setup_logger(name, level=logging.INFO):
     return logger
 
 
-async def init_engine(
-    logger, model_path: str, master_handler_port: int, is_local: bool, is_fake: bool, Generator
-) -> Tuple[AsyncEngine, TokenizerUtils, MasterHandler]:
-    model, tok = load_master_model(model_path)
-    if is_fake:
-        generator = Generator(None, None, None, None)
-        master_handler = None
-    elif is_local:
-        generator = Generator(LocalRPCManager(model_path), logger, model, tok)
-        master_handler = None
+async def init_rpc_manager(
+    logger, model_path: str, client_size: int, master_handler_port: int, is_local: bool
+) -> RPCManager:
+    master_handler = None
+    if is_local:
+        rpc_manager = LocalRPCManager(model_path)
     else:
         pending_requests = PendingRequests()
         master_handler = MasterHandler(logger, pending_requests)
         await master_handler.start(master_handler_port)
-
-        generator = Generator(RPCManager(pending_requests), logger, model, tok)
-    engine = AsyncEngine(logger, generator)
-    return engine, tok, master_handler
+        rpc_manager = RPCManager(client_size, pending_requests)
+    return rpc_manager, master_handler

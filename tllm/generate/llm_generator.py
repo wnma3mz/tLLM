@@ -86,9 +86,6 @@ class LLMGenerator:
         if self.processor is not None:
             self.logger.info("LLMGenerator Support Multi-Modal")
 
-    def update_url(self, url: str, pp_size: int):
-        self.manager.update_url(url, pp_size)
-
     async def forward(self, inputs_embeds: MIX_TENSOR, seq_input: SeqInput) -> ForwardResult:
         s1 = time.perf_counter()
         hidden_states, calc_cost_time_list = await self.manager.forward(inputs_embeds, seq_input)
@@ -171,17 +168,3 @@ class LLMGenerator:
         self.logger.debug(f"de tokenizer cost time: {time.perf_counter() - s1:.4f}s")
         self.logger.debug(f"communication cost time: {forward_result.comm_cost_time:.4f}s({fraction*100:.1f}%)")
         self.logger.debug("=" * 5)
-
-
-class FakeLLMGenerator(LLMGenerator):
-
-    async def generate(self, request_list: List[SequenceRequestData]):
-        generate_id, generate_text = 0, "fake "
-        for sequence_request in request_list:
-            sequence_request.output_ids.append(generate_id)
-            if len(sequence_request.output_ids) == sequence_request.sampling_params.max_tokens:
-                sequence_request.finish_reason_list = ["length"]
-                sequence_request.is_stop = True
-            else:
-                sequence_request.generate_text = generate_text
-                sequence_request.output_text += generate_text

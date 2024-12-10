@@ -33,3 +33,9 @@ else:
     CONVERT_DTYPE = mx.float16
     DES_DTYPE = np.float16
     DEVICE = None
+
+GRPC_OPTIONS = [
+    ("grpc.max_metadata_size", 32 * 1024 * 1024),
+    ("grpc.max_send_message_length", 128 * 1024 * 1024),
+    ("grpc.max_receive_message_length", 128 * 1024 * 1024),
+]

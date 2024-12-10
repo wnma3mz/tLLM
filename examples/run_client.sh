@@ -6,4 +6,4 @@ MASTER_URL=http://mac-mini:8022
 export OMP_NUM_THREADS=8;
 export PYTHONPATH="./":$PYTHONPATH;
 
-python3 tllm/rpc/handler.py --master_addr $MASTER_URL --is_debug
+python3 -m tllm.entrypoints.handler.handler --master_addr $MASTER_URL --is_debug

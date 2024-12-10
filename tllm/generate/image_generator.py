@@ -11,9 +11,6 @@ class ImageGenerator:
         self.logger = logger
         self.model = model
 
-    def update_url(self, url: str, pp_size: int):
-        self.manager.update_url(url, pp_size)
-
     async def forward(self, image_request: ImageRequestData) -> ForwardResult:
         height, width = image_request.runtime_config.height, image_request.runtime_config.width
         seq_len = image_request.input_embeds.prompt_embeds.shape[1]

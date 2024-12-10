@@ -5,6 +5,7 @@ from typing import Any, Dict, Tuple
 
 import grpc
 
+from tllm import GRPC_OPTIONS
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 
 
@@ -75,14 +76,7 @@ class MasterHandler(schemas_pb2_grpc.RPCServiceServicer):
         self.logger = logger
 
     async def start(self, port: int):
-        self.server = grpc.aio.server(
-            futures.ThreadPoolExecutor(max_workers=10),
-            options=[
-                ("grpc.max_metadata_size", 32 * 1024 * 1024),
-                ("grpc.max_send_message_length", 128 * 1024 * 1024),
-                ("grpc.max_receive_message_length", 128 * 1024 * 1024),
-            ],
-        )
+        self.server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=10), options=GRPC_OPTIONS)
 
         schemas_pb2_grpc.add_RPCServiceServicer_to_server(self, self.server)
         self.server.add_insecure_port(f"[::]:{port}")

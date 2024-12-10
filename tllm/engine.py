@@ -64,9 +64,6 @@ class AsyncEngine:
         self.abort_queue: asyncio.Queue = asyncio.Queue()
         self.queue_not_empty: asyncio.Event = asyncio.Event()  # 暂时无效，报错 async attached to a different loop
 
-    def update_url(self, url: str, pp_size: int):
-        self.generator.update_url(url, pp_size)
-
     async def fetch_data(self):
         aborting_request_ids = set()
         while not self.abort_queue.empty():

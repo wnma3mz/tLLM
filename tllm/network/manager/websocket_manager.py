@@ -1,15 +1,11 @@
-import asyncio
 import random
-import time
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import Dict, List, Set, Tuple
 
 from fastapi import WebSocket
 
 from tllm.models.file_helper import parse_model_size, split_model_layers
-from tllm.rpc.manager import ClientRPCManager
+from tllm.network.helper import find_continuous_path, tcp_ping_test
 from tllm.schemas import ClientData, InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
-from tllm.websocket.network import tcp_ping_test
-from tllm.websocket.utils import find_continuous_path
 
 
 class WebsocketManager:
@@ -124,66 +120,3 @@ class WebsocketManager:
             if client.client_id == client_id:
                 return True
         return False
-
-
-class PipelineManager:
-    def __init__(self, client_size: int):
-        self.task: Optional[asyncio.Task] = None
-        self.client_size = client_size
-        self.client_manager = ClientRPCManager(self.client_size)
-        self.last_check_result: List[int] = []
-        self.last_check_time: Optional[float] = None
-
-    def update_url(self, host_list: List[str]):
-        self.client_manager.update_url(host_list)
-
-    async def send_config(self, master_url: str, host_list: List[str]):
-        assert len(host_list) == self.client_size
-
-        async def set_single_config(i: int) -> None:
-            url = master_url if i == self.client_size - 1 else host_list[i + 1]
-            await self.client_manager.set_config(i, {"forward_url": url, "master_url": master_url, "pp_rank": i})
-
-        tasks = [set_single_config(i) for i in range(self.client_size)]
-        await asyncio.gather(*tasks)
-
-    async def health_check(self) -> Tuple[int]:
-        async def check_single_client(index: int) -> Tuple[int, bool]:
-            result = await self.client_manager.health_check(index)
-            return (index, result)
-
-        tasks = [check_single_client(i) for i in range(self.client_size)]
-
-        # 等待所有任务完成，返回结果列表
-        results = await asyncio.gather(*tasks, return_exceptions=False)
-
-        # 检查结果，如果有健康检查失败，返回对应的索引
-        self.last_check_time = time.time()
-        self.last_check_result = [index for index, is_healthy in results if not is_healthy]
-        return self.last_check_result
-
-    async def start_health_check(self, interval: float = 10):
-        if self.task and not self.task.done():
-            return
-
-        async def check_loop():
-            while True:
-                result = await self.health_check()
-                if len(result) > 0:
-                    break
-                await asyncio.sleep(interval)
-
-        self.task = asyncio.create_task(check_loop())
-
-    def stop_health_check(self):
-        self.last_check_time = None
-        self.last_check_result = []
-        if self.task and not self.task.done():
-            self.task.cancel()
-
-    async def get_status(self) -> Dict[str, Union[bool, float, List[int]]]:
-        return {
-            "last_check_time": self.last_check_time,
-            "last_check_result": self.last_check_result,
-            "is_running": bool(self.task and not self.task.done()),
-        }

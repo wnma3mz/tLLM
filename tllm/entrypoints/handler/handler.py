@@ -9,14 +9,15 @@ import uuid
 
 import grpc
 
+from tllm import GRPC_OPTIONS
 from tllm.commons.communicator import BaseCommunicator, Communicator
 from tllm.commons.convert import Convertor
+from tllm.network.helper import get_free_port, get_ips
+from tllm.network.http_client import HTTPClient
+from tllm.network.manager import MasterRPCManager
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
-from tllm.rpc.http_client import HTTPClient
-from tllm.rpc.manager import MasterRPCManager
 from tllm.schemas import SeqInput
-from tllm.utils import get_free_port, setup_logger
-from tllm.websocket.network import get_ips
+from tllm.utils import setup_logger
 
 
 class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
@@ -28,11 +29,7 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
         self.server = None
         self.logger = logger
 
-        self.grpc_options = [
-            ("grpc.max_metadata_size", 32 * 1024 * 1024),
-            ("grpc.max_send_message_length", 128 * 1024 * 1024),
-            ("grpc.max_receive_message_length", 128 * 1024 * 1024),
-        ]
+        self.grpc_options = GRPC_OPTIONS
 
         self.manager = MasterRPCManager(self.grpc_options)
         self.http_client = HTTPClient(master_url, comm, logger)

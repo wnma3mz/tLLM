@@ -11,17 +11,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 import uvicorn
 
+from tllm.commons.manager import load_master_model
+from tllm.engine import AsyncEngine
 from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionResponse
 from tllm.entrypoints.server_chat import OpenAIServing
 from tllm.entrypoints.utils import parse_args
+from tllm.generate import LLMGenerator
+from tllm.network.helper import get_free_port
+from tllm.network.manager import WebsocketManager
 from tllm.schemas import InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
-from tllm.utils import get_free_port, init_engine, setup_logger, setup_seed
-from tllm.websocket.manager import PipelineManager, WebsocketManager
+from tllm.utils import init_rpc_manager, setup_logger, setup_seed
 
 engine: None
 openai_serving_chat: OpenAIServing = None
 ws_manager: WebsocketManager = None
-
 
 app = FastAPI()
 
@@ -76,10 +79,10 @@ async def create_completion(request: ChatCompletionRequest, raw_request: Request
 async def health(background_tasks: BackgroundTasks):
     # 检查是否需要重新更新节点的状态
     # 如果没有请求 health，那么状态不会被更新
-    health_status = await pp_manager.get_status()
+    health_status = await rpc_manager.get_status()
     if len(health_status["last_check_result"]) > 0:
         logger.info(f"health check result: {health_status}")
-        pp_manager.stop_health_check()
+        rpc_manager.stop_health_check()
         ws_manager.unset_connect_clients(health_status["last_check_result"])
         background_tasks.add_task(update_model_url)
 
@@ -117,12 +120,10 @@ async def update_model_url():
         return
     host_list = ws_manager.set_connect_clients()
     if len(host_list) > 0:
-        clients = ws_manager.connect_clients
-        openai_serving_chat.engine.update_url(clients[0].host, len(clients))
-        pp_manager.update_url(host_list)
-        await pp_manager.send_config(f"{args.ip_addr}:{args.grpc_port}", host_list)
+        rpc_manager.update_url(host_list)
+        await rpc_manager.send_config(f"{args.ip_addr}:{args.grpc_port}", host_list)
         # 后台持续进行健康检查，如果有节点挂掉，需要重新分配
-        await pp_manager.start_health_check()
+        await rpc_manager.start_health_check()
 
 
 @app.post("/register_client")
@@ -202,7 +203,7 @@ async def serve_http(app: FastAPI, loop: asyncio.AbstractEventLoop, master_handl
 async def run_server(args) -> None:
     setup_seed()
     global app
-    global logger, engine, ws_manager, pp_manager, openai_serving_chat
+    global logger, engine, ws_manager, rpc_manager, openai_serving_chat
     global is_local
     is_local = args.is_local
 
@@ -221,21 +222,20 @@ async def run_server(args) -> None:
     logger.info("args: %s", args)
 
     s1 = time.time()
-    from tllm.generate import FakeLLMGenerator, LLMGenerator
 
-    if args.is_fake:
-        generator = FakeLLMGenerator
-    else:
-        generator = LLMGenerator
-    engine, tok, master_handler = await init_engine(
-        logger, args.model_path, args.grpc_port, args.is_local, args.is_fake, generator
+    model, tok = load_master_model(args.model_path)
+    total_layers = model.num_layers  # 必须要有层数
+    ws_manager = WebsocketManager(total_layers, args.model_path)
+
+    rpc_manager, master_handler = await init_rpc_manager(
+        logger, args.model_path, ws_manager.client_size, args.grpc_port, args.is_local
     )
-    total_layers = engine.generator.model.num_layers
+
+    generator = LLMGenerator(rpc_manager, logger, model, tok)
+    engine = AsyncEngine(logger, generator)
 
     logger.info(f"Engine init Cost Time: {time.time() - s1:.4f}s. Total Layers: {total_layers}")
     openai_serving_chat = OpenAIServing(engine, tok, args)
-    ws_manager = WebsocketManager(total_layers, args.model_path)
-    pp_manager = PipelineManager(ws_manager.client_size)
 
     loop = await engine.start()
     uvicorn_kwargs = {"host": ["::", "0.0.0.0"], "port": args.http_port}

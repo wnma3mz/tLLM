@@ -11,12 +11,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 import uvicorn
 
+from tllm.commons.manager import load_master_model
+from tllm.engine import AsyncEngine
 from tllm.entrypoints.image_protocol import Text2ImageRequest, Text2ImageResponse
 from tllm.entrypoints.server_image import ImageServing
 from tllm.entrypoints.utils import parse_args
+from tllm.generate import ImageGenerator
+from tllm.network.manager import WebsocketManager
 from tllm.schemas import InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
-from tllm.utils import init_engine, setup_logger, setup_seed
-from tllm.websocket.manager import PipelineManager, WebsocketManager
+from tllm.utils import init_rpc_manager, setup_logger, setup_seed
 
 engine: None
 image_serving: ImageServing = None
@@ -99,8 +102,6 @@ async def update_model_url():
         return
     host_list = ws_manager.set_connect_clients()
     if len(host_list) > 0:
-        clients = ws_manager.connect_clients
-        image_serving.engine.update_url(clients[0].host, len(clients))
         pp_manager.update_url(host_list)
         await pp_manager.send_config(f"{args.ip_addr}:{args.grpc_port}", host_list)
         # 后台持续进行健康检查，如果有节点挂掉，需要重新分配
@@ -200,17 +201,20 @@ async def run_server(args) -> None:
     logger.info("args: %s", args)
 
     s1 = time.time()
-    from tllm.generate import ImageGenerator
 
-    engine, _, master_handler = await init_engine(
-        logger, args.model_path, args.grpc_port, args.is_local, args.is_fake, ImageGenerator
+    model, tok = load_master_model(args.model_path)
+    total_layers = model.num_layers  # 必须要有层数
+    ws_manager = WebsocketManager(total_layers, args.model_path, skip_parse=True)
+
+    rpc_manager, master_handler = await init_rpc_manager(
+        logger, args.model_path, ws_manager.client_size, args.grpc_port, args.is_local
     )
-    total_layers = engine.generator.model.num_layers
+
+    generator = ImageGenerator(rpc_manager, logger, model, tok)
+    engine = AsyncEngine(logger, generator)
 
     logger.info(f"Engine init Cost Time: {time.time() - s1:.4f}s. Total Layers: {total_layers}")
     image_serving = ImageServing(engine, args)
-    ws_manager = WebsocketManager(total_layers, args.model_path, skip_parse=True)
-    pp_manager = PipelineManager(ws_manager.client_size)
 
     loop = await engine.start()
     uvicorn_kwargs = {"host": ["::", "0.0.0.0"], "port": args.http_port}
