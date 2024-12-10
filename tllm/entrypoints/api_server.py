@@ -15,7 +15,7 @@ from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionRespo
 from tllm.entrypoints.server_chat import OpenAIServing
 from tllm.entrypoints.utils import parse_args
 from tllm.schemas import InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
-from tllm.utils import init_engine, setup_logger, setup_seed
+from tllm.utils import get_free_port, init_engine, setup_logger, setup_seed
 from tllm.websocket.manager import PipelineManager, WebsocketManager
 
 engine: None
@@ -205,6 +205,9 @@ async def run_server(args) -> None:
     global logger, engine, ws_manager, pp_manager, openai_serving_chat
     global is_local
     is_local = args.is_local
+
+    if args.grpc_port is None:
+        args.grpc_port = get_free_port()
 
     if args.config:
         with open(args.config, "r") as f:

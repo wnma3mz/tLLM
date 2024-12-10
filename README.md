@@ -14,8 +14,6 @@
 
 3. run server 
 
-    `1` is the model size
-
     3.1 (no communication)
 
     - edit `examples/run_single_server.sh`

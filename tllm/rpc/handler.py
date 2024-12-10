@@ -15,7 +15,7 @@ from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.rpc.http_client import HTTPClient
 from tllm.rpc.manager import MasterRPCManager
 from tllm.schemas import SeqInput
-from tllm.utils import setup_logger
+from tllm.utils import get_free_port, setup_logger
 from tllm.websocket.network import get_ips
 
 
@@ -173,7 +173,7 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=25002, help="gRPC 服务的端口")
+    parser.add_argument("--port", type=int, default=None, help="gRPC 服务的端口")
     parser.add_argument(
         "--master_addr", type=str, required=True, help="master 的 http 地址, 如 http://192.168.x.y:8022"
     )
@@ -185,7 +185,9 @@ def parse_args():
 
 async def run(args):
     comm = Communicator()
-    if args.config:
+    if args.port is None:
+        args.port = get_free_port()
+    if args.config is not None:
         with open(args.config, "r") as f:
             config = json.load(f)
         # TODO

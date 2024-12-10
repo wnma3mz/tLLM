@@ -7,4 +7,4 @@ HOSTNAME=mac-mini
 export OMP_NUM_THREADS=8;
 export PYTHONPATH="./":$PYTHONPATH;
 
-python3 tllm/rpc/handler.py --master_addr $MASTER_URL --ip_addr $HOSTNAME --is_debug
+python3 tllm/rpc/handler.py --master_addr $MASTER_URL --is_debug

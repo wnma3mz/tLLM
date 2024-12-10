@@ -1,4 +1,5 @@
 import logging
+import socket
 from typing import Tuple
 
 from tllm import BACKEND, BackendEnum
@@ -7,6 +8,14 @@ from tllm.engine import AsyncEngine
 from tllm.generate import FakeLLMGenerator, LLMGenerator, TokenizerUtils
 from tllm.rpc.manager import LocalRPCManager, RPCManager
 from tllm.rpc.master_handler import MasterHandler, PendingRequests
+
+
+def get_free_port():
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind(("", 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
 
 
 def setup_seed(seed: int = 42):
