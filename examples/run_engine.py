@@ -1,8 +1,21 @@
+import argparse
 import asyncio
 from dataclasses import dataclass
 import logging
 
 from PIL import Image
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--backend", type=str, default="MLX", choices=["MLX", "TORCH", "mlx", "torch"])
+    return parser.parse_args()
+
+
+args = parse_args()
+import os
+
+os.environ["TLLM_BACKEND"] = args.backend.upper()
 
 from tllm.commons.manager import load_master_model
 from tllm.engine import AsyncEngine
@@ -20,11 +33,9 @@ from tllm.utils import setup_logger
 class Args:
     # model_path: str = "/Users/lujianghu/Documents/Llama-3.2-1B-Instruct"
     # model_path: str = "/Users/lujianghu/Documents/flux/schnell_4bit"
-    model_path: str = "Qwen/Qwen2.5-0.5B-Instruct"
-    # model_path: str = "Qwen/Qwen2-VL-2B-Instruct"
-    is_local: bool = True
-    is_debug: bool = True
-    is_fake: bool = False
+    # model_path: str = "Qwen/Qwen2.5-0.5B-Instruct"
+    model_path: str = "Qwen/Qwen2-VL-2B-Instruct"
+    is_debug: bool = False
 
 
 def init_engine(model_path, logger):
@@ -33,6 +44,14 @@ def init_engine(model_path, logger):
     generator = LLMGenerator(rpc_manager, logger, model, tok)
     engine = AsyncEngine(logger, generator)
     return engine, tok
+
+
+def init_image_engine(model_path, logger):
+    model, tok = load_master_model(model_path)
+    rpc_manager = LocalRPCManager(model_path)
+    generator = ImageGenerator(rpc_manager, logger, model, tok)
+    engine = AsyncEngine(logger, generator)
+    return engine
 
 
 async def llm_generate():
@@ -83,7 +102,7 @@ async def image_generate():
     }
 
     logger = setup_logger("engine", logging.DEBUG if args.is_debug else logging.INFO)
-    engine, _, _ = await init_engine(logger, args.model_path, 25111, args.is_local, args.is_fake, ImageGenerator)
+    engine = init_image_engine(args.model_path, logger)
     _ = await engine.start()
 
     image_serving = ImageServing(engine, args)
@@ -95,5 +114,6 @@ async def image_generate():
 
 
 if __name__ == "__main__":
-    asyncio.run(llm_generate())
+    # asyncio.run(llm_generate())
+    asyncio.run(mllm_generate())
     # asyncio.run(image_generate())

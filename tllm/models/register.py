@@ -36,7 +36,9 @@ if BackendEnum.MLX == BACKEND:
 elif BackendEnum.TORCH == BACKEND:
     from tllm.models.torch.llama import HFLlamaForCausalLM, HFLlamaModel
     from tllm.models.torch.qwen import HFQwen2ForCausalLM, HFQwen2Model
+    from tllm.models.torch.qwen_vl import HFQwen2VLForConditionalGeneration
 
     sampling_func = greedy_decode
     MODEL_REGISTER.update({"LlamaForCausalLM": (HFLlamaForCausalLM, HFLlamaModel)})
     MODEL_REGISTER.update({"Qwen2ForCausalLM": (HFQwen2ForCausalLM, HFQwen2Model)})
+    MODEL_REGISTER.update({"Qwen2VLForConditionalGeneration": (HFQwen2VLForConditionalGeneration, HFQwen2Model)})

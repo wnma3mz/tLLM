@@ -1,5 +1,6 @@
 from enum import Enum
 import importlib.util
+import os
 
 
 class BackendEnum(Enum):
@@ -14,12 +15,14 @@ elif importlib.util.find_spec("torch"):
 else:
     raise ImportError("No backend found")
 
-# BACKEND = BackendEnum.TORCH  # FOR TEST
+if os.environ.get("TLLM_BACKEND", None):
+    BACKEND = BackendEnum[os.environ["TLLM_BACKEND"]]
 
 if BACKEND == BackendEnum.TORCH:
     import torch
 
-    DTYPE = torch.bfloat16
+    # DTYPE = torch.bfloat16
+    DTYPE = torch.float16
     CONVERT_DTYPE = torch.float16
     DES_DTYPE = torch.float16
     if torch.cuda.is_available():
@@ -31,7 +34,7 @@ else:
     import mlx.core as mx
     import numpy as np
 
-    DTYPE = mx.bfloat16
+    DTYPE = mx.float16
     CONVERT_DTYPE = mx.float16
     DES_DTYPE = np.float16
     DEVICE = None

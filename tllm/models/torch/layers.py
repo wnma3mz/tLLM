@@ -237,7 +237,7 @@ class PlainLlamaSdpaAttention(LlamaSdpaAttention):
         return self.o_proj(attn_output), None
 
 
-class LlamaDecoderLayer(nn.Module):
+class DecoderLayer(nn.Module):
     def __init__(self, config: Union[LlamaConfig, AutoConfig], layer_idx: int, is_merge: bool) -> None:
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -294,7 +294,7 @@ class Decoder(nn.Module):
         config.offset = start_layer_idx
         self.layers = nn.ModuleList(
             [EmptyLayer()] * start_layer_idx
-            + [LlamaDecoderLayer(config, layer_idx, is_merge) for layer_idx in range(start_layer_idx, end_layer_idx)]
+            + [DecoderLayer(config, layer_idx, is_merge) for layer_idx in range(start_layer_idx, end_layer_idx)]
         )
 
     def forward(

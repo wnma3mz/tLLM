@@ -135,12 +135,16 @@ class PatchEmbed(nn.Module):
         self.embed_dim = embed_dim
 
         kernel_size = [temporal_patch_size, patch_size, patch_size]
-        self.proj = nn.Conv3d(in_channels, embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=False)
+        self.proj = nn.Conv3d(
+            in_channels=in_channels, out_channels=embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=False
+        )
 
     def __call__(self, hidden_states: mx.array) -> mx.array:
         hidden_states = hidden_states.reshape(
-            -1, self.temporal_patch_size, self.patch_size, self.patch_size, self.in_channels
+            -1, self.in_channels, self.temporal_patch_size, self.patch_size, self.patch_size
         )
+        # [out_ch, in_ch, n, h, w] -> [out_ch, n, h, w, in_ch]
+        hidden_states = mx.transpose(hidden_states, (0, 2, 3, 4, 1))
         hidden_states = self.proj(hidden_states).reshape(-1, self.embed_dim)
         return hidden_states
 
@@ -211,7 +215,6 @@ class VisionSdpaAttention(nn.Module):
             l, r = cu_seqlens[i - 1], cu_seqlens[i]
             attention_mask[..., l:r, l:r] = 1
         attention_mask = mx.where(attention_mask, 0, -math.inf)
-
         q = q.transpose(1, 0, 2)
         k = k.transpose(1, 0, 2)
         v = v.transpose(1, 0, 2)

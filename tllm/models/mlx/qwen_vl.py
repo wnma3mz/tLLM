@@ -5,6 +5,7 @@ import mlx.nn as nn
 import numpy as np
 from transformers import AutoConfig, AutoProcessor
 
+from tllm import DTYPE
 from tllm.models.mlx.helper import quantization_func
 from tllm.models.mlx.layers import PatchEmbed, PatchMerger, VisionMlp, VisionRotaryEmbedding, VisionSdpaAttention
 from tllm.models.utils import read_eos_token_ids
@@ -85,10 +86,8 @@ class Qwen2VisionModel(nn.Module):
         repeated = mx.repeat(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0])
         cu_seqlens = mx.cumsum(repeated)
         cu_seqlens = mx.pad(cu_seqlens, pad_width=(1, 0)).tolist()
-
         for blk in self.blocks:
-            hidden_states = blk(hidden_states, cu_seqlens=cu_seqlens, rotary_pos_emb=rotary_pos_emb)
-
+            hidden_states = blk(hidden_states.astype(DTYPE), cu_seqlens=cu_seqlens, rotary_pos_emb=rotary_pos_emb)
         return self.merger(hidden_states)
 
 
@@ -103,8 +102,9 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
 
     @classmethod
     def from_pretrained(cls, config, state_dict: Dict[str, mx.array], **kwargs):
-        model = cls(config)
         assert kwargs.get("model_path", None) is not None
+
+        model = cls(config)
         model.processor = AutoProcessor.from_pretrained(kwargs["model_path"], trust_remote_code=True)
         model.mm_config = {
             "vision_start_id": config.vision_start_token_id,
@@ -119,6 +119,7 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
 
         model = quantization_func(config, model, state_dict)
         model.load_weights(list(state_dict.items()))  # , strict=False
+        model.set_dtype(DTYPE)
 
         mx.eval(model.parameters())
         model.eval()
@@ -126,40 +127,40 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
 
     def get_input_embeddings(
         self,
-        x: np.ndarray,
+        input_ids: np.ndarray,
         pixel_values: Optional[np.ndarray] = None,
         pixel_values_videos: Optional[np.ndarray] = None,
         image_grid_thw: Optional[np.ndarray] = None,
         video_grid_thw: Optional[np.ndarray] = None,
     ) -> mx.array:
-        inputs_embeds = self.embed_tokens(mx.array(x))
+        inputs_embeds = self.embed_tokens(mx.array(input_ids))
 
         if pixel_values is not None:
-            pixel_values = mx.array(pixel_values).astype(inputs_embeds.dtype)
+            pixel_values = mx.array(pixel_values).astype(DTYPE)
             image_embeds = self.visual(pixel_values, grid_thw=mx.array(image_grid_thw))
-            n_image_tokens = (x == self.config.image_token_id).sum().item()
+            n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
             n_image_features = image_embeds.shape[0]
             if n_image_tokens != n_image_features:
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
                 )
-            image_mask = x == self.config.image_token_id  # shape: (seq_len, )
+            image_mask = input_ids == self.config.image_token_id  # shape: (seq_len, )
             image_mask_ind = [i for i, val in enumerate(image_mask) if val]
             image_embeds = image_embeds.astype(inputs_embeds.dtype)
 
             inputs_embeds[image_mask_ind] = image_embeds  # mlx not support bool mask
 
         if pixel_values_videos is not None:
-            pixel_values_videos = mx.array(pixel_values_videos).astype(inputs_embeds.dtype)
+            pixel_values_videos = mx.array(pixel_values_videos).astype(DTYPE)
             video_embeds = self.visual(pixel_values_videos, grid_thw=mx.array(video_grid_thw))
-            n_video_tokens = (x == self.config.video_token_id).sum().item()
+            n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
             n_video_features = video_embeds.shape[0]
             if n_video_tokens != n_video_features:
                 raise ValueError(
                     f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
                 )
 
-            video_mask = x == self.config.video_token_id  # shape: (seq_len, )
+            video_mask = input_ids == self.config.video_token_id  # shape: (seq_len, )
             video_mask_ind = [i for i, val in enumerate(video_mask) if val]
             video_embeds = video_embeds.astype(inputs_embeds.dtype)
             inputs_embeds[video_mask_ind] = video_embeds  # mlx not support bool mask

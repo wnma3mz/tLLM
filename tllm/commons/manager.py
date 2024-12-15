@@ -4,6 +4,7 @@ from typing import List, Optional, Tuple
 
 from transformers import AutoConfig
 
+from tllm import BACKEND, BackendEnum
 from tllm.commons.communicator import BaseCommunicator
 from tllm.generate import LLMGenerator, TokenizerUtils
 from tllm.models.file_helper import find_weight_file, get_model_path
@@ -65,12 +66,13 @@ class WeightManager:
 
     def _post_init(self):
         if str(self.model_path).endswith(".gguf"):
-            state_dict, config, _ = load_gguf_weight(str(self.model_path))
-            if state_dict is None:
-                raise ValueError("get gguf state_dict failed")
-            self.state_dict = state_dict
-            tok = TokenizerUtils("/Users/lujianghu/Documents/Llama-3.2-1B-Instruct/")  # TODO
-            arch = "LlamaForCausalLM"
+            raise NotImplementedError("GGUF model not supported")
+            # state_dict, config, _ = load_gguf_weight(str(self.model_path))
+            # if state_dict is None:
+            #     raise ValueError("get gguf state_dict failed")
+            # self.state_dict = state_dict
+            # tok = TokenizerUtils(...)  # TODO
+            # arch = "LlamaForCausalLM"
         else:
             config = AutoConfig.from_pretrained(self.model_path, trust_remote_code=True)
             tok = TokenizerUtils(self.model_path)
@@ -109,7 +111,8 @@ class WeightManager:
         new_state_dict = {}
         for k, v in state_dict.items():
             # for qwen-vl
-            if k == "visual.patch_embed.proj.weight":
+            if BACKEND == BackendEnum.MLX and k == "visual.patch_embed.proj.weight":
+                # [out_ch, in_ch, n, h, w] -> [out_ch, n, h, w, in_ch]
                 v = v.transpose(0, 2, 3, 4, 1)
 
             # model.layers for multi modal encoder
