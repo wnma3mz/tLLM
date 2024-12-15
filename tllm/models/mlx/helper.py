@@ -30,7 +30,7 @@ def build_mlx_mask(q_len_list: List[int], k_len_list: List[int]) -> mx.array:
         l_index += mask.shape[0]
         r_index += mask.shape[1]
 
-    final_mask = mx.where(combined_mask, 0, -math.inf)
+    final_mask = mx.where(combined_mask, 0, -math.inf).astype(DTYPE)
     return final_mask
 
 

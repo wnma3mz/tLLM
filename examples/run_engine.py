@@ -31,10 +31,10 @@ from tllm.utils import setup_logger
 
 @dataclass
 class Args:
-    # model_path: str = "/Users/lujianghu/Documents/Llama-3.2-1B-Instruct"
+    model_path: str = "/Users/lujianghu/Documents/Llama-3.2-3B-Instruct"
     # model_path: str = "/Users/lujianghu/Documents/flux/schnell_4bit"
     # model_path: str = "Qwen/Qwen2.5-0.5B-Instruct"
-    model_path: str = "Qwen/Qwen2-VL-2B-Instruct"
+    # model_path: str = "Qwen/Qwen2-VL-2B-Instruct"
     is_debug: bool = False
 
 
@@ -114,6 +114,6 @@ async def image_generate():
 
 
 if __name__ == "__main__":
-    # asyncio.run(llm_generate())
-    asyncio.run(mllm_generate())
+    asyncio.run(llm_generate())
+    # asyncio.run(mllm_generate())
     # asyncio.run(image_generate())

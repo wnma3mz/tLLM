@@ -7,7 +7,13 @@ from transformers import AutoConfig, AutoProcessor
 
 from tllm import DTYPE
 from tllm.models.mlx.helper import quantization_func
-from tllm.models.mlx.layers import PatchEmbed, PatchMerger, VisionMlp, VisionRotaryEmbedding, VisionSdpaAttention
+from tllm.models.mlx.qwen_vl.layers import (
+    PatchEmbed,
+    PatchMerger,
+    VisionMlp,
+    VisionRotaryEmbedding,
+    VisionSdpaAttention,
+)
 from tllm.models.utils import read_eos_token_ids
 
 
