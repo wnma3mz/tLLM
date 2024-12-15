@@ -6,6 +6,7 @@ import mlx.core as mx
 import mlx.nn as nn
 from mlx_lm.models.llama import MLP, Attention, ModelArgs, TransformerBlock, initialize_rope
 
+from tllm import DTYPE
 from tllm.commons.cache import AttentionData, RequestsCache, cat_func
 
 
@@ -167,11 +168,16 @@ class PatchMerger(nn.Module):
         return x
 
 
+def QuickGELUActivation(input: mx.array) -> mx.array:
+    return input * mx.sigmoid(1.702 * input)
+
+
 class VisionMlp(nn.Module):
     def __init__(self, dim: int, hidden_dim: int, hidden_act: str) -> None:
         super().__init__()
         self.fc1 = nn.Linear(dim, hidden_dim)
-        self.act = nn.SiLU()
+        # self.act = nn.SiLU()
+        self.act = QuickGELUActivation  # for qwenvl
         self.fc2 = nn.Linear(hidden_dim, dim)
 
     def __call__(self, x) -> mx.array:
@@ -210,23 +216,22 @@ class VisionSdpaAttention(nn.Module):
         q = apply_rotary_pos_emb_vision(mx.expand_dims(q, axis=0), rotary_pos_emb)[0]
         k = apply_rotary_pos_emb_vision(mx.expand_dims(k, axis=0), rotary_pos_emb)[0]
 
-        attention_mask = mx.zeros(shape=(1, seq_length, seq_length))
+        attention_mask = mx.zeros(shape=(1, seq_length, seq_length), dtype=mx.bool_)
         for i in range(1, len(cu_seqlens)):
             l, r = cu_seqlens[i - 1], cu_seqlens[i]
-            attention_mask[..., l:r, l:r] = 1
-        attention_mask = mx.where(attention_mask, 0, -math.inf)
-        q = q.transpose(1, 0, 2)
-        k = k.transpose(1, 0, 2)
-        v = v.transpose(1, 0, 2)
+            attention_mask[..., l:r, l:r] = True
+        attention_mask = mx.where(attention_mask, 0, -math.inf).astype(DTYPE)
+        q = q.transpose(1, 0, 2).astype(DTYPE)
+        k = k.transpose(1, 0, 2).astype(DTYPE)
+        v = v.transpose(1, 0, 2).astype(DTYPE)
         attn_output = mx.fast.scaled_dot_product_attention(
             mx.expand_dims(q, axis=0),
             mx.expand_dims(k, axis=0),
             mx.expand_dims(v, axis=0),
-            scale=1.0,
+            scale=1 / math.sqrt(q.shape[-1]),
             mask=attention_mask,
         )[0]
-        attn_output = attn_output.transpose(1, 0, 2)
-        attn_output = attn_output.reshape(seq_length, -1)
+        attn_output = attn_output.transpose(1, 0, 2).reshape(seq_length, -1)
         attn_output = self.proj(attn_output)
         return attn_output
 
