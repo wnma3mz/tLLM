@@ -8,7 +8,7 @@ from transformers import AutoConfig
 
 from tllm.commons.cache import CacheManager
 from tllm.models.mlx.helper import build_forward_cache, get_last_hidden_states, quantization_func
-from tllm.models.mlx.llama import Decoder
+from tllm.models.mlx.layers import Decoder
 from tllm.models.utils import read_eos_token_ids
 from tllm.models.weight_helper import default_merge_attn_bias, default_merge_attn_weight, default_merge_mlp_weight
 from tllm.schemas import SeqInput

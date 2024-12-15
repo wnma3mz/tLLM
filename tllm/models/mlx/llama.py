@@ -6,28 +6,12 @@ from mlx_lm.models.llama import ModelArgs
 import numpy as np
 from transformers import AutoConfig
 
-from tllm.commons.cache import AttentionData, CacheManager
-from tllm.models.mlx.helper import build_forward_cache, empty_func, get_last_hidden_states, quantization_func
-from tllm.models.mlx.layers import MLXTransformerBlock
+from tllm.commons.cache import CacheManager
+from tllm.models.mlx.helper import build_forward_cache, get_last_hidden_states, quantization_func
+from tllm.models.mlx.layers import Decoder
 from tllm.models.utils import read_eos_token_ids
 from tllm.models.weight_helper import default_merge_attn_weight, default_merge_mlp_weight
 from tllm.schemas import SeqInput
-
-
-class Decoder(nn.Module):
-    def __init__(self, args: ModelArgs, start_layer_idx: int, end_layer_idx: int, is_merge: bool):
-        super().__init__()
-        self.vocab_size = args.vocab_size
-        self.num_hidden_layers = args.num_hidden_layers
-        self.layers = [empty_func] * start_layer_idx + [
-            MLXTransformerBlock(args=args, layer_idx=layer_idx, offset=start_layer_idx, is_merge=is_merge)
-            for layer_idx in range(start_layer_idx, end_layer_idx)
-        ]
-
-    def __call__(self, h: mx.array, mask, cache: AttentionData) -> mx.array:
-        for layer in self.layers:
-            h = layer(h, mask, cache=cache)
-        return h
 
 
 class MLXLlamaModel(nn.Module):

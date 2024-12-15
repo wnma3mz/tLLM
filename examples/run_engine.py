@@ -4,31 +4,42 @@ import logging
 
 from PIL import Image
 
+from tllm.commons.manager import load_master_model
+from tllm.engine import AsyncEngine
 from tllm.entrypoints.image_server.image_protocol import Text2ImageRequest
 from tllm.entrypoints.image_server.server_image import ImageServing
 from tllm.entrypoints.protocol import ChatCompletionRequest
 from tllm.entrypoints.server_chat import OpenAIServing
 from tllm.generate import ImageGenerator, LLMGenerator
 from tllm.img_helper import base64_to_pil_image
-from tllm.utils import init_engine, setup_logger
+from tllm.network.manager import LocalRPCManager
+from tllm.utils import setup_logger
 
 
 @dataclass
 class Args:
     # model_path: str = "/Users/lujianghu/Documents/Llama-3.2-1B-Instruct"
     # model_path: str = "/Users/lujianghu/Documents/flux/schnell_4bit"
-    # model_path: str= "mlx-community/Qwen2.5-0.5B-Instruct-bf16"
-    model_path: str = "Qwen/Qwen2-VL-2B-Instruct"
+    model_path: str = "Qwen/Qwen2.5-0.5B-Instruct"
+    # model_path: str = "Qwen/Qwen2-VL-2B-Instruct"
     is_local: bool = True
     is_debug: bool = True
     is_fake: bool = False
+
+
+def init_engine(model_path, logger):
+    model, tok = load_master_model(model_path)
+    rpc_manager = LocalRPCManager(model_path)
+    generator = LLMGenerator(rpc_manager, logger, model, tok)
+    engine = AsyncEngine(logger, generator)
+    return engine, tok
 
 
 async def llm_generate():
     args = Args()
 
     logger = setup_logger("engine", logging.DEBUG if args.is_debug else logging.INFO)
-    engine, tok, _ = await init_engine(logger, args.model_path, 25111, args.is_local, args.is_fake, LLMGenerator)
+    engine, tok = init_engine(args.model_path, logger)
     _ = await engine.start()
     messages = [{"role": "user", "content": "Hello, how are you?"}]
     openai_serving_chat = OpenAIServing(engine, tok, args)
@@ -42,7 +53,7 @@ async def mllm_generate():
     args = Args()
 
     logger = setup_logger("engine", logging.DEBUG if args.is_debug else logging.INFO)
-    engine, tok, _ = await init_engine(logger, args.model_path, 25111, args.is_local, args.is_fake, LLMGenerator)
+    engine, tok = init_engine(args.model_path, logger)
     _ = await engine.start()
     messages = [
         {

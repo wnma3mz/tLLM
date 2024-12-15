@@ -2,19 +2,10 @@ import itertools
 from typing import Dict, List
 
 from safetensors import safe_open
+import torch
+import torch.nn as nn
 
 from tllm import BACKEND, BackendEnum
-
-if BACKEND == BackendEnum.TORCH:
-    import torch
-    import torch.nn as nn
-
-    class EmptyLayer(nn.Module):
-        @torch.inference_mode()
-        def forward(self, hidden_states, position_embeddings, attention_data) -> "torch.Tensor":
-            return hidden_states
-
-
 from tllm.commons.attn import get_attention_implementation
 from tllm.commons.cache import AttentionData, CacheManager, RequestsCache
 from tllm.schemas import SeqInput
@@ -23,6 +14,12 @@ from tllm.schemas import SeqInput
 def greedy_decode(logits: "torch.Tensor") -> List[int]:
     # logits shape: [seq_len, vocab_size]
     return torch.argmax(logits, dim=-1).tolist()
+
+
+def get_last_hidden_states(hidden_states: torch.Tensor, seq_len_list: List[int]) -> torch.Tensor:
+    # 只取最后一个 token 的 hidden_states
+    seq_hidden_states = torch.split(hidden_states, [seq_len for seq_len in seq_len_list], dim=0)
+    return torch.cat([x[-1:, :] for x in seq_hidden_states], dim=0)
 
 
 def build_mask(q_len_list: List[int], k_len_list: List[int]) -> "torch.Tensor":

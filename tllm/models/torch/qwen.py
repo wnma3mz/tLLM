@@ -1,23 +1,23 @@
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
 import torch.nn as nn
-from transformers.models.llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
+from transformers.models.qwen2.modeling_qwen2 import Qwen2RMSNorm, Qwen2RotaryEmbedding
 
 from tllm import DEVICE, DTYPE
 from tllm.commons.attn import get_attention_implementation
 from tllm.commons.cache import CacheManager
 from tllm.models.torch.helper import build_forward_cache, get_last_hidden_states
-from tllm.models.torch.layers import Decoder
+from tllm.models.torch.llama import Decoder
 from tllm.models.utils import read_eos_token_ids
-from tllm.models.weight_helper import default_merge_attn_weight, default_merge_mlp_weight
+from tllm.models.weight_helper import default_merge_attn_bias, default_merge_attn_weight, default_merge_mlp_weight
 from tllm.schemas import SeqInput
 
 _, attention_type = get_attention_implementation()
 
 
-class HFLlamaRotaryEmbedding(LlamaRotaryEmbedding):
+class HFQwen2RotaryEmbedding(Qwen2RotaryEmbedding):
     def forward(self, x, position_ids):
         if "dynamic" in self.rope_type:
             self._dynamic_frequency_update(position_ids, device=x.device)
@@ -41,16 +41,21 @@ class HFLlamaRotaryEmbedding(LlamaRotaryEmbedding):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-class HFLlamaModel(nn.Module):
+class HFQwen2Model(nn.Module):
     def __init__(self, config, is_merge: bool = True):
         super().__init__()
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.cache_manager = CacheManager()
+
+        # for qwen
+        config.attention_bias = True
+        config.o_proj_bias = False
+
         self.config = config
         self.model = Decoder(config, config.decoder_start_layer_idx, config.decoder_end_layer_idx, is_merge)
         self.num_decoder_layers = config.decoder_end_layer_idx - config.decoder_start_layer_idx
-        self.rotary_emb = HFLlamaRotaryEmbedding(config=config)
+        self.rotary_emb = HFQwen2RotaryEmbedding(config=config)
 
     @classmethod
     def from_pretrained(cls, config, state_dict: Dict[str, torch.Tensor], is_merge: bool = True, **kwargs):
@@ -81,6 +86,7 @@ class HFLlamaModel(nn.Module):
         state_dict = default_merge_attn_weight(state_dict)
         # torch.chunk(state_dict[mlp], self.world_size, dim=0)
         state_dict = default_merge_mlp_weight(state_dict)
+        state_dict = default_merge_attn_bias(state_dict)
         return state_dict
 
     @torch.inference_mode()
@@ -118,13 +124,13 @@ class HFLlamaModel(nn.Module):
         return hidden_states
 
 
-class HFLlamaForCausalLM(nn.Module):
+class HFQwen2ForCausalLM(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.vocab_size = config.vocab_size
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @classmethod
     def from_pretrained(cls, config, state_dict: Optional[Dict] = None, **kwargs):

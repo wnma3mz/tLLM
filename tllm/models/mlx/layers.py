@@ -359,10 +359,7 @@ class MergedMLP(nn.Module):
 
         dim = args.hidden_size
         hidden_dim = args.intermediate_size
-        if hasattr(args, "mlp_bias"):
-            mlp_bias = args.mlp_bias
-        else:
-            mlp_bias = False
+        mlp_bias = getattr(args, "mlp_bias", False)
 
         self.down_proj = nn.Linear(hidden_dim, dim, bias=mlp_bias)
         self.gate_up_proj = MergeParallelLayer(dim, hidden_dim, 2, 1, 0, bias=mlp_bias)
@@ -386,3 +383,24 @@ class MLXTransformerBlock(TransformerBlock):
         self.input_layernorm = nn.RMSNorm(args.hidden_size, eps=args.rms_norm_eps)
         self.post_attention_layernorm = nn.RMSNorm(args.hidden_size, eps=args.rms_norm_eps)
         self.args = args
+
+
+def empty_func(h, mask, cache):
+    # TODO
+    return h
+
+
+class Decoder(nn.Module):
+    def __init__(self, args: ModelArgs, start_layer_idx: int, end_layer_idx: int, is_merge: bool):
+        super().__init__()
+        self.vocab_size = args.vocab_size
+        self.num_hidden_layers = args.num_hidden_layers
+        self.layers = [empty_func] * start_layer_idx + [
+            MLXTransformerBlock(args=args, layer_idx=layer_idx, offset=start_layer_idx, is_merge=is_merge)
+            for layer_idx in range(start_layer_idx, end_layer_idx)
+        ]
+
+    def __call__(self, h: mx.array, mask, cache: AttentionData) -> mx.array:
+        for layer in self.layers:
+            h = layer(h, mask, cache=cache)
+        return h

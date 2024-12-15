@@ -14,6 +14,8 @@ elif importlib.util.find_spec("torch"):
 else:
     raise ImportError("No backend found")
 
+# BACKEND = BackendEnum.TORCH  # FOR TEST
+
 if BACKEND == BackendEnum.TORCH:
     import torch
 

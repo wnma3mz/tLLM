@@ -64,11 +64,6 @@ def quantization_func(config, model, state_dict):
     return model
 
 
-def empty_func(h, mask, cache):
-    # TODO
-    return h
-
-
 def read_from_safetensors(file_path: str, key_list: List[str]) -> Dict[str, mx.array]:
     tensors = {}
     weights = mx.load(file_path)
