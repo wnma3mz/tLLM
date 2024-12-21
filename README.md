@@ -84,31 +84,16 @@ In Mac Mini M4
 |                      | `mlx-community/Llama-3.2-1B-Instruct-4bit` | `mlx-community/Llama-3.2-1B-Instruct` | `mlx-community/Meta-Llama-3.1-8B-Instruct-4bit` | `mlx-community/Meta-Llama-3.1-8B-Instruct-bf16` |
 | -------------------- | -------------------------------------------- | --------------------------------------- | ------------------------------------------------- | ------------------------------------------------- |
 | Mac Mini M4 (16G) (Engine, Baseline)          | 98.10 tok/s                                 | 35.45 tok/s                             | 20.68 tok/s                                       | No Memory |
-| Mac Mini M4 (16G)          | 45.36 tok/s                                 | 23.6026 tok/s                             | 15.80 tok/s                                       | No Memory |
+| Mac Mini M4 (16G) (Local)          | 45.36 tok/s                                 | 23.60 tok/s                             | 15.80 tok/s                                       | No Memory |
+| Mac Mini M4 (16G) (Server+Client)           | 61.83 tok/s                                 | 34.54 tok/s                             |  14.91 tok/s                                       | No Memory |
 | Mac Mini M4 (16G) + M3 Pro (18G) |                                              | 16.33 tok/s                   | 11.06 tok/s | 5.64 tok/s |
 
-For `mlx-community/Llama-3.2-1B-Instruct-4bit`,
+Q: Why Local is slower than Server+Client?
+A: 
+- Local 只有一个进程，启动了 HTTP Serve， Engine 和 Model 都在一个进程中
+- Server+Client 是两个进程，Server 中包含了 HTTP Serve 和 Engine，以及 Embedding 和 LM HEAD；Client 中只有 Model
 
-![1734779816425](image/README/1734779816425.png)
+但不清楚，为什么 `mlx-community/Meta-Llama-3.1-8B-Instruct-4bit` 这个不大一样，暂时归因到内存压力上。
 
-For `mlx-community/Llama-3.2-1B-Instruct`,
-
-![1734779931105](image/README/1734779931105.png)
-
-For `mlx-community/Meta-Llama-3.1-8B-Instruct-4bit`,
-
-![1734779890405](image/README/1734779890405.png)
-
-old version
-
-For `mlx-community/Llama-3.2-1B-Instruct`
-
-- mac mini m2
-  ![alt text](asserts/image.png)
-- m3 pro
-  ![alt text](asserts/image-1.png)
-
-for 8b
-
-- m3 pro (layer=8) + mac mini m2 (layer=24)
-  ![alt text](asserts/image-2.png)
+Q: Mac Mini M4 (16G) + M3 Pro (18G) 这一列速度为什么慢？
+A：理想情况下会等于 Mac Mini M4 (16G) (Server+Client)，但由于需要进行通信，通信开销占了主要部分，其中主要是延迟问题导致每个 token 生成都需要花费一定时间，哪怕在局域网内。

@@ -87,3 +87,17 @@ TODO: Meta-Llama-3-8B-Instruct in GPU
 - 多维数组实现（float32）: 单机通信在 0.002 s 左右 （seq-len=1）
 - bytes 实现（float32）: 单机通信在 0.001 s 左右 （seq-len=1）
 
+
+old version
+
+For `mlx-community/Llama-3.2-1B-Instruct`
+
+- mac mini m2
+  ![alt text](asserts/image.png)
+- m3 pro
+  ![alt text](asserts/image-1.png)
+
+for 8b
+
+- m3 pro (layer=8) + mac mini m2 (layer=24)
+  ![alt text](asserts/image-2.png)
