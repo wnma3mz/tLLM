@@ -24,7 +24,7 @@
    tllm.server --model_path mlx-community/Llama-3.2-1B-Instruct-4bit --hostname $YOUR_IP
 
    # in another terminal
-   tllm.client --hostname $YOUR_IP
+   tllm.client --hostname http://$YOUR_IP:8022
    ```
 3. testing
 
@@ -81,10 +81,10 @@ In `examples/config.json`
 
 In Mac Mini M4
 
-|                      | `mlx-community/Llama-3.2-1B-Instruct-4bit` | `mlx-community/Llama-3.2-1B-Instruct` | `mlx-community/Meta-Llama-3.1-8B-Instruct-4bit` |
-| -------------------- | -------------------------------------------- | --------------------------------------- | ------------------------------------------------- |
-| Mac Mini M4          | 98.10 tok/s                                 | 35.45 tok/s                             | 20.68 tok/s                                       |
-| Mac Mini M4 + M3 Pro |                                              |                                         |                                                   |
+|                      | `mlx-community/Llama-3.2-1B-Instruct-4bit` | `mlx-community/Llama-3.2-1B-Instruct` | `mlx-community/Meta-Llama-3.1-8B-Instruct-4bit` | `mlx-community/Meta-Llama-3.1-8B-Instruct-bf16` |
+| -------------------- | -------------------------------------------- | --------------------------------------- | ------------------------------------------------- | ------------------------------------------------- |
+| Mac Mini M4 (16G)          | 98.10 tok/s                                 | 35.45 tok/s                             | 20.68 tok/s                                       | No Memory |
+| Mac Mini M4 (16G) + M3 Pro (18G) |                                              | 16.33 tok/s                   | 11.06 tok/s | 5.64 tok/s |
 
 For `mlx-community/Llama-3.2-1B-Instruct-4bit`,
 
