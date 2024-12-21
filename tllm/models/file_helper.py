@@ -91,27 +91,29 @@ def parse_model_size(model_name: str) -> float:
                 break
             except:
                 pass
-    if model_size == -1:
-        print("Model size not found in model name. Defaulting to 1B")
-        return 1.0
-    # assert model_size > 0, f"Invalid model name: {model_name}"
+    assert model_size > 0, f"Invalid model name: {model_name}"
     return model_size
 
 
-def split_model_layers(model_size: float, total_layers: int) -> Tuple[int, List[Tuple[int, int]]]:
-    # 根据 model size 和 层数来划分客户端数量以及每个客户端的层数
+def auto_set_client_size(model_size: float) -> int:
+    # num_hidden_layers
+    # 1B  16
+    # 3B  28
+    # 8B  32
+    # 70B 70
     if model_size < 4:
-        client_size = 1
+        return 1
     elif model_size <= 8:
-        client_size = 2
+        return 2
     elif model_size <= 32:
-        client_size = 4
+        return 4
     elif model_size <= 72:
-        client_size = 8
+        return 8
     else:
         raise ValueError(f"Model size {model_size} is too large")
 
+
+def split_model_layers(total_layers: int, client_size: int) -> List[Tuple[int, int]]:
+    # 根据 model size 和 层数来划分客户端数量以及每个客户端的层数
     each_client_layers = total_layers // client_size
-    return client_size, [
-        (start_idx, start_idx + each_client_layers) for start_idx in range(0, total_layers, each_client_layers)
-    ]
+    return [(start_idx, start_idx + each_client_layers) for start_idx in range(0, total_layers, each_client_layers)]

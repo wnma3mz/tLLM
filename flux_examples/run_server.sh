@@ -5,4 +5,4 @@ MASTER_HOSTNAME=mac-mini
 
 export PYTHONPATH="./":$PYTHONPATH;
 
-python3 -m tllm.entrypoints.api_server --ip_addr $MASTER_HOSTNAME --model_path $MODEL_PATH --is_debug
+python3 -m tllm.entrypoints.api_server --hostname $MASTER_HOSTNAME --model_path $MODEL_PATH --client_size 1 --is_debug

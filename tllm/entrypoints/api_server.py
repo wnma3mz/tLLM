@@ -1,5 +1,4 @@
 import asyncio
-import json
 import os
 import time
 from typing import Union
@@ -14,7 +13,7 @@ from tllm.entrypoints.image_server.image_protocol import Text2ImageRequest, Text
 from tllm.entrypoints.image_server.server_image import ImageServing
 from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionResponse
 from tllm.entrypoints.server_chat import OpenAIServing
-from tllm.entrypoints.utils import parse_args, serve_http
+from tllm.entrypoints.utils import load_master_config, parse_master_args, serve_http
 from tllm.network.helper import get_free_port
 from tllm.network.manager import LocalRPCManager, RPCManager, WebsocketManager
 from tllm.schemas import InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
@@ -48,7 +47,7 @@ async def get_index():
 
 @app.post("/v1/chat/completions")
 async def create_chat_completion(request: ChatCompletionRequest, raw_request: Request) -> ChatCompletionResponse:
-    if not ws_manager.has_full_model and not is_local:
+    if not ws_manager.has_full_model and not args.is_local:
         raise ValueError("No available Full Node to process the request")
     if openai_serving_chat is None:
         raise ValueError("OpenAIServing instance is not initialized")
@@ -66,7 +65,7 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
 
 @app.post("/v1/completions")
 async def create_completion(request: ChatCompletionRequest, raw_request: Request) -> ChatCompletionResponse:
-    if not ws_manager.has_full_model and not is_local:
+    if not ws_manager.has_full_model and not args.is_local:
         raise ValueError("No available Full Node to process the request")
     if openai_serving_chat is None:
         raise ValueError("OpenAIServing instance is not initialized")
@@ -80,7 +79,7 @@ async def create_completion(request: ChatCompletionRequest, raw_request: Request
 
 @app.post("/v1/create_image")
 async def create_image(request: Text2ImageRequest, raw_request: Request) -> Text2ImageResponse:
-    if not ws_manager.has_full_model and not is_local:
+    if not ws_manager.has_full_model and not args.is_local:
         raise ValueError("No available Full Node to process the request")
     if image_serving is None:
         raise ValueError("ImageServing instance is not initialized")
@@ -142,7 +141,7 @@ async def update_model_url():
     host_list = ws_manager.set_connect_clients()
     if len(host_list) > 0:
         rpc_manager.update_url(host_list)
-        await rpc_manager.send_config(f"{args.ip_addr}:{args.grpc_port}", host_list)
+        await rpc_manager.send_config(f"{args.hostname}:{args.grpc_port}", host_list)
         # 后台持续进行健康检查，如果有节点挂掉，需要重新分配
         await rpc_manager.start_health_check()
 
@@ -174,9 +173,7 @@ async def init_model_func(
 async def init_app(engine: AsyncEngine, args):
     global app
     global logger, openai_serving_chat, image_serving
-    global is_local
     logger = SingletonLogger.setup_master_logger()
-    is_local = args.is_local
 
     logger.info("args: %s", args)
     if args.is_image:
@@ -196,7 +193,7 @@ async def init_engine(args):
 
     global ws_manager, rpc_manager
 
-    ws_manager = WebsocketManager(total_layers, args.model_path)
+    ws_manager = WebsocketManager(total_layers, args.model_path, client_size=args.client_size)
     rpc_manager, master_handler = await init_rpc_manager(
         args.model_path, ws_manager.client_size, args.grpc_port, args.is_local
     )
@@ -223,11 +220,7 @@ async def run_server(args) -> None:
         args.grpc_port = get_free_port()
 
     if args.config:
-        with open(args.config, "r") as f:
-            config = json.load(f)
-        args.ip_addr = config["server"]["ip_addr"]
-        args.http_port = config["server"]["http_port"]
-        args.grpc_port = config["server"]["grpc_port"]
+        args = load_master_config(args.config, args)
 
     engine = await init_engine(args)
     app = await init_app(engine, args)
@@ -238,5 +231,5 @@ async def run_server(args) -> None:
 
 
 if __name__ == "__main__":
-    args = parse_args()
+    args = parse_master_args()
     asyncio.run(run_server(args))

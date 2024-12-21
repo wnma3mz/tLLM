@@ -1,25 +1,27 @@
 import random
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from fastapi import WebSocket
 
-from tllm.models.file_helper import parse_model_size, split_model_layers
+from tllm.models.file_helper import auto_set_client_size, parse_model_size, split_model_layers
 from tllm.network.helper import find_continuous_path, tcp_ping_test
 from tllm.schemas import ClientData, InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
 
 
 class WebsocketManager:
-    def __init__(self, total_layers: int, model_name: str, skip_parse: bool = False):
+    def __init__(self, total_layers: int, model_name: str, client_size: Optional[int] = None):
         self.total_layers = total_layers
         self.model_name = model_name
         self.clients: Dict[str, ClientData] = {}  # 连接的客户端, client_id -> ClientData
         self.monitor_websockets: Set[WebSocket] = set()  # 前端页面的websocket连接
 
         self.connect_clients = []
-        if skip_parse:
-            self.client_size, self.layer_info = split_model_layers(1, total_layers)
+        if client_size is None:
+            model_size = parse_model_size(model_name)
+            self.client_size = auto_set_client_size(model_size)
         else:
-            self.client_size, self.layer_info = split_model_layers(parse_model_size(model_name), total_layers)
+            self.client_size = client_size
+        self.layer_info = split_model_layers(total_layers, self.client_size)
         self.client_info = [[start_idx, end_idx, 0] for start_idx, end_idx in self.layer_info]  # 统计连接情况
 
     def get_free_layer(self) -> Tuple[int, int, int]:

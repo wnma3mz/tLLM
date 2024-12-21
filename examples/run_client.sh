@@ -6,3 +6,4 @@ export OMP_NUM_THREADS=8;
 export PYTHONPATH="./":$PYTHONPATH;
 
 python3 -m tllm.entrypoints.handler.handler --master_addr $MASTER_URL --is_debug
+# python3 -m tllm.entrypoints.handler.handler --master_addr $MASTER_URL --is_debug --config examples/config_one.json --client_idx 0

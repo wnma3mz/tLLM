@@ -7,11 +7,7 @@
     "client": [
         {
             "grpc_port": 25002,
-            "hostname": "m3pro"
-        },
-        {
-            "grpc_port": 25003,
-            "hostname": "m3"
+            "hostname": "mac-mini"
         }
     ]
 }

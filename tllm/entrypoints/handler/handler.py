@@ -1,8 +1,5 @@
-import argparse
 import asyncio
 from concurrent import futures
-import json
-import logging
 import time
 from typing import List
 import uuid
@@ -12,6 +9,7 @@ import grpc
 from tllm import GRPC_OPTIONS
 from tllm.commons.communicator import BaseCommunicator, Communicator
 from tllm.commons.convert import Convertor
+from tllm.entrypoints.utils import load_handler_config, parse_handler_args
 from tllm.network.helper import get_free_port, get_ips
 from tllm.network.http_client import HTTPClient
 from tllm.network.manager import MasterRPCManager
@@ -168,44 +166,31 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
         return schemas_pb2.HealthResponse(msg="Healthy", status=200)
 
 
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=None, help="gRPC 服务的端口")
-    parser.add_argument(
-        "--master_addr", type=str, required=True, help="master 的 http 地址, 如 http://192.168.x.y:8022"
-    )
-    parser.add_argument("--ip_addr", type=str, default=None, help="提供给 master 连接的 ip, 如 192.168.x.y")
-    parser.add_argument("--is_debug", action="store_true")
-    parser.add_argument("--config", type=str, default=None, help="config file path")
-    return parser.parse_args()
-
-
 async def run(args):
     comm = Communicator()
-    if args.port is None:
-        args.port = get_free_port()
+    if args.grpc_port is None:
+        args.grpc_port = get_free_port()
     if args.config is not None:
-        with open(args.config, "r") as f:
-            config = json.load(f)
-        # TODO
-        args.port = config["client"][0]["grpc"]
-        args.master_addr = config["client"][0]["master_addr"]
-        args.ip_addr = config["client"][0]["ip_addr"]
+        if args.client_idx is None:
+            raise ValueError("client_idx is required when config is provided")
+        args = load_handler_config(args.config, args, args.client_idx)
 
     ip_addr_list = get_ips()
-    if args.ip_addr and isinstance(args.ip_addr, str):
-        ip_addr_list = [args.ip_addr]
+    # 如果指定了 hostname, 则只使用指定的 hostname
+    if args.hostname is not None and isinstance(args.hostname, str):
+        ip_addr_list = [args.hostname]
+
     if len(ip_addr_list) == 0:
         raise ValueError("No available ip address")
 
     SingletonLogger.set_level("DEBUG" if args.is_debug else "INFO")
-    logger = SingletonLogger.setup_handler_logger(f"handler-{args.port}")
+    logger = SingletonLogger.setup_handler_logger(f"handler-{args.grpc_port}")
 
     rpc_servicer = RPCHandler(comm, logger, args.master_addr)
 
     try:
         if comm.rank == 0:
-            await rpc_servicer.start(ip_addr_list, args.port)
+            await rpc_servicer.start(ip_addr_list, args.grpc_port)
     except Exception as e:
         await rpc_servicer.stop()
         logger.error(f"Error occurred: {str(e)}")
@@ -215,5 +200,5 @@ async def run(args):
 
 
 if __name__ == "__main__":
-    args = parse_args()
+    args = parse_handler_args()
     asyncio.run(run(args))
