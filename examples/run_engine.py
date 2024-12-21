@@ -28,9 +28,9 @@ from tllm.network.manager import LocalRPCManager
 
 @dataclass
 class Args:
-    # model_path: str = "/Users/lujianghu/Documents/Llama-3.2-3B-Instruct"
+    model_path: str = "/Users/lujianghu/Documents/Llama-3.2-1B-Instruct"
     # model_path: str = "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit"
-    model_path: str = "mlx-community/Llama-3.2-1B-Instruct-4bit"
+    # model_path: str = "mlx-community/Llama-3.2-1B-Instruct-4bit"
     # model_path: str = "/Users/lujianghu/Documents/flux/schnell_4bit"
     # model_path: str = "Qwen/Qwen2.5-0.5B-Instruct"
     # model_path: str = "Qwen/Qwen2-VL-2B-Instruct"
@@ -77,7 +77,7 @@ async def llm_generate(args, messages):
     messages = [{"role": "user", "content": "Hello, how are you?"}]
     openai_serving_chat = OpenAIServing(engine, args)
 
-    request = ChatCompletionRequest(model="test", messages=messages)
+    request = ChatCompletionRequest(model="test", messages=messages, max_tokens=100)
     response = await openai_serving_chat.create_chat_completion(request, None)
     print(response)
 

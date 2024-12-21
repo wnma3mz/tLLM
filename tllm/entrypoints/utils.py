@@ -13,20 +13,52 @@ from tllm.singleton_logger import SingletonLogger
 
 def parse_master_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_path", type=str, required=True)
-    parser.add_argument("--hostname", type=str, required=False)
-    parser.add_argument("--grpc_port", type=int, default=None)
-    parser.add_argument("--http_port", type=int, default=8022)
-    parser.add_argument("--config", type=str, default=None, help="config file path")
+    parser.add_argument(
+        "--model_path",
+        type=str,
+        required=True,
+        help="Specify the path of the model file or huggingface repo. Like mlx-community/Llama-3.2-1B-Instruct-bf16",
+    )
+    parser.add_argument("--hostname", type=str, help="The address of the client connection.")
+    parser.add_argument(
+        "--grpc_port",
+        type=int,
+        default=None,
+        help="Specify the port number used by the gRPC service. If this parameter is not provided, the default value (currently None, and the specific value may be determined by the program logic later) will be used.",
+    )
+    parser.add_argument(
+        "--http_port",
+        type=int,
+        default=8022,
+        help="Specify the port number used by the HTTP service. The default value is 8022, and this port can be modified by passing in a parameter according to actual needs.",
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="The path of the configuration file. If there is an additional configuration file to control the program's behavior, this parameter can be used to specify its path. By default, it is not specified.",
+    )
     parser.add_argument(
         "--client_size",
         type=int,
         default=None,
-        help="the number of the client, if not provided, will be parsed from the model path and auto calculated",
+        help="The number of clients. If this parameter is not provided, the program will try to parse and automatically calculate the number from the model path.",
     )
-    parser.add_argument("--is_local", action="store_true")
-    parser.add_argument("--is_debug", action="store_true")
-    parser.add_argument("--is_image", action="store_true")
+    parser.add_argument(
+        "--is_local",
+        action="store_true",
+        help="A boolean flag. If this parameter is specified in the command line, indicates that the model runs locally only",
+    )
+    parser.add_argument(
+        "--is_debug",
+        action="store_true",
+        help="A boolean flag used to turn on or off the debug mode. If this parameter is specified, the program will print more logs",
+    )
+    parser.add_argument(
+        "--is_image",
+        action="store_true",
+        help="A boolean flag. The specific meaning start the Vincennes Diagram service",
+    )
     return parser.parse_args()
 
 

@@ -9,8 +9,8 @@ uvicorn
 websockets
 pillow
 huggingface_hub
-gradio
 psutil
+gradio==5.4.0
 grpcio==1.68.1
 lz4==4.3.3
 protobuf==5.28.3

@@ -4,7 +4,5 @@
 MODEL_PATH=Qwen/Qwen2-VL-2B-Instruct
 MASTER_HOSTNAME=mac-mini
 
-export PYTHONPATH="./":$PYTHONPATH;
-
-python3 -m tllm.entrypoints.api_server --hostname $MASTER_HOSTNAME --model_path $MODEL_PATH --is_debug
-# python3 -m tllm.entrypoints.api_server --hostname $MASTER_HOSTNAME --model_path $MODEL_PATH --is_debug --config examples/config_one.json
+tllm.server --model_path $MODEL_PATH --hostname $MASTER_HOSTNAME --is_debug
+# tllm.server --hostname $MASTER_HOSTNAME --model_path $MODEL_PATH --is_debug --config examples/config_one.json

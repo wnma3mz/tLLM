@@ -9,3 +9,5 @@ weights/
 .DS_Store
 *.png
 *.pt
+build/
+*.egg-info/

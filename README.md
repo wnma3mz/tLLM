@@ -4,45 +4,35 @@
 
 ### QuickStart
 
-1. download model from: https://huggingface.co/mlx-community/Llama-3.2-1B-Instruct-bf16
+1. install dependencies
 
-2. install dependencies
+- for mlx (macos arm):   `pip install -e ".[mlx]"`
+- for nvidia: `pip install -e ".[torch]"`
 
-- for mlx:   `pip install -r requirements-mlx.txt`
-- for nvidia: `pip install -r requirements-cuda.txt`
-- for intel: `pip install -r requirements.txt`
+2. run server
 
-3. run server 
+   2.1 (no communication)
 
-    3.1 (no communication)
+   ```bash
+   tllm.server --model_path mlx-community/Llama-3.2-1B-Instruct-4bit --is_local
+   ```
 
-    - edit `examples/run_single_server.sh`
+   2.2 (with communication)
 
-    ```bash
-    bash examples/run_single_server.sh
-    ```
+   ```bash
+   # first in one terminal
+   tllm.server --model_path mlx-community/Llama-3.2-1B-Instruct-4bit --hostname $YOUR_IP
 
-    3.2 (with communication)
+   # in another terminal
+   tllm.client --hostname $YOUR_IP
+   ```
+3. testing
 
-    - edit `examples/run_client.sh`
-
-    - edit `examples/run_server.sh`
-
-    ```bash
-    # first in one terminal
-    bash examples/run_server.sh
-
-    # in another terminal
-    bash examples/run_client.sh
-    ```
-
-4. testing
-
-```python
-python benchmarks/run_async_requests.py
+```bash
+python3 benchmarks/run_async_requests.py
 ```
 
-### Config
+### More Details
 
 In `examples/config.json`
 
@@ -69,34 +59,55 @@ In `examples/config.json`
 
 ### Features
 
-- [x] Support Multi-Requests
-- [x] Engine
-    - [x] mlx
-    - [x] torch
-    - [ ] tinygrad
-        - [ ] Multi-Request
-        - [ ] Jit
-        - [ ] Pipeline
-- [x] Communication
-    - [x] grpc
-    - [x] Auto Find Node
-        - [x] Simple Get Ip
-        - [x] Test Ping
-- [x] Attention
-    - [x] xformers
-    - [x] flash-attn
-    - [ ] PageAttention
+- [X] Support Multi-Requests
+- [X] Engine
+  - [X] mlx
+  - [X] torch
+  - [ ] tinygrad
+    - [ ] Multi-Request
+    - [ ] Jit
+    - [ ] Pipeline
+- [X] Communication
+  - [X] grpc
+  - [X] Auto Find Node
+    - [X] Simple Get Ip
+    - [X] Test Ping
+- [X] Attention
+  - [X] xformers
+  - [X] flash-attn
+  - [ ] PageAttention
 
 ### Performance
 
-For 1b
+In Mac Mini M4
+
+|                      | `mlx-community/Llama-3.2-1B-Instruct-4bit` | `mlx-community/Llama-3.2-1B-Instruct` | `mlx-community/Meta-Llama-3.1-8B-Instruct-4bit` |
+| -------------------- | -------------------------------------------- | --------------------------------------- | ------------------------------------------------- |
+| Mac Mini M4          | 98.10 tok/s                                 | 35.45 tok/s                             | 20.68 tok/s                                       |
+| Mac Mini M4 + M3 Pro |                                              |                                         |                                                   |
+
+For `mlx-community/Llama-3.2-1B-Instruct-4bit`,
+
+![1734779816425](image/README/1734779816425.png)
+
+For `mlx-community/Llama-3.2-1B-Instruct`,
+
+![1734779931105](image/README/1734779931105.png)
+
+For `mlx-community/Meta-Llama-3.1-8B-Instruct-4bit`,
+
+![1734779890405](image/README/1734779890405.png)
+
+old version
+
+For `mlx-community/Llama-3.2-1B-Instruct`
 
 - mac mini m2
-![alt text](asserts/image.png)
-
+  ![alt text](asserts/image.png)
 - m3 pro
-![alt text](asserts/image-1.png)
+  ![alt text](asserts/image-1.png)
 
 for 8b
-- m3 pro (layer=8) + mac mini m2 (layer=24) 
-![alt text](asserts/image-2.png)
+
+- m3 pro (layer=8) + mac mini m2 (layer=24)
+  ![alt text](asserts/image-2.png)

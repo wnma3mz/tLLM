@@ -184,6 +184,10 @@ async def run(args):
         await rpc_servicer.stop()
 
 
-if __name__ == "__main__":
+def main():
     args = parse_handler_args()
     asyncio.run(run(args))
+
+
+if __name__ == "__main__":
+    main()

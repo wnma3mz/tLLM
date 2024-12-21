@@ -220,6 +220,11 @@ async def run_server(args) -> None:
     await shutdown_task
 
 
-if __name__ == "__main__":
+def main():
+    global args
     args = parse_master_args()
     asyncio.run(run_server(args))
+
+
+if __name__ == "__main__":
+    main()
