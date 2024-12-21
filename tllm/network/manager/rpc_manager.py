@@ -81,7 +81,6 @@ class RPCManager:
 
         tasks = [check_single_client(i) for i in range(self.client_size)]
 
-        # 等待所有任务完成，返回结果列表
         results = await asyncio.gather(*tasks, return_exceptions=False)
 
         # 检查结果，如果有健康检查失败，返回对应的索引

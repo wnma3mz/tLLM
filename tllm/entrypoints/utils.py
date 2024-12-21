@@ -7,13 +7,14 @@ from typing import Dict
 from fastapi import FastAPI
 import uvicorn
 
+from tllm.network.helper import get_free_port, get_ips
 from tllm.singleton_logger import SingletonLogger
 
 
 def parse_master_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--hostname", type=str, required=True)
     parser.add_argument("--model_path", type=str, required=True)
+    parser.add_argument("--hostname", type=str, required=False)
     parser.add_argument("--grpc_port", type=int, default=None)
     parser.add_argument("--http_port", type=int, default=8022)
     parser.add_argument("--config", type=str, default=None, help="config file path")
@@ -42,23 +43,43 @@ def parse_handler_args():
     return parser.parse_args()
 
 
-def load_master_config(config_path: str, args):
-    with open(config_path, "r") as f:
-        config = json.load(f)
-    args.hostname = config["server"]["hostname"]
-    args.http_port = config["server"]["http_port"]
-    args.grpc_port = config["server"]["grpc_port"]
-    args.client_size = len(config["client"])
+def update_master_args(args):
+    if args.grpc_port is None:
+        args.grpc_port = get_free_port()
+
+    if args.config is not None:
+        with open(args.config, "r") as f:
+            config = json.load(f)
+        args.hostname = config["server"]["hostname"]
+        args.http_port = config["server"]["http_port"]
+        args.grpc_port = config["server"]["grpc_port"]
+        args.client_size = len(config["client"])
     return args
 
 
-def load_handler_config(config_path: str, args, idx: int):
-    with open(config_path, "r") as f:
-        config = json.load(f)
-    args.grpc_port = config["client"][idx]["grpc_port"]
-    args.hostname = config["client"][idx]["hostname"]
-    args.master_addr = f'http://{config["server"]["hostname"]}:{config["server"]["http_port"]}'
-    return args
+def update_handler_args(args):
+    if args.grpc_port is None:
+        args.grpc_port = get_free_port()
+
+    if args.config is not None:
+        if args.client_idx is None:
+            raise ValueError("client_idx is required when config is provided")
+        with open(args.config_path, "r") as f:
+            config = json.load(f)
+        args.grpc_port = config["client"][args.client_idx]["grpc_port"]
+        args.hostname = config["client"][args.client_idx]["hostname"]
+        args.master_addr = f'http://{config["server"]["hostname"]}:{config["server"]["http_port"]}'
+
+    # 如果指定了 hostname, 则只使用指定的 hostname
+    if args.hostname is not None and isinstance(args.hostname, str):
+        ip_addr_list = [args.hostname]
+    else:
+        ip_addr_list = get_ips()
+
+    if len(ip_addr_list) == 0:
+        raise ValueError("No available ip address")
+
+    return args, ip_addr_list
 
 
 async def serve_http(app: FastAPI, **uvicorn_kwargs: Dict):

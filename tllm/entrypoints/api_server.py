@@ -13,8 +13,8 @@ from tllm.entrypoints.image_server.image_protocol import Text2ImageRequest, Text
 from tllm.entrypoints.image_server.server_image import ImageServing
 from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionResponse
 from tllm.entrypoints.server_chat import OpenAIServing
-from tllm.entrypoints.utils import load_master_config, parse_master_args, serve_http
-from tllm.network.helper import get_free_port
+from tllm.entrypoints.utils import parse_master_args, serve_http, update_master_args
+from tllm.generate import ImageGenerator, LLMGenerator
 from tllm.network.manager import LocalRPCManager, RPCManager, WebsocketManager
 from tllm.schemas import InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
 from tllm.singleton_logger import SingletonLogger
@@ -188,7 +188,7 @@ async def init_engine(args):
     logger = SingletonLogger.setup_master_logger()
 
     s1 = time.time()
-    model, tok = load_master_model(args.model_path)
+    model = load_master_model(args.model_path)
     total_layers = model.num_layers  # 必须要有层数
 
     global ws_manager, rpc_manager
@@ -197,17 +197,12 @@ async def init_engine(args):
     rpc_manager, master_handler = await init_rpc_manager(
         args.model_path, ws_manager.client_size, args.grpc_port, args.is_local
     )
-
-    if args.is_image:
-        from tllm.generate import ImageGenerator
-
-        generator = ImageGenerator(rpc_manager, model, tok)
-    else:
-        from tllm.generate import LLMGenerator
-
-        generator = LLMGenerator(rpc_manager, model, tok)
-    engine = AsyncEngine(generator)
     logger.info(f"Engine init Cost Time: {time.time() - s1:.4f}s. Total Layers: {total_layers}")
+    if args.is_image:
+        generator = ImageGenerator(rpc_manager, model)
+    else:
+        generator = LLMGenerator(rpc_manager, model)
+    engine = AsyncEngine(generator)
 
     await engine.start()
     return engine
@@ -215,12 +210,7 @@ async def init_engine(args):
 
 async def run_server(args) -> None:
     SingletonLogger.set_level("DEBUG" if args.is_debug else "INFO")
-
-    if args.grpc_port is None:
-        args.grpc_port = get_free_port()
-
-    if args.config:
-        args = load_master_config(args.config, args)
+    args = update_master_args(args)
 
     engine = await init_engine(args)
     app = await init_app(engine, args)

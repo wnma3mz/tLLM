@@ -1,12 +1,11 @@
 import os
 import time
-from typing import List, Optional, Tuple
+from typing import Any, List
 
 from transformers import AutoConfig
 
 from tllm import BACKEND, BackendEnum
 from tllm.commons.communicator import BaseCommunicator
-from tllm.generate import LLMGenerator, TokenizerUtils
 from tllm.models.file_helper import find_weight_file, get_model_path
 from tllm.models.register import MODEL_REGISTER
 from tllm.models.weight_helper import load_gguf_weight, read_from_safetensors, tie_embedding_weights
@@ -65,6 +64,8 @@ class WeightManager:
         return TransformerWeightHandler(weights)
 
     def _post_init(self):
+        from tllm.generate import TokenizerUtils
+
         if str(self.model_path).endswith(".gguf"):
             raise NotImplementedError("GGUF model not supported")
             # state_dict, config, _ = load_gguf_weight(str(self.model_path))
@@ -149,7 +150,7 @@ class WeightManager:
         return state_dict
 
 
-def load_client_model(start_idx: int, end_idx: int, comm: BaseCommunicator, model_path: str):
+def load_client_model(start_idx: int, end_idx: int, comm: BaseCommunicator, model_path: str) -> Any:
     weight_manager = WeightManager(model_path)
     config = weight_manager.config
 
@@ -175,7 +176,7 @@ def load_client_model(start_idx: int, end_idx: int, comm: BaseCommunicator, mode
     return model
 
 
-def load_master_model(model_path: str) -> Tuple[LLMGenerator, TokenizerUtils]:
+def load_master_model(model_path: str) -> Any:
     weight_manager = WeightManager(model_path)
     state_dict = weight_manager.read_master_weight()
     if weight_manager.arch not in MODEL_REGISTER:
@@ -190,4 +191,5 @@ def load_master_model(model_path: str) -> Tuple[LLMGenerator, TokenizerUtils]:
         kwargs.update({"quantization_level": weight_manager.config.quantization_level})
 
     model = MY_CausalLM_CLASS.from_pretrained(weight_manager.config, state_dict, **kwargs)
-    return model, weight_manager.tok
+    model.tok = weight_manager.tok
+    return model

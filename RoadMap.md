@@ -45,7 +45,7 @@
     - [ ] Auto Layer Split
         - [x] get free layer idx
         - [x] fix split layer pipeline
-        - [ ] calculate layer memory and recommend split
+        - [x] calculate layer memory and recommend split
         - [ ] split model before load
     - [x] Async Generation
         - [x] Multi-Sequence Batch=1

@@ -9,8 +9,7 @@ import grpc
 from tllm import GRPC_OPTIONS
 from tllm.commons.communicator import BaseCommunicator, Communicator
 from tllm.commons.convert import Convertor
-from tllm.entrypoints.utils import load_handler_config, parse_handler_args
-from tllm.network.helper import get_free_port, get_ips
+from tllm.entrypoints.utils import parse_handler_args, update_handler_args
 from tllm.network.http_client import HTTPClient
 from tllm.network.manager import MasterRPCManager
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
@@ -112,10 +111,10 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
         """
         @param request: ForwardRequest
             hidden_states: bytes
-            uuid: str
-            seq_len: int
+            uuid: List[str]
+            seq_len: List[int]
         """
-        if not hasattr(self.http_client, "model") and self.http_client is None:
+        if hasattr(self.http_client, "model") is None:
             return schemas_pb2.ForwardResponse(msg="Model not initialized", status=400)
         if hasattr(self.manager, "master_stub") is None:
             return schemas_pb2.ForwardResponse(msg="Manager not initialized", status=400)
@@ -167,27 +166,13 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
 
 
 async def run(args):
-    comm = Communicator()
-    if args.grpc_port is None:
-        args.grpc_port = get_free_port()
-    if args.config is not None:
-        if args.client_idx is None:
-            raise ValueError("client_idx is required when config is provided")
-        args = load_handler_config(args.config, args, args.client_idx)
-
-    ip_addr_list = get_ips()
-    # 如果指定了 hostname, 则只使用指定的 hostname
-    if args.hostname is not None and isinstance(args.hostname, str):
-        ip_addr_list = [args.hostname]
-
-    if len(ip_addr_list) == 0:
-        raise ValueError("No available ip address")
-
     SingletonLogger.set_level("DEBUG" if args.is_debug else "INFO")
+    args, ip_addr_list = update_handler_args(args)
+    comm = Communicator()
+
     logger = SingletonLogger.setup_handler_logger(f"handler-{args.grpc_port}")
 
     rpc_servicer = RPCHandler(comm, logger, args.master_addr)
-
     try:
         if comm.rank == 0:
             await rpc_servicer.start(ip_addr_list, args.grpc_port)

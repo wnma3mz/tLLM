@@ -27,8 +27,6 @@ class StatusTracker:
 
 
 class PendingRequests:
-    """管理待处理的请求"""
-
     def __init__(self):
         self._forward_requests: Dict[str, asyncio.Future] = {}
         self._status_requests: Dict[str, StatusTracker] = {}
@@ -97,7 +95,6 @@ class MasterHandler(schemas_pb2_grpc.RPCServiceServicer):
     ) -> schemas_pb2.ForwardResponse:
         """处理从最后一个节点返回的结果"""
         request_id = "-".join(x for x in list(request.uuid))
-        # self.logger.debug(f"Received result request id: {request_id}")
 
         try:
             self.pending_requests.complete_forward_request(request_id, request.hidden_states)
@@ -113,7 +110,6 @@ class MasterHandler(schemas_pb2_grpc.RPCServiceServicer):
     ) -> schemas_pb2.ForwardResponse:
         """处理从最后一个节点返回的结果"""
         request_id = "-".join(x for x in list(request.uuid))
-        # self.logger.debug(f"Received result request id: {request_id}")
 
         try:
             self.pending_requests.complete_forward_request(request_id, request.hidden_states)

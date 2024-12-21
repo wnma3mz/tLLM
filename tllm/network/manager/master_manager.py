@@ -8,6 +8,9 @@ from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 
 class MasterRPCManager:
     # 向 Master 发送 gRPC 请求
+    # 每个节点需要发送处理完之后的「结果」和「状态」
+    # 「结果」发往下一个 PP，如果已经是最后一个 PP，则发往 Master 节点
+    # 「状态」发往 Master 节点
     def __init__(self, grpc_options: List[Tuple[str, int]]):
         self.grpc_options = grpc_options
         self.master_stub = None
@@ -36,7 +39,6 @@ class MasterRPCManager:
             "uuid": request.uuid,
             "hidden_states": hidden_states,
             # "text_embeddings": request.text_embeddings,
-            # "image_rotary_emb": request.image_rotary_emb,
         }
         status_request = {"uuid": request.uuid, "pp_idx": self.pp_idx, "cost_time": cost_time}
         await self.master_stub.Status(schemas_pb2.StatusRequest(**status_request))

@@ -37,25 +37,41 @@ class Args:
     is_debug: bool = False
 
 
-def init_engine(model_path):
-    model, tok = load_master_model(model_path)
+def init_engine(model_path: str) -> AsyncEngine:
+    model = load_master_model(model_path)
     rpc_manager = LocalRPCManager(model_path)
-    generator = LLMGenerator(rpc_manager, model, tok)
+    generator = LLMGenerator(rpc_manager, model)
     engine = AsyncEngine(generator)
     return engine
 
 
-def init_image_engine(model_path):
-    model, tok = load_master_model(model_path)
+def init_image_engine(model_path: str) -> AsyncEngine:
+    model = load_master_model(model_path)
     rpc_manager = LocalRPCManager(model_path)
-    generator = ImageGenerator(rpc_manager, model, tok)
+    generator = ImageGenerator(rpc_manager, model)
     engine = AsyncEngine(generator)
     return engine
 
 
-async def llm_generate():
-    args = Args()
+def llm_message():
+    messages = [{"role": "user", "content": "Hello, how are you?"}]
+    return messages
 
+
+def mllm_message():
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "What is shown in this image?"},
+                {"type": "image_url", "image_url": {"file_path": "asserts/image-1.png"}},
+            ],
+        }
+    ]
+    return messages
+
+
+async def llm_generate(args, messages):
     engine = init_engine(args.model_path)
     await engine.start()
     messages = [{"role": "user", "content": "Hello, how are you?"}]
@@ -66,31 +82,7 @@ async def llm_generate():
     print(response)
 
 
-async def mllm_generate():
-    args = Args()
-
-    engine = init_engine(args.model_path)
-    await engine.start()
-    messages = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "What is shown in this image?"},
-                {"type": "image_url", "image_url": {"file_path": "asserts/image-1.png"}},
-            ],
-        }
-    ]
-    openai_serving_chat = OpenAIServing(engine, args)
-
-    request = ChatCompletionRequest(model="test", messages=messages)
-    response = await openai_serving_chat.create_chat_completion(request, None)
-    print(response)
-
-
-async def image_generate():
-    args = Args()
-
-    prompt = "a little dog"
+async def image_generate(args):
     prompt = "germanic romanticism painting of an obscure winter forest in a geocore landscape. Ambient landscape lighting, heavy shading, crystal night sky, stunning stars, topography"
     config = {
         "num_inference_steps": 3,
@@ -99,7 +91,7 @@ async def image_generate():
     }
 
     engine = init_image_engine(args.model_path)
-    _ = await engine.start()
+    await engine.start()
 
     image_serving = ImageServing(engine, args)
 
@@ -110,6 +102,7 @@ async def image_generate():
 
 
 if __name__ == "__main__":
-    asyncio.run(llm_generate())
-    # asyncio.run(mllm_generate())
-    # asyncio.run(image_generate())
+    args = Args()
+    asyncio.run(llm_generate(args, llm_message()))
+    # asyncio.run(llm_generate(args, mllm_message()))
+    # asyncio.run(image_generate(args))
