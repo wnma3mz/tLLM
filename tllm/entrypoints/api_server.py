@@ -1,6 +1,5 @@
 import asyncio
 import json
-import logging
 import os
 import time
 from typing import Union
@@ -11,19 +10,21 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingRes
 
 from tllm.commons.manager import load_master_model
 from tllm.engine import AsyncEngine
+from tllm.entrypoints.image_server.image_protocol import Text2ImageRequest, Text2ImageResponse
+from tllm.entrypoints.image_server.server_image import ImageServing
 from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionResponse
 from tllm.entrypoints.server_chat import OpenAIServing
 from tllm.entrypoints.utils import parse_args, serve_http
-from tllm.generate import LLMGenerator
 from tllm.network.helper import get_free_port
 from tllm.network.manager import LocalRPCManager, RPCManager, WebsocketManager
 from tllm.schemas import InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
-from tllm.utils import init_rpc_manager, setup_logger, setup_seed
+from tllm.singleton_logger import SingletonLogger
+from tllm.utils import init_rpc_manager, setup_seed
 
 openai_serving_chat: OpenAIServing = None
+image_serving: ImageServing = None
 ws_manager: WebsocketManager = None
 rpc_manager: Union[RPCManager, LocalRPCManager]
-
 app = FastAPI()
 
 
@@ -49,6 +50,8 @@ async def get_index():
 async def create_chat_completion(request: ChatCompletionRequest, raw_request: Request) -> ChatCompletionResponse:
     if not ws_manager.has_full_model and not is_local:
         raise ValueError("No available Full Node to process the request")
+    if openai_serving_chat is None:
+        raise ValueError("OpenAIServing instance is not initialized")
     try:
         generator = await openai_serving_chat.create_chat_completion(request, raw_request)
         if request.stream:
@@ -65,12 +68,32 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
 async def create_completion(request: ChatCompletionRequest, raw_request: Request) -> ChatCompletionResponse:
     if not ws_manager.has_full_model and not is_local:
         raise ValueError("No available Full Node to process the request")
+    if openai_serving_chat is None:
+        raise ValueError("OpenAIServing instance is not initialized")
     generator = await openai_serving_chat.create_chat_completion(request, raw_request)
     if request.stream:
         return StreamingResponse(content=generator, media_type="text/event-stream")
     else:
         assert isinstance(generator, ChatCompletionResponse)
         return JSONResponse(content=generator.model_dump())
+
+
+@app.post("/v1/create_image")
+async def create_image(request: Text2ImageRequest, raw_request: Request) -> Text2ImageResponse:
+    if not ws_manager.has_full_model and not is_local:
+        raise ValueError("No available Full Node to process the request")
+    if image_serving is None:
+        raise ValueError("ImageServing instance is not initialized")
+    try:
+        generator = await image_serving.create_image(request, raw_request)
+        if request.stream:
+            return StreamingResponse(content=generator, media_type="text/event-stream")
+        else:
+            assert isinstance(generator, Text2ImageResponse)
+            return JSONResponse(content=generator.model_dump())
+    except Exception as e:
+        logger.error(f"Error processing request: {str(e)}")
+        return JSONResponse(content={"error": str(e)}, status_code=499)
 
 
 @app.get("/health")
@@ -148,11 +171,11 @@ async def init_model_func(
     return response
 
 
-async def run_server(args) -> None:
-    setup_seed()
+async def init_app(engine: AsyncEngine, args):
     global app
-    global logger, ws_manager, rpc_manager, openai_serving_chat
+    global logger, openai_serving_chat, image_serving
     global is_local
+    logger = SingletonLogger.setup_master_logger()
     is_local = args.is_local
 
     if args.grpc_port is None:
@@ -165,29 +188,51 @@ async def run_server(args) -> None:
         args.http_port = config["server"]["http_port"]
         args.grpc_port = config["server"]["grpc_port"]
 
-    logger = setup_logger("master", logging.DEBUG if args.is_debug else logging.INFO)
-
     logger.info("args: %s", args)
+    if args.is_image:
+        image_serving = ImageServing(engine, args)
+    else:
+        openai_serving_chat = OpenAIServing(engine, args)
+    return app
+
+
+async def init_engine(args):
+    setup_seed()
+    logger = SingletonLogger.setup_master_logger()
 
     s1 = time.time()
-
     model, tok = load_master_model(args.model_path)
     total_layers = model.num_layers  # 必须要有层数
-    ws_manager = WebsocketManager(total_layers, args.model_path)
 
+    global ws_manager, rpc_manager
+
+    ws_manager = WebsocketManager(total_layers, args.model_path)
     rpc_manager, master_handler = await init_rpc_manager(
-        logger, args.model_path, ws_manager.client_size, args.grpc_port, args.is_local
+        args.model_path, ws_manager.client_size, args.grpc_port, args.is_local
     )
 
-    generator = LLMGenerator(rpc_manager, logger, model, tok)
-    engine = AsyncEngine(logger, generator)
+    if args.is_image:
+        from tllm.generate import ImageGenerator
 
+        generator = ImageGenerator(rpc_manager, model, tok)
+    else:
+        from tllm.generate import LLMGenerator
+
+        generator = LLMGenerator(rpc_manager, model, tok)
+    engine = AsyncEngine(generator)
     logger.info(f"Engine init Cost Time: {time.time() - s1:.4f}s. Total Layers: {total_layers}")
-    openai_serving_chat = OpenAIServing(engine, tok, args)
 
-    loop = await engine.start()
+    await engine.start()
+    return engine
+
+
+async def run_server(args) -> None:
+    SingletonLogger.set_level("DEBUG" if args.is_debug else "INFO")
+    engine = await init_engine(args)
+    app = await init_app(engine, args)
+
     uvicorn_kwargs = {"host": ["::", "0.0.0.0"], "port": args.http_port, "timeout_graceful_shutdown": 5}
-    shutdown_task = await serve_http(app, loop, engine, master_handler, logger, **uvicorn_kwargs)
+    shutdown_task = await serve_http(app, **uvicorn_kwargs)
     await shutdown_task
 
 

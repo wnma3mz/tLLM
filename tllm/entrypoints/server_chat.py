@@ -20,7 +20,7 @@ from tllm.entrypoints.protocol import (
     UsageInfo,
     random_uuid,
 )
-from tllm.generate import MessageProcessor, TokenizerUtils
+from tllm.generate import MessageProcessor
 from tllm.schemas import RequestOutput, SequenceRequestData
 
 
@@ -29,9 +29,9 @@ def create_error_response(message: str) -> ChatCompletionResponse:
 
 
 class OpenAIServing:
-    def __init__(self, engine: AsyncEngine, tok: TokenizerUtils, args):
+    def __init__(self, engine: AsyncEngine, args):
         self.engine = engine
-        self.message_processor = MessageProcessor(tok)
+        self.message_processor = MessageProcessor(self.engine.tok)
         self.model_name = os.path.basename(args.model_path)
 
     async def show_available_models(self):

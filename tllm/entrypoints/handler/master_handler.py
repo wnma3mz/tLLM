@@ -7,6 +7,7 @@ import grpc
 
 from tllm import GRPC_OPTIONS
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
+from tllm.singleton_logger import SingletonLogger
 
 
 class StatusTracker:
@@ -71,9 +72,9 @@ class PendingRequests:
 
 
 class MasterHandler(schemas_pb2_grpc.RPCServiceServicer):
-    def __init__(self, logger, pending_requests: PendingRequests):
+    def __init__(self, pending_requests: PendingRequests):
         self.pending_requests = pending_requests
-        self.logger = logger
+        self.logger = SingletonLogger.setup_master_logger()
 
     async def start(self, port: int):
         self.server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=10), options=GRPC_OPTIONS)

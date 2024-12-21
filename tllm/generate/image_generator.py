@@ -3,13 +3,15 @@ from typing import List
 
 from tllm.img_helper import pil_image_to_base64
 from tllm.schemas import ForwardResult, ImageRequestData
+from tllm.singleton_logger import SingletonLogger
 
 
 class ImageGenerator:
-    def __init__(self, manager: "RPCManager", logger, model, tok=None) -> None:
+    def __init__(self, manager: "RPCManager", model, tok=None) -> None:
         self.manager = manager
-        self.logger = logger
         self.model = model
+        self.logger = SingletonLogger.setup_master_logger()
+        self.tok = tok
 
     async def forward(self, image_request: ImageRequestData) -> ForwardResult:
         height, width = image_request.runtime_config.height, image_request.runtime_config.width

@@ -1,7 +1,7 @@
 import argparse
 import asyncio
 from dataclasses import dataclass
-import logging
+import os
 
 from PIL import Image
 
@@ -13,8 +13,6 @@ def parse_args():
 
 
 args = parse_args()
-import os
-
 os.environ["TLLM_BACKEND"] = args.backend.upper()
 
 from tllm.commons.manager import load_master_model
@@ -26,42 +24,42 @@ from tllm.entrypoints.server_chat import OpenAIServing
 from tllm.generate import ImageGenerator, LLMGenerator
 from tllm.img_helper import base64_to_pil_image
 from tllm.network.manager import LocalRPCManager
-from tllm.utils import setup_logger
 
 
 @dataclass
 class Args:
-    model_path: str = "/Users/lujianghu/Documents/Llama-3.2-3B-Instruct"
+    # model_path: str = "/Users/lujianghu/Documents/Llama-3.2-3B-Instruct"
+    # model_path: str = "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit"
+    model_path: str = "mlx-community/Llama-3.2-1B-Instruct-4bit"
     # model_path: str = "/Users/lujianghu/Documents/flux/schnell_4bit"
     # model_path: str = "Qwen/Qwen2.5-0.5B-Instruct"
     # model_path: str = "Qwen/Qwen2-VL-2B-Instruct"
     is_debug: bool = False
 
 
-def init_engine(model_path, logger):
+def init_engine(model_path):
     model, tok = load_master_model(model_path)
     rpc_manager = LocalRPCManager(model_path)
-    generator = LLMGenerator(rpc_manager, logger, model, tok)
-    engine = AsyncEngine(logger, generator)
-    return engine, tok
+    generator = LLMGenerator(rpc_manager, model, tok)
+    engine = AsyncEngine(generator)
+    return engine
 
 
-def init_image_engine(model_path, logger):
+def init_image_engine(model_path):
     model, tok = load_master_model(model_path)
     rpc_manager = LocalRPCManager(model_path)
-    generator = ImageGenerator(rpc_manager, logger, model, tok)
-    engine = AsyncEngine(logger, generator)
+    generator = ImageGenerator(rpc_manager, model, tok)
+    engine = AsyncEngine(generator)
     return engine
 
 
 async def llm_generate():
     args = Args()
 
-    logger = setup_logger("engine", logging.DEBUG if args.is_debug else logging.INFO)
-    engine, tok = init_engine(args.model_path, logger)
-    _ = await engine.start()
+    engine = init_engine(args.model_path)
+    await engine.start()
     messages = [{"role": "user", "content": "Hello, how are you?"}]
-    openai_serving_chat = OpenAIServing(engine, tok, args)
+    openai_serving_chat = OpenAIServing(engine, args)
 
     request = ChatCompletionRequest(model="test", messages=messages)
     response = await openai_serving_chat.create_chat_completion(request, None)
@@ -71,9 +69,8 @@ async def llm_generate():
 async def mllm_generate():
     args = Args()
 
-    logger = setup_logger("engine", logging.DEBUG if args.is_debug else logging.INFO)
-    engine, tok = init_engine(args.model_path, logger)
-    _ = await engine.start()
+    engine = init_engine(args.model_path)
+    await engine.start()
     messages = [
         {
             "role": "user",
@@ -83,7 +80,7 @@ async def mllm_generate():
             ],
         }
     ]
-    openai_serving_chat = OpenAIServing(engine, tok, args)
+    openai_serving_chat = OpenAIServing(engine, args)
 
     request = ChatCompletionRequest(model="test", messages=messages)
     response = await openai_serving_chat.create_chat_completion(request, None)
@@ -101,8 +98,7 @@ async def image_generate():
         "width": 768,
     }
 
-    logger = setup_logger("engine", logging.DEBUG if args.is_debug else logging.INFO)
-    engine = init_image_engine(args.model_path, logger)
+    engine = init_image_engine(args.model_path)
     _ = await engine.start()
 
     image_serving = ImageServing(engine, args)

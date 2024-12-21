@@ -17,7 +17,7 @@ from tllm.network.http_client import HTTPClient
 from tllm.network.manager import MasterRPCManager
 from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.schemas import SeqInput
-from tllm.utils import setup_logger
+from tllm.singleton_logger import SingletonLogger
 
 
 class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
@@ -198,8 +198,8 @@ async def run(args):
     if len(ip_addr_list) == 0:
         raise ValueError("No available ip address")
 
-    logger_name = f"handler-{args.port}"
-    logger = setup_logger(logger_name, logging.DEBUG if args.is_debug else logging.INFO)
+    SingletonLogger.set_level("DEBUG" if args.is_debug else "INFO")
+    logger = SingletonLogger.setup_handler_logger(f"handler-{args.port}")
 
     rpc_servicer = RPCHandler(comm, logger, args.master_addr)
 

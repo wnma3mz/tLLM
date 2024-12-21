@@ -1,5 +1,5 @@
 import time
-from typing import AsyncGenerator, Dict, List, Optional
+from typing import Dict, List, Optional
 
 import numpy as np
 from transformers import AutoImageProcessor, AutoProcessor
@@ -7,6 +7,7 @@ from transformers import AutoImageProcessor, AutoProcessor
 from tllm.models.register import sampling_func
 from tllm.models.utils import is_generate_end
 from tllm.schemas import MIX_TENSOR, ForwardResult, SeqInput, SequenceRequestData
+from tllm.singleton_logger import SingletonLogger
 
 
 def merge_mm_input(mm_input_list: List[Dict[str, List[np.ndarray]]]) -> Optional[Dict[str, List[MIX_TENSOR]]]:
@@ -76,9 +77,9 @@ def process_mm_input(
 
 
 class LLMGenerator:
-    def __init__(self, manager: "RPCManager", logger, model, tok: "TokenizerUtils") -> None:
+    def __init__(self, manager: "RPCManager", model, tok: "TokenizerUtils") -> None:
         self.manager = manager
-        self.logger = logger
+        self.logger = SingletonLogger.setup_master_logger()
         self.model = model
         self.tok = tok
         self.processor = getattr(model, "processor", None)

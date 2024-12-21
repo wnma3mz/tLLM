@@ -91,7 +91,10 @@ def parse_model_size(model_name: str) -> float:
                 break
             except:
                 pass
-    assert model_size > 0, f"Invalid model name: {model_name}"
+    if model_size == -1:
+        print("Model size not found in model name. Defaulting to 1B")
+        return 1.0
+    # assert model_size > 0, f"Invalid model name: {model_name}"
     return model_size
 
 

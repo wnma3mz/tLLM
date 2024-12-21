@@ -5,6 +5,7 @@ from typing import List, Union
 
 from tllm.generate import ImageGenerator, LLMGenerator
 from tllm.schemas import SequenceRequestData
+from tllm.singleton_logger import SingletonLogger
 
 conversations_dict = {}  # List[int] -> str, TODO LRU 缓存
 
@@ -51,19 +52,21 @@ def post_process(data: SequenceRequestData):
 
 
 class AsyncEngine:
-    def __init__(
-        self, logger, generator: Union[LLMGenerator, ImageGenerator], sleep_time: float = 0.0, limit_size: int = 5
-    ):
+    def __init__(self, generator: Union[LLMGenerator, ImageGenerator], sleep_time: float = 0.0, limit_size: int = 5):
         self.generator = generator
         self.prefill_queue: asyncio.Queue = asyncio.Queue()
         self.decoding_queue: asyncio.Queue = asyncio.Queue()
         self.processing_task = None
         self.limit_size: int = limit_size  # 每次最多处理 5 个请求，prefill + decode
         self.sleep_time: float = sleep_time
-        self.logger = logger
+        self.logger = SingletonLogger.setup_master_logger()
         self.abort_queue: asyncio.Queue = asyncio.Queue()
         self.queue_not_empty: asyncio.Event = asyncio.Event()
         self._loop = None
+
+    @property
+    def tok(self):
+        return self.generator.tok
 
     async def fetch_data(self):
         aborting_request_ids = set()

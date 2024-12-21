@@ -6,6 +6,8 @@ from typing import Dict
 from fastapi import FastAPI
 import uvicorn
 
+from tllm.singleton_logger import SingletonLogger
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -16,17 +18,18 @@ def parse_args():
     parser.add_argument("--config", type=str, default=None, help="config file path")
     parser.add_argument("--is_local", action="store_true")
     parser.add_argument("--is_debug", action="store_true")
-    parser.add_argument("--is_fake", action="store_true")
+    parser.add_argument("--is_image", action="store_true")
     return parser.parse_args()
 
 
-async def serve_http(
-    app: FastAPI, loop: asyncio.AbstractEventLoop, engine, master_handler, logger, **uvicorn_kwargs: Dict
-):
+async def serve_http(app: FastAPI, **uvicorn_kwargs: Dict):
+    logger = SingletonLogger.setup_master_logger()
+
     config = uvicorn.Config(app, **uvicorn_kwargs)
     server = uvicorn.Server(config)
 
-    asyncio.set_event_loop(loop)
+    # asyncio.set_event_loop(loop)
+    loop = asyncio.get_event_loop()
     server_task = loop.create_task(server.serve())
 
     # Setup graceful shutdown handlers
@@ -38,18 +41,18 @@ async def serve_http(
         except Exception as e:
             logger.error(f"Error stopping server: {e}")
 
-        if master_handler:
-            try:
-                await master_handler.stop()
-            except Exception as e:
-                logger.error(f"Error stopping master handler: {e}")
+        # if master_handler:
+        #     try:
+        #         await master_handler.stop()
+        #     except Exception as e:
+        #         logger.error(f"Error stopping master handler: {e}")
 
-        try:
-            await engine.stop()
-        except Exception as e:
-            logger.error(f"Error stopping engine: {e}")
-        finally:
-            loop.stop()
+        # try:
+        #     await engine.stop()
+        # except Exception as e:
+        #     logger.error(f"Error stopping engine: {e}")
+        # finally:
+        #     loop.stop()
 
         logger.info("Shutdown sequence completed")
 
