@@ -178,16 +178,6 @@ async def init_app(engine: AsyncEngine, args):
     logger = SingletonLogger.setup_master_logger()
     is_local = args.is_local
 
-    if args.grpc_port is None:
-        args.grpc_port = get_free_port()
-
-    if args.config:
-        with open(args.config, "r") as f:
-            config = json.load(f)
-        args.ip_addr = config["server"]["ip_addr"]
-        args.http_port = config["server"]["http_port"]
-        args.grpc_port = config["server"]["grpc_port"]
-
     logger.info("args: %s", args)
     if args.is_image:
         image_serving = ImageServing(engine, args)
@@ -228,6 +218,17 @@ async def init_engine(args):
 
 async def run_server(args) -> None:
     SingletonLogger.set_level("DEBUG" if args.is_debug else "INFO")
+
+    if args.grpc_port is None:
+        args.grpc_port = get_free_port()
+
+    if args.config:
+        with open(args.config, "r") as f:
+            config = json.load(f)
+        args.ip_addr = config["server"]["ip_addr"]
+        args.http_port = config["server"]["http_port"]
+        args.grpc_port = config["server"]["grpc_port"]
+
     engine = await init_engine(args)
     app = await init_app(engine, args)
 
