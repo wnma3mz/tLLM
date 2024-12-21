@@ -83,7 +83,8 @@ In Mac Mini M4
 
 |                      | `mlx-community/Llama-3.2-1B-Instruct-4bit` | `mlx-community/Llama-3.2-1B-Instruct` | `mlx-community/Meta-Llama-3.1-8B-Instruct-4bit` | `mlx-community/Meta-Llama-3.1-8B-Instruct-bf16` |
 | -------------------- | -------------------------------------------- | --------------------------------------- | ------------------------------------------------- | ------------------------------------------------- |
-| Mac Mini M4 (16G)          | 98.10 tok/s                                 | 35.45 tok/s                             | 20.68 tok/s                                       | No Memory |
+| Mac Mini M4 (16G) (Engine, Baseline)          | 98.10 tok/s                                 | 35.45 tok/s                             | 20.68 tok/s                                       | No Memory |
+| Mac Mini M4 (16G)          | 45.36 tok/s                                 | 23.6026 tok/s                             | 15.80 tok/s                                       | No Memory |
 | Mac Mini M4 (16G) + M3 Pro (18G) |                                              | 16.33 tok/s                   | 11.06 tok/s | 5.64 tok/s |
 
 For `mlx-community/Llama-3.2-1B-Instruct-4bit`,
