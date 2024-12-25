@@ -14,6 +14,23 @@ from tllm.models.weight_helper import default_merge_attn_weight, default_merge_m
 from tllm.schemas import SeqInput
 
 
+def get_inv_freq_mx(dim, base):
+    return 1.0 / (base ** (mx.arange(0, dim, 2, dtype=mx.int32).astype(mx.float32) / dim))
+
+
+class DynamicNTKScalingRoPE:
+    def __init__(self, dims, max_position_embeddings, base, scale, rope_type, rope_scaling):
+        self._freqs = get_inv_freq_mx(dims, base)
+
+    def __call__(self, position_ids):
+        inv_mx_freq_expanded = mx.expand_dims(self._freqs, (0, 2))[0]
+        position_mx_ids_expanded = position_ids[None, :]
+
+        freqs = (inv_mx_freq_expanded @ position_mx_ids_expanded).transpose(0, 1)
+        emb_mx = mx.concatenate((freqs, freqs), axis=-1)
+        return emb_mx.cos(), emb_mx.sin()
+
+
 class MLXLlamaModel(nn.Module):
     def __init__(self, config: AutoConfig, is_merge: bool = True):
         super().__init__()
@@ -23,9 +40,20 @@ class MLXLlamaModel(nn.Module):
         self.config = config
         self.model = Decoder(args, config.decoder_start_layer_idx, config.decoder_end_layer_idx, is_merge)
         self.num_layers = config.decoder_end_layer_idx - config.decoder_start_layer_idx
+        self.rotary_emb = DynamicNTKScalingRoPE(
+            dims=args.head_dim or args.hidden_size // args.num_attention_heads,
+            max_position_embeddings=args.max_position_embeddings,
+            base=args.rope_theta,
+            scale=1.0,
+            rope_type="default",
+            rope_scaling=1.0,
+        )
 
     def __call__(self, hidden_states: mx.array, seq_input: SeqInput) -> mx.array:
         attention_data = build_forward_cache(seq_input, self.cache_manager, self.num_layers)
+
+        cos, sin = self.rotary_emb(attention_data.position_ids)
+        attention_data.cos, attention_data.sin = cos, sin
 
         mask = attention_data.attn_mask
         mask = mask if mask is None else mask.astype(hidden_states.dtype)

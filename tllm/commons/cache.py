@@ -10,12 +10,15 @@ if BACKEND == BackendEnum.MLX:
 
     cat_func = lambda tensors: mx.concat(tensors, axis=0)
     zeros_func = lambda x0, x1, x2: mx.zeros(shape=(x0, x1, x2), dtype=DTYPE)
+    array_func = lambda x: mx.array([x], dtype=mx.int32)
+    arange_func = lambda x: mx.arange(0, x, dtype=mx.int32)
 else:
     import torch
 
     cat_func = lambda tensors: torch.cat(tensors, dim=0)
     zeros_func = lambda x0, x1, x2: torch.zeros(size=(x0, x1, x2), dtype=DTYPE)
-
+    array_func = lambda x: torch.tensor([x], dtype=torch.long)
+    arange_func = lambda x: torch.arange(0, x, dtype=torch.long)
 
 KV_CACHE_TYPE = Tuple[MIX_TENSOR, MIX_TENSOR]
 
@@ -68,18 +71,25 @@ class RequestsCache:
 
     def build(self, seq_input, cache_manager):
         q_len_list, k_len_list = [], []
+        position_ids_list = []
 
         for uuid, q_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
             if uuid in cache_manager.cache_dict:
+                # kv_cache 是整个历史的 kv_cache
+                # 当 q_len 为 1 时，直接使用 kv_cache，使用历史的全部 token kv cache
+                # TODO: 当 q_len > 1 时，表示只需要使用前 q_len 的 kv_cache，后面的 kv_cache 需要重新计算
                 layer_cache_list, cache_seq_len = cache_manager.get(uuid)
+                position_ids = array_func(cache_seq_len)
                 k_len_list.append(cache_seq_len + q_len)
             else:
                 layer_cache_list = None
+                position_ids = arange_func(q_len)
                 k_len_list.append(q_len)
             q_len_list.append(q_len)
+            position_ids_list.append(position_ids)
 
             self.add(uuid, q_len, layer_cache_list)
-        return q_len_list, k_len_list
+        return q_len_list, k_len_list, position_ids_list
 
     def get_kv_cache(self, uuid: str) -> List[KVCache]:
         return self.cache_dict[uuid]["cache"]

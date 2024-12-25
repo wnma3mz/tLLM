@@ -175,7 +175,7 @@ class MergedSdpaAttention(nn.Module):
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(
-            query_states, key_states, cos, sin, attention_data.position_ids, unsqueeze_dim=1
+            query_states, key_states, cos, sin, unsqueeze_dim=1
         )
         request_cache: RequestsCache = attention_data.request_cache
         key_states, value_states = request_cache.update(

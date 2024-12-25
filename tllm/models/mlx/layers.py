@@ -68,6 +68,21 @@ class RowParallelLayer(BaseParallelLayer):
     def __call__(self, x: mx.array) -> mx.array:
         return self.layer(x)
 
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    half_dim = x.shape[-1] // 2
+    x1 = x[..., :half_dim]
+    x2 = x[..., half_dim:]
+    return mx.concatenate((-x2, x1), axis=-1)
+
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    # Expand dimensions
+    cos = mx.expand_dims(cos, axis=unsqueeze_dim)
+    sin = mx.expand_dims(sin, axis=unsqueeze_dim)
+    
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
 
 class MergedAttention(nn.Module):
     def __init__(self, args, layer_idx: int, offset: int):
@@ -88,25 +103,13 @@ class MergedAttention(nn.Module):
         )
         self.o_proj = nn.Linear(n_heads * head_dim, dim, bias=o_proj_bias)
 
-        self.rope = initialize_rope(args)
-
         self.layer_idx = layer_idx
         self.offset = offset
 
-        max_seq_len = 1024
+        # max_seq_len = 1024
         # self._k_cache = mx.zeros(shape=(max_seq_len, args.num_key_value_heads, self.head_dim), dtype=self.o_proj.weight.dtype)
         # self._v_cache = mx.zeros(shape=(max_seq_len, args.num_key_value_heads, self.head_dim), dtype=self.o_proj.weight.dtype)
         self._k_cache, self._v_cache = None, None
-
-    def _rope(self, xs: mx.array, request_cache: RequestsCache, uuid_list: List[str]) -> List[mx.array]:
-        offset_list = request_cache.get_offset_list(uuid_list, self.layer_idx - self.offset)
-        x_list = []
-        start = 0
-        for uuid, offset in zip(uuid_list, offset_list):
-            end = start + request_cache.get_seq_len(uuid)
-            x_list.append(self.rope(xs[start:end].transpose(1, 0, 2), offset).transpose(1, 0, 2))
-            start = end
-        return cat_func(x_list)
 
     def __call__(
         self,
@@ -124,8 +127,7 @@ class MergedAttention(nn.Module):
 
         # must has cache, and split by uuid
         request_cache: RequestsCache = cache.request_cache
-        queries = self._rope(queries, request_cache, cache.uuid_list)
-        keys = self._rope(keys, request_cache, cache.uuid_list)
+        queries, keys = apply_rotary_pos_emb(queries, keys, cache.cos, cache.sin)
 
         keys, values = request_cache.update(
             keys, values, cache.uuid_list, self.layer_idx - self.offset, self._k_cache, self._v_cache

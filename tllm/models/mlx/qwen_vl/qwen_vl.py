@@ -139,6 +139,7 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
         image_grid_thw: Optional[np.ndarray] = None,
         video_grid_thw: Optional[np.ndarray] = None,
     ) -> mx.array:
+        # TODO: Multi-Request Maybe Has Problem
         inputs_embeds = self.embed_tokens(mx.array(input_ids))
 
         if pixel_values is not None:

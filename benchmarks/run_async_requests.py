@@ -11,9 +11,8 @@ async def requests_func(messages: List[Dict[str, Any]]):
     data = {
         "messages": messages,
         "model": "tt",
-        # "stream": True
         "stream": False,
-        "max_tokens": 20,
+        "max_tokens": 200,
     }
     time.sleep(random.random() * 2)
     async with aiohttp.ClientSession() as session:
@@ -25,15 +24,39 @@ async def requests_func(messages: List[Dict[str, Any]]):
                 print(f"Error: {response.status}")
 
 
-async def main():
+def llm_message():
     messages1 = [{"role": "user", "content": "Hello, how are you?"}]
     messages2 = [{"role": "user", "content": "Hello, What's your name?"}]
     messages3 = [
         {"role": "system", "content": "You are a helpful AI assistant."},
         {"role": "user", "content": "今天天气怎么样"},
     ]
-
     messages_list = [messages1, messages2, messages3]
+    return messages_list
+
+def mllm_message():
+    messages1 = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "这张图片里面有什么？"},
+                {"type": "image_url", "image_url": {"file_path": "asserts/flux_gen_image.png"}},
+            ],
+        }
+    ]
+    messages2 = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "What is shown in this image?"},
+                {"type": "image_url", "image_url": {"file_path": "asserts/image-1.png"}},
+            ],
+        }
+    ]
+    messages_list = [messages1, messages2]
+    return messages_list    
+
+async def main(messages_list: List[List[Dict[str, Any]]]):
     print("异步并发请求结果")
     s1 = time.time()
     await asyncio.gather(*[requests_func(messages) for messages in messages_list])
@@ -41,11 +64,11 @@ async def main():
 
     print("单独请求结果")
     s1 = time.time()
-    await requests_func(messages3)
-    await requests_func(messages1)
-    await requests_func(messages2)
+    for message in messages_list:
+        await requests_func(message)
     print(f"time cost: {time.time() - s1:.4f} s")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # asyncio.run(main(llm_message()))
+    asyncio.run(main(mllm_message()))
