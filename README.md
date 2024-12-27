@@ -89,6 +89,7 @@ In Mac Mini M4
 | Mac Mini M4 (16G) + M3 Pro (18G) |                                              | 16.33 tok/s                   | 11.06 tok/s | 5.64 tok/s |
 
 Q: Why Local is slower than Server+Client?
+
 A: 
 - Local 只有一个进程，启动了 HTTP Serve， Engine 和 Model 都在一个进程中
 - Server+Client 是两个进程，Server 中包含了 HTTP Serve 和 Engine，以及 Embedding 和 LM HEAD；Client 中只有 Model
@@ -96,4 +97,5 @@ A:
 但不清楚，为什么 `mlx-community/Meta-Llama-3.1-8B-Instruct-4bit` 这个不大一样，暂时归因到内存压力上。
 
 Q: Mac Mini M4 (16G) + M3 Pro (18G) 这一列速度为什么慢？
+
 A：理想情况下会等于 Mac Mini M4 (16G) (Server+Client)，但由于需要进行通信，通信开销占了主要部分，其中主要是延迟问题导致每个 token 生成都需要花费一定时间，哪怕在局域网内。

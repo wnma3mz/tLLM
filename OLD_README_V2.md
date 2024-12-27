@@ -127,7 +127,7 @@ flowchart TB
         direction TB
         A[Master] -->|gRPC Request| B2[Client1]
         B2[Client1] -->|gRPC Request| C2[Client2]
-        C2[Client2] -->|grpc Request| A[Master]
+        C2[Client2] -->|gRPC Request| A[Master]
     end
 ```
 

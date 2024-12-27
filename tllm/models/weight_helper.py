@@ -88,6 +88,28 @@ def default_merge_attn_weight(weights: Dict[str, MIX_TENSOR]) -> Dict[str, MIX_T
     return merge_weight_func(attn_pattern, attn_list, attn_name, weights)
 
 
+def default_merge_mlp_quantization(weights: Dict[str, MIX_TENSOR]) -> Dict[str, MIX_TENSOR]:
+    mlp_list = ["gate_proj", "up_proj"]
+    mlp_pattern = re.compile(r"model\.layers\.(\d+)\.mlp.*.biases")
+    mlp_name = "model.layers.{layer_idx}.mlp.gate_up_proj.layer.biases"
+    weights = merge_weight_func(mlp_pattern, mlp_list, mlp_name, weights)
+
+    mlp_pattern = re.compile(r"model\.layers\.(\d+)\.mlp.*.scales")
+    mlp_name = "model.layers.{layer_idx}.mlp.gate_up_proj.layer.scales"
+    return merge_weight_func(mlp_pattern, mlp_list, mlp_name, weights)
+
+
+def default_merge_attn_quantization(weights: Dict[str, MIX_TENSOR]) -> Dict[str, MIX_TENSOR]:
+    attn_list = ["q_proj", "k_proj", "v_proj"]
+    attn_pattern = re.compile(r"model\.layers\.(\d+)\.self_attn.*.biases")
+    attn_name = "model.layers.{layer_idx}.self_attn.qkv_proj.layer.biases"
+    weights = merge_weight_func(attn_pattern, attn_list, attn_name, weights)
+
+    attn_pattern = re.compile(r"model\.layers\.(\d+)\.self_attn.*.scales")
+    attn_name = "model.layers.{layer_idx}.self_attn.qkv_proj.layer.scales"
+    return merge_weight_func(attn_pattern, attn_list, attn_name, weights)
+
+
 def tie_embedding_weights(state_dict: Dict[str, MIX_TENSOR]) -> Dict[str, MIX_TENSOR]:
     has_key_list = list(state_dict.keys())
     if "lm_head.weight" not in state_dict:

@@ -10,7 +10,12 @@ from tllm.commons.cache import CacheManager
 from tllm.models.mlx.helper import build_forward_cache, get_last_hidden_states, quantization_func
 from tllm.models.mlx.layers import Decoder
 from tllm.models.utils import read_eos_token_ids
-from tllm.models.weight_helper import default_merge_attn_weight, default_merge_mlp_weight
+from tllm.models.weight_helper import (
+    default_merge_attn_quantization,
+    default_merge_attn_weight,
+    default_merge_mlp_quantization,
+    default_merge_mlp_weight,
+)
 from tllm.schemas import SeqInput
 
 
@@ -21,12 +26,12 @@ def get_inv_freq_mx(dim, base):
 class DynamicNTKScalingRoPE:
     def __init__(self, dims, max_position_embeddings, base, scale, rope_type, rope_scaling):
         self._freqs = get_inv_freq_mx(dims, base)
+        self._freqs = mx.expand_dims(self._freqs, (0, 2))[0]
 
     def __call__(self, position_ids):
-        inv_mx_freq_expanded = mx.expand_dims(self._freqs, (0, 2))[0]
         position_mx_ids_expanded = position_ids[None, :]
+        freqs = (self._freqs @ position_mx_ids_expanded).transpose(1, 0)
 
-        freqs = (inv_mx_freq_expanded @ position_mx_ids_expanded).transpose(0, 1)
         emb_mx = mx.concatenate((freqs, freqs), axis=-1)
         return emb_mx.cos(), emb_mx.sin()
 
@@ -40,21 +45,21 @@ class MLXLlamaModel(nn.Module):
         self.config = config
         self.model = Decoder(args, config.decoder_start_layer_idx, config.decoder_end_layer_idx, is_merge)
         self.num_layers = config.decoder_end_layer_idx - config.decoder_start_layer_idx
-        self.rotary_emb = DynamicNTKScalingRoPE(
-            dims=args.head_dim or args.hidden_size // args.num_attention_heads,
-            max_position_embeddings=args.max_position_embeddings,
-            base=args.rope_theta,
-            scale=1.0,
-            rope_type="default",
-            rope_scaling=1.0,
-        )
+        # TODO: Custom RoPE
+        # self.rotary_emb = DynamicNTKScalingRoPE(
+        #     dims=args.head_dim or args.hidden_size // args.num_attention_heads,
+        #     max_position_embeddings=args.max_position_embeddings,
+        #     base=args.rope_theta,
+        #     scale=1.0,
+        #     rope_type="default",
+        #     rope_scaling=1.0,
+        # )
 
     def __call__(self, hidden_states: mx.array, seq_input: SeqInput) -> mx.array:
         attention_data = build_forward_cache(seq_input, self.cache_manager, self.num_layers)
 
-        cos, sin = self.rotary_emb(attention_data.position_ids)
-        attention_data.cos, attention_data.sin = cos, sin
-
+        # cos, sin = self.rotary_emb(attention_data.position_ids)
+        # attention_data.cos, attention_data.sin = mx.expand_dims(cos, axis=1), mx.expand_dims(sin, axis=1)
         mask = attention_data.attn_mask
         mask = mask if mask is None else mask.astype(hidden_states.dtype)
         output = self.model(hidden_states, mask=mask, cache=attention_data)
@@ -69,12 +74,11 @@ class MLXLlamaModel(nn.Module):
         return output
 
     @classmethod
-    def from_pretrained(cls, config: AutoConfig, state_dict: Dict[str, mx.array], is_merge: bool = True, **kwargs):
-        if getattr(config, "quantization", None) is not None or state_dict is not None:
-            is_merge = False
+    def from_pretrained(cls, config: AutoConfig, state_dict: Dict[str, mx.array], **kwargs):
+        is_merge = True
 
         model = cls(config, is_merge)
-        state_dict = model.merge_weights(state_dict, is_merge)
+        state_dict = model.merge_weights(state_dict, is_merge, getattr(config, "quantization", False))
 
         model = quantization_func(config, model, state_dict)
         model.load_weights(list(state_dict.items()), strict=False)
@@ -82,9 +86,15 @@ class MLXLlamaModel(nn.Module):
         model.eval()
         return model
 
-    def merge_weights(self, state_dict: Dict[str, mx.array], is_merge: bool = True) -> Dict[str, mx.array]:
+    def merge_weights(
+        self, state_dict: Dict[str, mx.array], is_merge: bool = True, is_quantization: bool = False
+    ) -> Dict[str, mx.array]:
         if not is_merge:
             return state_dict
+        if is_quantization:
+            state_dict = default_merge_attn_quantization(state_dict)
+            state_dict = default_merge_mlp_quantization(state_dict)
+
         state_dict = default_merge_attn_weight(state_dict)
         state_dict = default_merge_mlp_weight(state_dict)
         return state_dict

@@ -10,7 +10,13 @@ from tllm.commons.cache import CacheManager
 from tllm.models.mlx.helper import build_forward_cache, get_last_hidden_states, quantization_func
 from tllm.models.mlx.layers import Decoder
 from tllm.models.utils import read_eos_token_ids
-from tllm.models.weight_helper import default_merge_attn_bias, default_merge_attn_weight, default_merge_mlp_weight
+from tllm.models.weight_helper import (
+    default_merge_attn_bias,
+    default_merge_attn_quantization,
+    default_merge_attn_weight,
+    default_merge_mlp_quantization,
+    default_merge_mlp_weight,
+)
 from tllm.schemas import SeqInput
 
 
@@ -46,10 +52,9 @@ class MLXQwen2Model(nn.Module):
     @classmethod
     def from_pretrained(cls, config: AutoConfig, state_dict: Dict[str, mx.array], **kwargs):
         is_merge = True
-        if getattr(config, "quantization", None) is not None or state_dict is not None:
-            is_merge = False
+
         model = cls(config, is_merge)
-        state_dict = model.merge_weights(state_dict, is_merge)
+        state_dict = model.merge_weights(state_dict, is_merge, getattr(config, "quantization", False))
 
         model = quantization_func(config, model, state_dict)
         model.load_weights(list(state_dict.items()))  # strict=False
@@ -58,9 +63,14 @@ class MLXQwen2Model(nn.Module):
         model.eval()
         return model
 
-    def merge_weights(self, state_dict: Dict[str, mx.array], is_merge: bool = True) -> Dict[str, mx.array]:
+    def merge_weights(
+        self, state_dict: Dict[str, mx.array], is_merge: bool = True, is_quantization: bool = False
+    ) -> Dict[str, mx.array]:
         if not is_merge:
             return state_dict
+        if is_quantization:
+            state_dict = default_merge_attn_quantization(state_dict)
+            state_dict = default_merge_mlp_quantization(state_dict)
 
         state_dict = default_merge_attn_weight(state_dict)
         state_dict = default_merge_attn_bias(state_dict)

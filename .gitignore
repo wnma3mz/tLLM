@@ -11,3 +11,4 @@ weights/
 *.pt
 build/
 *.egg-info/
+*.bak
