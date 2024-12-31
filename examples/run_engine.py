@@ -77,8 +77,9 @@ async def llm_generate(args, messages):
     messages = [{"role": "user", "content": "Hello, how are you?"}]
     openai_serving_chat = OpenAIServing(engine, args)
 
-    request = ChatCompletionRequest(model="test", messages=messages, max_tokens=100)
-    response = await openai_serving_chat.create_chat_completion(request, None)
+    for _ in range(3):
+        request = ChatCompletionRequest(model="test", messages=messages, max_tokens=100)
+        response = await openai_serving_chat.create_chat_completion(request, None)
     print(response)
 
 

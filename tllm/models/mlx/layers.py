@@ -87,9 +87,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-from my_ext import apply_rotary_pos_emb as apply_rotary_pos_emb_new
-
-
 class MergedAttention(nn.Module):
     def __init__(self, args, layer_idx: int, offset: int):
         super().__init__()
