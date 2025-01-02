@@ -29,8 +29,8 @@ from tllm.network.manager import LocalRPCManager
 @dataclass
 class Args:
     # model_path: str = "/Users/lujianghu/Documents/Llama-3.2-1B-Instruct"
-    model_path: str = "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit"
-    # model_path: str = "mlx-community/Llama-3.2-1B-Instruct-4bit"
+    # model_path: str = "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit"
+    model_path: str = "mlx-community/Llama-3.2-1B-Instruct-4bit"
     # model_path: str = "/Users/lujianghu/Documents/flux/schnell_4bit"
     # model_path: str = "Qwen/Qwen2.5-0.5B-Instruct"
     # model_path: str = "Qwen/Qwen2-VL-2B-Instruct"

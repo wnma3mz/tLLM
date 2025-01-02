@@ -5,7 +5,6 @@ import mlx.core as mx
 import mlx.nn as nn
 from mlx_lm.models.llama import MLP, Attention, ModelArgs, TransformerBlock, initialize_rope
 
-from tllm import DTYPE
 from tllm.commons.cache import AttentionData, RequestsCache, cat_func
 
 
@@ -77,14 +76,48 @@ def rotate_half(x):
     return mx.concatenate((-x2, x1), axis=-1)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    # Expand dimensions
-    cos = mx.expand_dims(cos, axis=unsqueeze_dim)
-    sin = mx.expand_dims(sin, axis=unsqueeze_dim)
-
+def apply_rotary_pos_emb(q, k, cos, sin):
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
+
+
+@mx.compile
+def sdap(q, k, v, scale, mask):
+    """
+    处理3维输入的scaled dot-product attention
+
+    Args:
+        q: [L, H, D] - sequence length, heads, head dimension
+        k: [S, H_kv, D] - S is source length, H_kv is number of key/value heads
+        v: Same shape as k
+        scale: Scaling factor
+        mask: Attention mask
+    """
+    q, k, v = q.transpose(1, 0, 2), k.transpose(1, 0, 2), v.transpose(1, 0, 2)
+    q = mx.multiply(scale, q)
+    n_q_heads = q.shape[0]  # 查询头数
+    n_kv_heads = k.shape[0]  # key/value头数
+
+    if n_q_heads > n_kv_heads:  # grouped query attention
+        n_repeats = n_q_heads // n_kv_heads
+        L, _, D = q.shape
+        q = mx.reshape(q, (n_kv_heads, n_repeats, q.shape[1], q.shape[2]))
+
+        # k和v保持[S, H_kv, D]格式，在计算时添加一个维度
+        scores = mx.matmul(q, mx.swapaxes(k[:, None], -1, -2))
+        scores = scores + mask
+        scores = mx.softmax(scores, axis=-1)
+        out = mx.matmul(scores, v[:, None])
+        # 展平结果为[L, H, D]
+        out = mx.flatten(out, 0, 1)
+
+    else:  # 标准注意力计算
+        scores = mx.matmul(q, mx.swapaxes(k, -1, -2))
+        scores = scores + mask
+        scores = mx.softmax(scores, axis=-1)
+        out = mx.matmul(scores, v)
+    return out.transpose(1, 0, 2)
 
 
 class MergedAttention(nn.Module):
@@ -142,21 +175,16 @@ class MergedAttention(nn.Module):
         # must has cache, and split by uuid
         request_cache: RequestsCache = cache.request_cache
 
-        # queries, keys = apply_rotary_pos_emb(queries, keys, cache.cos, cache.sin)
+        # queries = apply_rotary_pos_emb_v2(queries, cache.cos, cache.sin)
+        # keys = apply_rotary_pos_emb_v2(keys, cache.cos, cache.sin)
         queries = self._rope(queries, request_cache, cache.uuid_list)
         keys = self._rope(keys, request_cache, cache.uuid_list)
         keys, values = request_cache.update(
             keys, values, cache.uuid_list, self.layer_idx - self.offset, self._k_cache, self._v_cache
         )
 
-        output = mx.fast.scaled_dot_product_attention(
-            mx.expand_dims(queries.transpose(1, 0, 2), axis=0),
-            mx.expand_dims(keys.transpose(1, 0, 2), axis=0),
-            mx.expand_dims(values.transpose(1, 0, 2), axis=0),
-            scale=self.scale,
-            mask=mask,
-        )[0]
-        output = output.transpose(1, 0, 2).reshape(L, -1)
+        output = sdap(queries, keys, values, scale=self.scale, mask=mask)
+        output = output.reshape(L, -1)
 
         return self.o_proj(output)
 
