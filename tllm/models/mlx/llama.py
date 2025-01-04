@@ -10,12 +10,7 @@ from tllm.commons.cache import CacheManager
 from tllm.models.mlx.helper import build_forward_cache, get_last_hidden_states, quantization_func
 from tllm.models.mlx.layers import Decoder
 from tllm.models.utils import read_eos_token_ids
-from tllm.models.weight_helper import (
-    default_merge_attn_quantization,
-    default_merge_attn_weight,
-    default_merge_mlp_quantization,
-    default_merge_mlp_weight,
-)
+from tllm.models.weight_helper import default_merge_attn, default_merge_mlp, tensor_parallel_state_dict
 from tllm.schemas import SeqInput
 
 
@@ -40,6 +35,11 @@ class MLXLlamaModel(nn.Module):
     def __init__(self, config: AutoConfig, is_merge: bool = True):
         super().__init__()
         args = ModelArgs.from_dict(config.to_dict())
+
+        args.comm = config.comm
+        self.world_size = config.comm.world_size
+        self.rank = config.comm.rank
+
         self.vocab_size = args.vocab_size
         self.cache_manager = CacheManager()
         self.config = config
@@ -78,7 +78,7 @@ class MLXLlamaModel(nn.Module):
         is_merge = True
 
         model = cls(config, is_merge)
-        state_dict = model.merge_weights(state_dict, is_merge, getattr(config, "quantization", False))
+        state_dict = model.merge_weights(state_dict, is_merge)
 
         model = quantization_func(config, model, state_dict)
         model.load_weights(list(state_dict.items()), strict=False)
@@ -86,17 +86,24 @@ class MLXLlamaModel(nn.Module):
         model.eval()
         return model
 
-    def merge_weights(
-        self, state_dict: Dict[str, mx.array], is_merge: bool = True, is_quantization: bool = False
-    ) -> Dict[str, mx.array]:
+    def merge_weights(self, state_dict: Dict[str, mx.array], is_merge: bool = True) -> Dict[str, mx.array]:
         if not is_merge:
             return state_dict
-        if is_quantization:
-            state_dict = default_merge_attn_quantization(state_dict)
-            state_dict = default_merge_mlp_quantization(state_dict)
 
-        state_dict = default_merge_attn_weight(state_dict)
-        state_dict = default_merge_mlp_weight(state_dict)
+        layer_name_mapper = {
+            "self_attn.o_proj": "self_attn.o_proj.layer",
+            "mlp.down_proj": "mlp.down_proj.layer",
+        }
+        key_list = list(state_dict.keys())
+        for key in key_list:
+            for s_key, t_key in layer_name_mapper.items():
+                if s_key in key:
+                    state_dict[key.replace(s_key, t_key)] = state_dict.pop(key)
+
+        # tensor parallel
+        state_dict = tensor_parallel_state_dict(state_dict, self.world_size, self.rank)
+        state_dict = default_merge_attn(state_dict)
+        state_dict = default_merge_mlp(state_dict)
         return state_dict
 
 

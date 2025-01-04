@@ -1,5 +1,5 @@
 import itertools
-from typing import List, Optional
+from typing import List
 
 import mlx.core as mx
 import mlx.nn as nn
@@ -28,7 +28,7 @@ class MergeParallelLayer(BaseParallelLayer):
 
     def __call__(self, x: mx.array) -> List[mx.array]:
         node_output = self.layer(x)
-        return mx.split(node_output, self.ind, axis=-1)
+        return (node_output[:, : self.ind[0]], node_output[:, self.ind[0] :])
 
 
 class QKVParallelLayer(BaseParallelLayer):
@@ -56,13 +56,6 @@ class RowParallelLayer(BaseParallelLayer):
         self.row_size, self.col_size = row_size, col_size
         self.layer = nn.Linear(row_size // self.world_size, col_size, bias=bias)
         self.ind = [i * row_size // self.world_size for i in range(1, self.world_size)]
-
-    def load_weight(self, w: Optional[mx.array] = None):
-        if self.world_size > 1:
-            w_list = w.split(self.ind, axis=1)
-            w = w_list[self.rank]
-        state_dict = {"layer.weight": w}
-        self.load_weights(list(state_dict.items()))
 
     def __call__(self, x: mx.array) -> mx.array:
         return self.layer(x)
@@ -134,10 +127,18 @@ class MergedAttention(nn.Module):
         attention_bias = getattr(args, "attention_bias", False)
         o_proj_bias = getattr(args, "o_proj_bias", False)
 
+        self.comm = args.comm
+        self.rank = self.comm.rank
+        self.world_size = self.comm.world_size
+
         self.qkv_proj = QKVParallelLayer(
-            dim, [n_heads * head_dim, n_kv_heads * head_dim, n_kv_heads * head_dim], 1, 0, bias=attention_bias
+            dim,
+            [n_heads * head_dim, n_kv_heads * head_dim, n_kv_heads * head_dim],
+            self.world_size,
+            self.rank,
+            bias=attention_bias,
         )
-        self.o_proj = nn.Linear(n_heads * head_dim, dim, bias=o_proj_bias)
+        self.o_proj = RowParallelLayer(n_heads * head_dim, dim, self.world_size, self.rank, bias=o_proj_bias)
 
         self.layer_idx = layer_idx
         self.offset = offset
@@ -166,11 +167,10 @@ class MergedAttention(nn.Module):
     ) -> mx.array:
         L, _ = x.shape
         queries, keys, values = self.qkv_proj(x)
-
         # Prepare the queries, keys and values for the attention computation
-        queries = queries.reshape(L, self.n_heads, -1)
-        keys = keys.reshape(L, self.n_kv_heads, -1)
-        values = values.reshape(L, self.n_kv_heads, -1)
+        queries = queries.reshape(L, -1, self.head_dim)
+        keys = keys.reshape(L, -1, self.head_dim)
+        values = values.reshape(L, -1, self.head_dim)
 
         # must has cache, and split by uuid
         request_cache: RequestsCache = cache.request_cache
@@ -186,7 +186,9 @@ class MergedAttention(nn.Module):
         output = sdap(queries, keys, values, scale=self.scale, mask=mask)
         output = output.reshape(L, -1)
 
-        return self.o_proj(output)
+        attn_output = self.o_proj(output)
+        attn_output = self.comm.all_reduce(attn_output)
+        return attn_output
 
 
 class PlainAttention(Attention):
@@ -247,12 +249,16 @@ class MergedMLP(nn.Module):
         hidden_dim = args.intermediate_size
         mlp_bias = getattr(args, "mlp_bias", False)
 
-        self.down_proj = nn.Linear(hidden_dim, dim, bias=mlp_bias)
-        self.gate_up_proj = MergeParallelLayer(dim, hidden_dim, 2, 1, 0, bias=mlp_bias)
+        self.comm = args.comm
+        self.rank = self.comm.rank
+        self.world_size = self.comm.world_size
+
+        self.down_proj = RowParallelLayer(hidden_dim, dim, self.world_size, self.rank, bias=mlp_bias)
+        self.gate_up_proj = MergeParallelLayer(dim, hidden_dim, 2, self.world_size, self.rank, bias=mlp_bias)
 
     def __call__(self, x) -> mx.array:
         gate_out, up_out = self.gate_up_proj(x)
-        return self.down_proj(nn.silu(gate_out) * up_out)
+        return self.comm.all_reduce(self.down_proj(nn.silu(gate_out) * up_out))
 
 
 class MLXTransformerBlock(TransformerBlock):

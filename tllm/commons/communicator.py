@@ -1,3 +1,4 @@
+import os
 from typing import Any, List
 
 from tllm import BACKEND, BackendEnum
@@ -10,10 +11,11 @@ class BaseCommunicator:
         self.world_size = 1
 
     def is_rank0(self) -> bool:
-        return True
+        return self.rank == 0
 
     def print_rank0(self, *args):
-        print(*args)
+        if self.is_rank0():
+            print(*args)
 
     def all_reduce(self, x: MIX_TENSOR) -> MIX_TENSOR:
         return x
@@ -31,11 +33,39 @@ class BaseCommunicator:
         return x
 
 
-if BACKEND != BackendEnum.TORCH:
-    Communicator = BaseCommunicator
-else:
-    import os
+if BACKEND == BackendEnum.MLX:
+    import mlx.core as mx
 
+    class MLXCommunicator(BaseCommunicator):
+        def __init__(self) -> None:
+            world = mx.distributed.init()
+            self.world_size = world.size()
+            self.rank = world.rank()
+            print(f"MLXCommunicator: rank={self.rank}, world_size={self.world_size}")
+
+        def all_reduce(self, x: mx.array) -> mx.array:
+            # input shape == output shape
+            return mx.distributed.all_sum(x)
+
+        def all_gather(self, x: mx.array):
+            raise NotImplementedError
+
+        def gather(self, x: mx.array):
+            raise NotImplementedError
+
+        def broadcast(self, x: mx.array):
+            raise NotImplementedError
+
+        def broadcast_object(self, obj_list: List[Any]):
+            raise NotImplementedError
+
+    # Feature: MLXCommunicator
+    if "WORLD_SIZE" in os.environ and int(os.environ["WORLD_SIZE"]) > 1:
+        print("Using MLXCommunicator")
+        Communicator = MLXCommunicator
+    else:
+        Communicator = BaseCommunicator
+elif BACKEND == BackendEnum.TORCH:
     import torch
     import torch.distributed as dist
 
@@ -48,13 +78,6 @@ else:
 
             self.world_size = dist.get_world_size()
             self.rank = dist.get_rank()
-
-        def is_rank0(self) -> bool:
-            return dist.get_rank() == 0
-
-        def print_rank0(self, *args):
-            if self.is_rank0():
-                print(*args)
 
         def all_reduce(self, x: torch.Tensor) -> torch.Tensor:
             # input shape == output shape
@@ -87,3 +110,5 @@ else:
         Communicator = TorchCommunicator  # is_torchrun=True
     else:
         Communicator = BaseCommunicator
+else:
+    raise ImportError("No backend found")

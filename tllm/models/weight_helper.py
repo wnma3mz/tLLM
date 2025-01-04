@@ -67,47 +67,55 @@ def merge_weight_func(
     return weights
 
 
-def default_merge_attn_bias(weights: Dict[str, MIX_TENSOR]) -> Dict[str, MIX_TENSOR]:
-    attn_pattern = re.compile(r"model\.layers\.(\d+)\.self_attn.*.bias")
+def default_merge_attn(weights: Dict[str, MIX_TENSOR]) -> Dict[str, MIX_TENSOR]:
     attn_list = ["q_proj", "k_proj", "v_proj"]
-    attn_name = "model.layers.{layer_idx}.self_attn.qkv_proj.layer.bias"
-    return merge_weight_func(attn_pattern, attn_list, attn_name, weights)
+    for suffix in ["weight", "biases", "scales", "bias"]:
+        attn_pattern = re.compile(r"model\.layers\.(\d+)\.self_attn.*\." + suffix + r"$")
+        attn_name = "model.layers.{layer_idx}.self_attn.qkv_proj.layer." + suffix
+        weights = merge_weight_func(attn_pattern, attn_list, attn_name, weights)
+    return weights
 
 
-def default_merge_mlp_weight(weights: Dict[str, MIX_TENSOR]) -> Dict[str, MIX_TENSOR]:
-    mlp_pattern = re.compile(r"model\.layers\.(\d+)\.mlp.*.weight")
+def default_merge_mlp(weights: Dict[str, MIX_TENSOR]) -> Dict[str, MIX_TENSOR]:
     mlp_list = ["gate_proj", "up_proj"]
-    mlp_name = "model.layers.{layer_idx}.mlp.gate_up_proj.layer.weight"
-    return merge_weight_func(mlp_pattern, mlp_list, mlp_name, weights)
+    for suffix in ["weight", "biases", "scales", "bias"]:
+        mlp_pattern = re.compile(r"model\.layers\.(\d+)\.mlp.*." + suffix + r"$")
+        mlp_name = "model.layers.{layer_idx}.mlp.gate_up_proj.layer." + suffix
+        weights = merge_weight_func(mlp_pattern, mlp_list, mlp_name, weights)
+    return weights
 
 
-def default_merge_attn_weight(weights: Dict[str, MIX_TENSOR]) -> Dict[str, MIX_TENSOR]:
-    attn_pattern = re.compile(r"model\.layers\.(\d+)\.self_attn.*.weight")
+def split_tensor_by_rank(tensor, world_size, rank, axis):
+    """Split tensor along specified axis based on world size and return rank's portion."""
+    indices = [i * tensor.shape[axis] // world_size for i in range(1, world_size)]
+    return mx.split(tensor, indices, axis=axis)[rank]
+
+
+def tensor_parallel_state_dict(state_dict, world_size, rank):
+    """Process state dictionary by splitting specific layers across ranks."""
     attn_list = ["q_proj", "k_proj", "v_proj"]
-    attn_name = "model.layers.{layer_idx}.self_attn.qkv_proj.layer.weight"
-    return merge_weight_func(attn_pattern, attn_list, attn_name, weights)
-
-
-def default_merge_mlp_quantization(weights: Dict[str, MIX_TENSOR]) -> Dict[str, MIX_TENSOR]:
     mlp_list = ["gate_proj", "up_proj"]
-    mlp_pattern = re.compile(r"model\.layers\.(\d+)\.mlp.*.biases")
-    mlp_name = "model.layers.{layer_idx}.mlp.gate_up_proj.layer.biases"
-    weights = merge_weight_func(mlp_pattern, mlp_list, mlp_name, weights)
 
-    mlp_pattern = re.compile(r"model\.layers\.(\d+)\.mlp.*.scales")
-    mlp_name = "model.layers.{layer_idx}.mlp.gate_up_proj.layer.scales"
-    return merge_weight_func(mlp_pattern, mlp_list, mlp_name, weights)
+    suffix_list = ["weight", "biases", "scales", "bias"]
 
+    axis_0_list = [f"self_attn.{layer_name}.{suffix}" for layer_name in attn_list for suffix in suffix_list]
+    axis_0_list += [f"mlp.{layer_name}.{suffix}" for layer_name in mlp_list for suffix in suffix_list]
 
-def default_merge_attn_quantization(weights: Dict[str, MIX_TENSOR]) -> Dict[str, MIX_TENSOR]:
-    attn_list = ["q_proj", "k_proj", "v_proj"]
-    attn_pattern = re.compile(r"model\.layers\.(\d+)\.self_attn.*.biases")
-    attn_name = "model.layers.{layer_idx}.self_attn.qkv_proj.layer.biases"
-    weights = merge_weight_func(attn_pattern, attn_list, attn_name, weights)
+    axis_1_list = [f"self_attn.o_proj.layer.{suffix}" for suffix in suffix_list]
+    axis_1_list += [f"mlp.down_proj.layer.{suffix}" for suffix in suffix_list]
 
-    attn_pattern = re.compile(r"model\.layers\.(\d+)\.self_attn.*.scales")
-    attn_name = "model.layers.{layer_idx}.self_attn.qkv_proj.layer.scales"
-    return merge_weight_func(attn_pattern, attn_list, attn_name, weights)
+    split_patterns = {"axis_0": axis_0_list, "axis_1": axis_1_list}
+
+    processed_dict = state_dict.copy()
+
+    for key in list(state_dict.keys()):
+        if any(pattern in key for pattern in split_patterns["axis_0"]):
+            processed_dict[key] = split_tensor_by_rank(state_dict[key], world_size, rank, axis=0)
+
+        elif any(pattern in key for pattern in split_patterns["axis_1"]):
+            processed_dict[key] = split_tensor_by_rank(state_dict[key], world_size, rank, axis=1)
+
+    return processed_dict
 
 
 def tie_embedding_weights(state_dict: Dict[str, MIX_TENSOR]) -> Dict[str, MIX_TENSOR]:

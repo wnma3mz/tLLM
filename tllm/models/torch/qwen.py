@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional
 
 import numpy as np
 import torch
@@ -11,7 +11,7 @@ from tllm.commons.cache import CacheManager
 from tllm.models.torch.helper import build_forward_cache, get_last_hidden_states
 from tllm.models.torch.llama import Decoder
 from tllm.models.utils import read_eos_token_ids
-from tllm.models.weight_helper import default_merge_attn_bias, default_merge_attn_weight, default_merge_mlp_weight
+from tllm.models.weight_helper import default_merge_attn, default_merge_mlp
 from tllm.schemas import SeqInput
 
 _, attention_type = get_attention_implementation()
@@ -68,7 +68,8 @@ class HFQwen2Model(nn.Module):
         return model
 
     def merge_weights(self, state_dict: Dict[str, torch.Tensor], is_merge: bool) -> Dict[str, torch.Tensor]:
-        # TODO: support bias and TP
+        if not is_merge:
+            return state_dict
         layer_name_mapper = {
             "self_attn.o_proj": "self_attn.o_proj.layer",
             "mlp.down_proj": "mlp.down_proj.layer",
@@ -80,13 +81,8 @@ class HFQwen2Model(nn.Module):
                     # w_list = w.chunk(self.world_size, dim=1)[self.rank]
                     state_dict[key.replace(s_key, t_key)] = state_dict.pop(key)
 
-        if not is_merge:
-            return state_dict
-        # torch.chunk(state_dict[qkv], self.world_size, dim=0)
-        state_dict = default_merge_attn_weight(state_dict)
-        # torch.chunk(state_dict[mlp], self.world_size, dim=0)
-        state_dict = default_merge_mlp_weight(state_dict)
-        state_dict = default_merge_attn_bias(state_dict)
+        state_dict = default_merge_attn(state_dict)
+        state_dict = default_merge_mlp(state_dict)
         return state_dict
 
     @torch.inference_mode()
