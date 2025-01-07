@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import os
 import time
 from typing import Union
@@ -7,14 +8,14 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket,
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 
-from tllm import CLIENT_SOCKET_PATH
+from tllm import CLIENT_SOCKET_PATH, MASTER_SOCKET_PATH
 from tllm.commons.manager import load_master_model
 from tllm.engine import AsyncEngine
 from tllm.entrypoints.image_server.image_protocol import Text2ImageRequest, Text2ImageResponse
 from tllm.entrypoints.image_server.server_image import ImageServing
 from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionResponse
 from tllm.entrypoints.server_chat import OpenAIServing
-from tllm.entrypoints.utils import parse_master_args, serve_http, update_master_args
+from tllm.entrypoints.utils import GRPCProcess, parse_master_args, serve_http, update_master_args
 from tllm.generate import ImageGenerator, LLMGenerator
 from tllm.network.manager import RPCManager, WebsocketManager
 from tllm.schemas import InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
@@ -198,28 +199,43 @@ async def init_engine(args):
 
     ws_manager = WebsocketManager(total_layers, args.model_path, client_size=args.client_size)
     rpc_manager, master_handler = init_rpc_manager(ws_manager.client_size)
-    logger.info(f"Engine init Cost Time: {time.time() - s1:.4f}s. Total Layers: {total_layers}")
+    logger.info(f"Engine Init Cost Time: {time.time() - s1:.4f}s. Total Layers: {total_layers}")
     if args.is_image:
         generator = ImageGenerator(rpc_manager, model)
     else:
         generator = LLMGenerator(rpc_manager, model)
     engine = AsyncEngine(generator)
 
-    if master_handler is not None:
-        await master_handler.start(args.grpc_port)
+    await master_handler.start(args.grpc_port)
     await engine.start()
-    return engine
+    return engine, master_handler
 
 
 async def run_server(args) -> None:
     SingletonLogger.set_level("DEBUG" if args.is_debug else "INFO")
     args = update_master_args(args)
 
-    engine = await init_engine(args)
+    engine, master_handler = await init_engine(args)
     app = await init_app(engine, args)
 
     uvicorn_kwargs = {"host": ["::", "0.0.0.0"], "port": args.http_port, "timeout_graceful_shutdown": 5}
-    shutdown_task = await serve_http(app, args, **uvicorn_kwargs)
+
+    if args.is_local:
+        if os.path.isfile(MASTER_SOCKET_PATH):
+            os.remove(MASTER_SOCKET_PATH)
+        if os.path.isfile(CLIENT_SOCKET_PATH):
+            os.remove(CLIENT_SOCKET_PATH)
+
+        args_handler = copy.deepcopy(args)
+        args_handler.hostname = "localhost"
+        args_handler.grpc_port = None
+        args_handler.master_addr = f"http://{args_handler.hostname}:{args_handler.http_port}"
+        args.hostname = f"unix://{MASTER_SOCKET_PATH}"
+    else:
+        args_handler = None
+
+    grpc_process = GRPCProcess(args_handler)
+    shutdown_task = await serve_http(app, grpc_process, engine, master_handler, **uvicorn_kwargs)
 
     await shutdown_task
 

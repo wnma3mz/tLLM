@@ -88,7 +88,7 @@ class MasterHandler(schemas_pb2_grpc.RPCServiceServicer):
             try:
                 await self.server.stop(grace=5)
                 await self.server.wait_for_termination()
-            except Exception as e:
+            except (Exception, asyncio.CancelledError) as e:
                 print("master handler error", str(e))
 
     async def Forward(

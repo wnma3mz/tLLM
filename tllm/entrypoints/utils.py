@@ -1,15 +1,14 @@
 import argparse
 import asyncio
-import copy
 import json
-import os
+from multiprocessing import Process
 import signal
-from typing import Dict
+import sys
+from typing import Dict, Optional
 
 from fastapi import FastAPI
 import uvicorn
 
-from tllm import CLIENT_SOCKET_PATH, MASTER_SOCKET_PATH
 from tllm.network.helper import get_free_port, get_ips
 from tllm.singleton_logger import SingletonLogger
 
@@ -117,7 +116,43 @@ def update_handler_args(args):
     return args, ip_addr_list
 
 
-async def serve_http(app: FastAPI, args, **uvicorn_kwargs: Dict):
+class GRPCProcess:
+    def __init__(self, args_handler):
+        self.args_handler = args_handler
+        self.process: Optional[Process] = None
+        self.logger = SingletonLogger.setup_master_logger()
+
+    def run_server(self):
+        """在新进程中运行的 gRPC 服务器"""
+        from tllm.entrypoints.handler.handler import run
+
+        try:
+            asyncio.run(run(self.args_handler))
+        except Exception as e:
+            print(f"Error in gRPC process: {e}")
+            sys.exit(1)
+
+    def start(self):
+        """启动 gRPC 服务器进程"""
+        if self.args_handler is None:
+            return
+        self.process = Process(target=self.run_server)
+        self.process.start()
+        self.logger.info(f"Started gRPC process (PID: {self.process.pid})")
+
+    def shutdown(self):
+        """关闭 gRPC 服务器进程"""
+        if self.process and self.process.is_alive():
+            self.process.join(timeout=10)
+            if self.process.is_alive():
+                self.process.terminate()
+                self.process.join(timeout=5)
+                if self.process.is_alive():
+                    self.process.kill()
+            self.logger.info("gRPC process stopped")
+
+
+async def serve_http(app: FastAPI, grpc_process, engine, master_handler, **uvicorn_kwargs: Dict):
     logger = SingletonLogger.setup_master_logger()
 
     config = uvicorn.Config(app, **uvicorn_kwargs)
@@ -127,42 +162,23 @@ async def serve_http(app: FastAPI, args, **uvicorn_kwargs: Dict):
     loop = asyncio.get_event_loop()
     server_task = loop.create_task(server.serve())
 
-    if args.is_local:
-        from tllm.entrypoints.handler.handler import run
-
-        if os.path.isfile(MASTER_SOCKET_PATH):
-            os.remove(MASTER_SOCKET_PATH)
-        if os.path.isfile(CLIENT_SOCKET_PATH):
-            os.remove(CLIENT_SOCKET_PATH)
-
-        args_handler = copy.deepcopy(args)
-        args_handler.hostname = "localhost"
-        args_handler.grpc_port = None
-        args_handler.master_addr = f"http://{args_handler.hostname}:{args_handler.http_port}"
-        args.hostname = f"unix://{MASTER_SOCKET_PATH}"
-        await run(args_handler)
+    try:
+        grpc_process.start()
+    except Exception as e:
+        logger.error(f"Failed to start gRPC process: {e}")
+        raise e
 
     # Setup graceful shutdown handlers
     async def shutdown_handler():
         server.should_exit = True
 
         try:
+            grpc_process.shutdown()
+            await master_handler.stop()
+            await engine.stop()
             await server.shutdown()
         except Exception as e:
             logger.error(f"Error stopping server: {e}")
-
-        # if master_handler:
-        #     try:
-        #         await master_handler.stop()
-        #     except Exception as e:
-        #         logger.error(f"Error stopping master handler: {e}")
-
-        # try:
-        #     await engine.stop()
-        # except Exception as e:
-        #     logger.error(f"Error stopping engine: {e}")
-        # finally:
-        #     loop.stop()
 
         logger.info("Shutdown sequence completed")
 

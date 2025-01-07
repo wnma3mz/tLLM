@@ -14,7 +14,7 @@
    2.1 (no communication)
 
    ```bash
-   tllm.server --model_path mlx-community/Llama-3.2-1B-Instruct-4bit --is_local
+   tllm.server --model_path mlx-community/Llama-3.2-1B-Instruct-4bit --hostname localhost --is_local
    ```
 
    2.2 (with communication)

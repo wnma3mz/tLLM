@@ -59,7 +59,7 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
 
         try:
             await self.server.wait_for_termination()
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, asyncio.CancelledError):
             self.http_client.is_running = False
             connection_task.cancel()
             ping_task.cancel()
@@ -71,10 +71,10 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
 
     async def stop(self):
         self.http_client.is_running = False
-        if self.server:
+        if self.server is not None:
             try:
                 await self.server.stop(grace=5)
-            except Exception as e:
+            except (Exception, asyncio.CancelledError):
                 pass
 
     async def forward_func(self, request: schemas_pb2.ForwardRequest):
@@ -174,12 +174,12 @@ async def run(args):
     logger = SingletonLogger.setup_handler_logger(f"handler-{args.grpc_port}")
 
     rpc_servicer = RPCHandler(comm, logger, args.master_addr)
+    # if comm.rank == 0:
     try:
-        if comm.rank == 0:
-            await rpc_servicer.start(ip_addr_list, args.grpc_port)
+        await rpc_servicer.start(ip_addr_list, args.grpc_port)
     except Exception as e:
-        await rpc_servicer.stop()
         logger.error(f"Error occurred: {str(e)}")
+        await rpc_servicer.stop()
         raise
     finally:
         await rpc_servicer.stop()

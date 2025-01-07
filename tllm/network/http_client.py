@@ -55,9 +55,7 @@ class HTTPClient:
                 return InitModelResponse(**await response.json())
 
     async def maintain_connection(self, client_id: str, ip_addr_list: List[str], port: int):
-        """
-        维护连接的协程，定期发送ping请求
-        """
+        """维护连接的协程，定期发送ping请求"""
         while self.is_running:
             is_connected = await self.ping()
 
