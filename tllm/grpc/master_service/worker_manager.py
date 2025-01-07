@@ -7,8 +7,8 @@ import grpc
 
 from tllm import GRPC_OPTIONS, PP_TIMEOUT
 from tllm.commons.convert import Convertor
-from tllm.entrypoints.handler.master_handler import PendingRequests
-from tllm.rpc import schemas_pb2, schemas_pb2_grpc
+from tllm.grpc.master_service.pending_requests import PendingRequests
+from tllm.grpc.proto import schemas_pb2, schemas_pb2_grpc
 from tllm.schemas import MIX_TENSOR, SeqInput
 
 
@@ -45,7 +45,7 @@ async def rpc_health_check(stub):
     await stub.Health(schemas_pb2.Empty())
 
 
-class RPCManager:
+class WorkerRPCManager:
     def __init__(self, client_size: int, pending_requests: PendingRequests):
         self.pending_requests = pending_requests
         self.grpc_options = GRPC_OPTIONS

@@ -62,7 +62,7 @@ setup(
     entry_points={
         "console_scripts": [
             "tllm.server=tllm.entrypoints.api_server:main",
-            "tllm.client=tllm.entrypoints.handler.handler:main",
+            "tllm.client=tllm.grpc.worker_service.worker_server:main",
         ],
     },
 )

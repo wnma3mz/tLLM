@@ -124,7 +124,7 @@ class GRPCProcess:
 
     def run_server(self):
         """在新进程中运行的 gRPC 服务器"""
-        from tllm.entrypoints.handler.handler import run
+        from tllm.grpc.worker_service.worker_server import run
 
         try:
             asyncio.run(run(self.args_handler))
@@ -152,7 +152,7 @@ class GRPCProcess:
             self.logger.info("gRPC process stopped")
 
 
-async def serve_http(app: FastAPI, grpc_process, engine, master_handler, **uvicorn_kwargs: Dict):
+async def serve_http(app: FastAPI, grpc_process, engine, master_server, **uvicorn_kwargs: Dict):
     logger = SingletonLogger.setup_master_logger()
 
     config = uvicorn.Config(app, **uvicorn_kwargs)
@@ -174,7 +174,7 @@ async def serve_http(app: FastAPI, grpc_process, engine, master_handler, **uvico
 
         try:
             grpc_process.shutdown()
-            await master_handler.stop()
+            await master_server.stop()
             await engine.stop()
             await server.shutdown()
         except Exception as e:

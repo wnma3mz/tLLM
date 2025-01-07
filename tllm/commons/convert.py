@@ -4,8 +4,7 @@ import lz4.frame
 import numpy as np
 
 from tllm import BACKEND, CONVERT_DTYPE, DES_DTYPE, DTYPE, BackendEnum
-from tllm.rpc import schemas_pb2, schemas_pb2_grpc
-from tllm.rpc.schemas_pb2 import BFloat16Tensor
+from tllm.grpc.proto import schemas_pb2, schemas_pb2_grpc
 from tllm.schemas import MIX_TENSOR
 
 if BACKEND == BackendEnum.MLX:
@@ -111,9 +110,9 @@ class Convertor:
         self.des_dtype = des_dtype
         self.dtype = dtype
 
-    def serialize(self, tensor: MIX_TENSOR) -> BFloat16Tensor:
+    def serialize(self, tensor: MIX_TENSOR) -> schemas_pb2.BFloat16Tensor:
         # TODO: support bfloat16
-        tensor_proto = BFloat16Tensor()
+        tensor_proto = schemas_pb2.BFloat16Tensor()
         # seq_len x hidden_size
         tensor_proto.shape.extend(tensor.shape)
         tensor_bytes = self.serialize_func(tensor, self.ser_dtype)
@@ -121,7 +120,7 @@ class Convertor:
         tensor_proto.data = lz4.frame.compress(tensor_bytes) if flag else tensor_bytes
         return tensor_proto
 
-    def deserialize(self, tensor_proto: BFloat16Tensor) -> MIX_TENSOR:
+    def deserialize(self, tensor_proto: schemas_pb2.BFloat16Tensor) -> MIX_TENSOR:
         flag = tensor_proto.shape[0] >= 64
         tensor_bytes = lz4.frame.decompress(tensor_proto.data) if flag else tensor_proto.data
         return self.deserialize_func(tensor_proto, tensor_bytes, self.dtype, self.des_dtype)

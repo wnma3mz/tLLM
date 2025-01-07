@@ -6,18 +6,18 @@ import uuid
 
 import grpc
 
-from tllm import CLIENT_SOCKET_PATH, GRPC_OPTIONS, MASTER_SOCKET_PATH
+from tllm import CLIENT_SOCKET_PATH, GRPC_OPTIONS
 from tllm.commons.communicator import BaseCommunicator, Communicator
 from tllm.commons.convert import Convertor
 from tllm.entrypoints.utils import parse_handler_args, update_handler_args
+from tllm.grpc.proto import schemas_pb2, schemas_pb2_grpc
+from tllm.grpc.worker_service.master_manager import MasterRPCManager
 from tllm.network.http_client import HTTPClient
-from tllm.network.manager import MasterRPCManager
-from tllm.rpc import schemas_pb2, schemas_pb2_grpc
 from tllm.schemas import SeqInput
 from tllm.singleton_logger import SingletonLogger
 
 
-class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
+class WorkerServer(schemas_pb2_grpc.RPCServiceServicer):
     def __init__(self, comm: BaseCommunicator, logger, master_url: str):
         self.comm = comm
         self.client_id = f"{str(uuid.uuid4())[:8]}"
@@ -28,7 +28,7 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
 
         self.grpc_options = GRPC_OPTIONS
 
-        self.manager = MasterRPCManager(self.grpc_options)
+        self.master_rpc_manager = MasterRPCManager(self.grpc_options)
         self.http_client = HTTPClient(master_url, comm, logger)
 
         if comm.rank == 0:
@@ -97,13 +97,13 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
         self.logger.debug(f"serialize_tensor cost time: {time.perf_counter() - s1:.4f}")
         self.logger.debug("=" * 20)
 
-        await self.manager.rpc_func(request.uuid, request.seq_len, output, cost_time)
+        await self.master_rpc_manager.rpc_func(request.uuid, request.seq_len, output, cost_time)
 
     async def SetConfig(
         self, request: schemas_pb2.SetConfigRequest, context: grpc.ServicerContext
     ) -> schemas_pb2.SetConfigResponse:
         self.logger.debug(f"forward_url: {request.forward_url}")
-        self.manager.update_url(request.master_url, request.forward_url, request.pp_rank)
+        self.master_rpc_manager.update_url(request.master_url, request.forward_url, request.pp_rank)
         return schemas_pb2.SetConfigResponse(msg="SetConfig Completed", status=200)
 
     async def Forward(
@@ -117,7 +117,7 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
         """
         if hasattr(self.http_client, "model") is None:
             return schemas_pb2.ForwardResponse(msg="Model not initialized", status=400)
-        if hasattr(self.manager, "master_stub") is None:
+        if hasattr(self.master_rpc_manager, "master_stub") is None:
             return schemas_pb2.ForwardResponse(msg="Manager not initialized", status=400)
         asyncio.create_task(self.forward_func(request))
 
@@ -148,14 +148,14 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
         self.logger.debug(f"serialize_tensor cost time: {time.perf_counter() - s1:.4f}")
         self.logger.debug("=" * 20)
 
-        await self.manager.rpc_image_func(request, output, cost_time)
+        await self.master_rpc_manager.rpc_image_func(request, output, cost_time)
 
     async def ImageForward(
         self, request: schemas_pb2.ImageForwardRequest, context: grpc.ServicerContext
     ) -> schemas_pb2.ForwardResponse:
         if not hasattr(self.http_client, "model") and self.http_client is None:
             return schemas_pb2.ForwardResponse(msg="Model not initialized", status=400)
-        if hasattr(self.manager, "master_stub") is None:
+        if hasattr(self.master_rpc_manager, "master_stub") is None:
             return schemas_pb2.ForwardResponse(msg="Manager not initialized", status=400)
         asyncio.create_task(self.image_forward_func(request))
 
@@ -173,7 +173,7 @@ async def run(args):
 
     logger = SingletonLogger.setup_handler_logger(f"handler-{args.grpc_port}")
 
-    rpc_servicer = RPCHandler(comm, logger, args.master_addr)
+    rpc_servicer = WorkerServer(comm, logger, args.master_addr)
     # if comm.rank == 0:
     try:
         await rpc_servicer.start(ip_addr_list, args.grpc_port)

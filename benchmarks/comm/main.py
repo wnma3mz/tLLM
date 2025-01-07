@@ -10,11 +10,10 @@ import tabulate
 import torch
 
 from tllm.commons.convert import Convertor
-from tllm.rpc import schemas_pb2, schemas_pb2_grpc
-from tllm.rpc.schemas_pb2 import BFloat16Tensor
+from tllm.grpc.proto import schemas_pb2, schemas_pb2_grpc
 
 
-def compress_bytes(tensor_proto: BFloat16Tensor) -> BFloat16Tensor:
+def compress_bytes(tensor_proto: schemas_pb2.BFloat16Tensor) -> schemas_pb2.BFloat16Tensor:
     if not use_zlib and not use_lz4:
         return tensor_proto
     if use_zlib:
@@ -24,7 +23,7 @@ def compress_bytes(tensor_proto: BFloat16Tensor) -> BFloat16Tensor:
     return tensor_proto
 
 
-def uncompress_bytes(tensor_proto: BFloat16Tensor) -> BFloat16Tensor:
+def uncompress_bytes(tensor_proto: schemas_pb2.BFloat16Tensor) -> schemas_pb2.BFloat16Tensor:
     if not use_zlib and not use_lz4:
         return tensor_proto
     if use_zlib:

@@ -1,7 +1,8 @@
 from tllm import BACKEND, BackendEnum
-from tllm.entrypoints.handler.master_handler import MasterHandler, PendingRequests
-from tllm.network.manager import RPCManager
-
+from tllm.grpc.master_service.master_server import MasterServer
+from tllm.grpc.master_service.pending_requests import PendingRequests
+from tllm.grpc.master_service.worker_manager import WorkerRPCManager
+from typing import Tuple
 
 def setup_seed(seed: int = 42):
     if BACKEND == BackendEnum.TORCH:
@@ -10,8 +11,8 @@ def setup_seed(seed: int = 42):
         torch.manual_seed(seed)
 
 
-def init_rpc_manager(client_size: int) -> RPCManager:
+def init_grpc_service(client_size: int) -> Tuple[WorkerRPCManager, MasterServer]:
     pending_requests = PendingRequests()
-    master_handler = MasterHandler(pending_requests)
-    rpc_manager = RPCManager(client_size, pending_requests)
-    return rpc_manager, master_handler
+    master_server = MasterServer(pending_requests)
+    worker_rpc_manager = WorkerRPCManager(client_size, pending_requests)
+    return worker_rpc_manager, master_server

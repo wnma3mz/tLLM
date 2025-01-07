@@ -5,9 +5,9 @@ import numpy as np
 from transformers import AutoImageProcessor, AutoProcessor
 
 from tllm.generate.token_utils import TokenizerUtils
+from tllm.grpc.master_service.worker_manager import WorkerRPCManager
 from tllm.models.register import sampling_func
 from tllm.models.utils import is_generate_end
-from tllm.network.manager import RPCManager
 from tllm.schemas import MIX_TENSOR, ForwardResult, SeqInput, SequenceRequestData
 from tllm.singleton_logger import SingletonLogger
 
@@ -79,7 +79,7 @@ def process_mm_input(
 
 
 class LLMGenerator:
-    def __init__(self, manager: RPCManager, model) -> None:
+    def __init__(self, manager: WorkerRPCManager, model) -> None:
         self.manager = manager
         self.logger = SingletonLogger.setup_master_logger()
         self.model = model

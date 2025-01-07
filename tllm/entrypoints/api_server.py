@@ -2,7 +2,6 @@ import asyncio
 import copy
 import os
 import time
-from typing import Union
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,15 +16,16 @@ from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionRespo
 from tllm.entrypoints.server_chat import OpenAIServing
 from tllm.entrypoints.utils import GRPCProcess, parse_master_args, serve_http, update_master_args
 from tllm.generate import ImageGenerator, LLMGenerator
-from tllm.network.manager import RPCManager, WebsocketManager
+from tllm.grpc.master_service.worker_manager import WorkerRPCManager
+from tllm.network.websocket_manager import WebsocketManager
 from tllm.schemas import InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
 from tllm.singleton_logger import SingletonLogger
-from tllm.utils import init_rpc_manager, setup_seed
+from tllm.utils import init_grpc_service, setup_seed
 
 openai_serving_chat: OpenAIServing = None
 image_serving: ImageServing = None
 ws_manager: WebsocketManager = None
-rpc_manager: RPCManager = None
+worker_rpc_manager: WorkerRPCManager = None
 app = FastAPI()
 
 
@@ -101,10 +101,10 @@ async def create_image(request: Text2ImageRequest, raw_request: Request) -> Text
 async def health(background_tasks: BackgroundTasks):
     # 检查是否需要重新更新节点的状态
     # 如果没有请求 health，那么状态不会被更新
-    health_status = await rpc_manager.get_status()
+    health_status = await worker_rpc_manager.get_status()
     if len(health_status["last_check_result"]) > 0:
         logger.info(f"health check result: {health_status}")
-        rpc_manager.stop_health_check()
+        worker_rpc_manager.stop_health_check()
         ws_manager.unset_connect_clients(health_status["last_check_result"])
         background_tasks.add_task(update_model_url)
 
@@ -143,11 +143,11 @@ async def update_model_url():
     host_list = ws_manager.set_connect_clients()
     if len(host_list) > 0:
         host_list = [f"unix://{CLIENT_SOCKET_PATH}" if x.startswith("localhost") else x for x in host_list]
-        rpc_manager.update_url(host_list)
+        worker_rpc_manager.update_url(host_list)
         master_url = args.hostname if args.is_local else f"{args.hostname}:{args.grpc_port}"
-        await rpc_manager.send_config(master_url, host_list)
+        await worker_rpc_manager.send_config(master_url, host_list)
         # 后台持续进行健康检查，如果有节点挂掉，需要重新分配
-        await rpc_manager.start_health_check()
+        await worker_rpc_manager.start_health_check()
 
 
 @app.post("/register_client")
@@ -195,27 +195,27 @@ async def init_engine(args):
     model = load_master_model(args.model_path)
     total_layers = model.num_layers  # 必须要有层数
 
-    global ws_manager, rpc_manager
+    global ws_manager, worker_rpc_manager
 
     ws_manager = WebsocketManager(total_layers, args.model_path, client_size=args.client_size)
-    rpc_manager, master_handler = init_rpc_manager(ws_manager.client_size)
+    worker_rpc_manager, master_server = init_grpc_service(ws_manager.client_size)
     logger.info(f"Engine Init Cost Time: {time.time() - s1:.4f}s. Total Layers: {total_layers}")
     if args.is_image:
-        generator = ImageGenerator(rpc_manager, model)
+        generator = ImageGenerator(worker_rpc_manager, model)
     else:
-        generator = LLMGenerator(rpc_manager, model)
+        generator = LLMGenerator(worker_rpc_manager, model)
     engine = AsyncEngine(generator)
 
-    await master_handler.start(args.grpc_port)
+    await master_server.start(args.grpc_port)
     await engine.start()
-    return engine, master_handler
+    return engine, master_server
 
 
 async def run_server(args) -> None:
     SingletonLogger.set_level("DEBUG" if args.is_debug else "INFO")
     args = update_master_args(args)
 
-    engine, master_handler = await init_engine(args)
+    engine, master_server = await init_engine(args)
     app = await init_app(engine, args)
 
     uvicorn_kwargs = {"host": ["::", "0.0.0.0"], "port": args.http_port, "timeout_graceful_shutdown": 5}
@@ -235,7 +235,7 @@ async def run_server(args) -> None:
         args_handler = None
 
     grpc_process = GRPCProcess(args_handler)
-    shutdown_task = await serve_http(app, grpc_process, engine, master_handler, **uvicorn_kwargs)
+    shutdown_task = await serve_http(app, grpc_process, engine, master_server, **uvicorn_kwargs)
 
     await shutdown_task
 

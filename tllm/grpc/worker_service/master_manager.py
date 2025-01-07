@@ -3,7 +3,7 @@ from typing import List, Tuple
 
 import grpc
 
-from tllm.rpc import schemas_pb2, schemas_pb2_grpc
+from tllm.grpc.proto import schemas_pb2, schemas_pb2_grpc
 
 
 class MasterRPCManager:
