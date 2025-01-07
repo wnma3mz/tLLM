@@ -2,13 +2,14 @@ import argparse
 import asyncio
 import copy
 import json
+import os
 import signal
 from typing import Dict
 
 from fastapi import FastAPI
 import uvicorn
 
-from tllm.entrypoints.handler.handler import run
+from tllm import CLIENT_SOCKET_PATH, MASTER_SOCKET_PATH
 from tllm.network.helper import get_free_port, get_ips
 from tllm.singleton_logger import SingletonLogger
 
@@ -126,12 +127,19 @@ async def serve_http(app: FastAPI, args, **uvicorn_kwargs: Dict):
     loop = asyncio.get_event_loop()
     server_task = loop.create_task(server.serve())
 
-    # 必须在 server 启动之后再启动 client，或者是异步的
     if args.is_local:
+        from tllm.entrypoints.handler.handler import run
+
+        if os.path.isfile(MASTER_SOCKET_PATH):
+            os.remove(MASTER_SOCKET_PATH)
+        if os.path.isfile(CLIENT_SOCKET_PATH):
+            os.remove(CLIENT_SOCKET_PATH)
+
         args_handler = copy.deepcopy(args)
         args_handler.hostname = "localhost"
         args_handler.grpc_port = None
         args_handler.master_addr = f"http://{args_handler.hostname}:{args_handler.http_port}"
+        args.hostname = f"unix://{MASTER_SOCKET_PATH}"
         await run(args_handler)
 
     # Setup graceful shutdown handlers

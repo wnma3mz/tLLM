@@ -6,7 +6,7 @@ import uuid
 
 import grpc
 
-from tllm import GRPC_OPTIONS
+from tllm import CLIENT_SOCKET_PATH, GRPC_OPTIONS, MASTER_SOCKET_PATH
 from tllm.commons.communicator import BaseCommunicator, Communicator
 from tllm.commons.convert import Convertor
 from tllm.entrypoints.utils import parse_handler_args, update_handler_args
@@ -49,6 +49,7 @@ class RPCHandler(schemas_pb2_grpc.RPCServiceServicer):
 
         schemas_pb2_grpc.add_RPCServiceServicer_to_server(self, self.server)
         self.server.add_insecure_port(f"[::]:{port}")
+        self.server.add_insecure_port(f"unix://{CLIENT_SOCKET_PATH}")
         self.logger.info(f"Starting gRPC server on [::]:{port}")
         await self.server.start()
 

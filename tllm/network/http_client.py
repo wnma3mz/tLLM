@@ -101,7 +101,7 @@ class HTTPClient:
                 s1 = time.perf_counter()
                 await self.load_model(response.model, response.start_idx, response.end_idx)
                 self.logger.info(
-                    f"Model loaded in {time.time() - s1:.2f}s: [start_idx={response.start_idx}, end_idx={response.end_idx}]"
+                    f"Model loaded in {time.perf_counter() - s1:.4f}s: [start_idx={response.start_idx}, end_idx={response.end_idx}]"
                 )
 
                 self.init_model_info = {

@@ -46,3 +46,6 @@ GRPC_OPTIONS = [
 ]
 
 PP_TIMEOUT = 10  # TTFT 不超过 10s，且单个 token 生成时间不超过 10s
+
+MASTER_SOCKET_PATH = "/tmp/tllm_master_grpc_uds.sock"
+CLIENT_SOCKET_PATH = "/tmp/tllm_client_grpc_uds.sock"

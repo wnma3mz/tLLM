@@ -7,6 +7,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket,
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 
+from tllm import CLIENT_SOCKET_PATH
 from tllm.commons.manager import load_master_model
 from tllm.engine import AsyncEngine
 from tllm.entrypoints.image_server.image_protocol import Text2ImageRequest, Text2ImageResponse
@@ -23,7 +24,7 @@ from tllm.utils import init_rpc_manager, setup_seed
 openai_serving_chat: OpenAIServing = None
 image_serving: ImageServing = None
 ws_manager: WebsocketManager = None
-rpc_manager: RPCManager
+rpc_manager: RPCManager = None
 app = FastAPI()
 
 
@@ -110,7 +111,7 @@ async def health(background_tasks: BackgroundTasks):
 
 
 @app.get("/v1/models")
-async def show_available_models():  #
+async def show_available_models():
     models = await openai_serving_chat.show_available_models()
     return JSONResponse(content=models.model_dump())
 
@@ -140,8 +141,10 @@ async def update_model_url():
         return
     host_list = ws_manager.set_connect_clients()
     if len(host_list) > 0:
+        host_list = [f"unix://{CLIENT_SOCKET_PATH}" if x.startswith("localhost") else x for x in host_list]
         rpc_manager.update_url(host_list)
-        await rpc_manager.send_config(f"{args.hostname}:{args.grpc_port}", host_list)
+        master_url = args.hostname if args.is_local else f"{args.hostname}:{args.grpc_port}"
+        await rpc_manager.send_config(master_url, host_list)
         # 后台持续进行健康检查，如果有节点挂掉，需要重新分配
         await rpc_manager.start_health_check()
 
