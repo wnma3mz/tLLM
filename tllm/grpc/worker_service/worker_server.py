@@ -11,8 +11,8 @@ from tllm.commons.communicator import BaseCommunicator, Communicator
 from tllm.commons.convert import Convertor
 from tllm.entrypoints.utils import parse_handler_args, update_handler_args
 from tllm.grpc.proto import schemas_pb2, schemas_pb2_grpc
+from tllm.grpc.worker_service.http_client import HTTPClient
 from tllm.grpc.worker_service.master_manager import MasterRPCManager
-from tllm.network.http_client import HTTPClient
 from tllm.schemas import SeqInput
 from tllm.singleton_logger import SingletonLogger
 

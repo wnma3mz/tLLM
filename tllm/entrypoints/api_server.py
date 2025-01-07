@@ -15,9 +15,9 @@ from tllm.entrypoints.image_server.server_image import ImageServing
 from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionResponse
 from tllm.entrypoints.server_chat import OpenAIServing
 from tllm.entrypoints.utils import GRPCProcess, parse_master_args, serve_http, update_master_args
+from tllm.entrypoints.websocket_manager import WebsocketManager
 from tllm.generate import ImageGenerator, LLMGenerator
 from tllm.grpc.master_service.worker_manager import WorkerRPCManager
-from tllm.network.websocket_manager import WebsocketManager
 from tllm.schemas import InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
 from tllm.singleton_logger import SingletonLogger
 from tllm.utils import init_grpc_service, setup_seed

@@ -82,6 +82,7 @@ class MLXLlamaModel(nn.Module):
 
         model = quantization_func(config, model, state_dict)
         model.load_weights(list(state_dict.items()), strict=False)
+
         mx.eval(model.parameters())
         model.eval()
         return model

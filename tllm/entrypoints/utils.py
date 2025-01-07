@@ -9,7 +9,7 @@ from typing import Dict, Optional
 from fastapi import FastAPI
 import uvicorn
 
-from tllm.network.helper import get_free_port, get_ips
+from tllm.entrypoints.helper import get_free_port, get_ips
 from tllm.singleton_logger import SingletonLogger
 
 

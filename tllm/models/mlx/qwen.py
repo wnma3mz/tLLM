@@ -20,6 +20,11 @@ class MLXQwen2Model(nn.Module):
         config_dict = config.to_dict()
         config_dict.pop("rope_scaling")  # TODO: remove this line
         args = ModelArgs.from_dict(config_dict)
+
+        args.comm = config.comm
+        self.world_size = config.comm.world_size
+        self.rank = config.comm.rank
+
         args.attention_bias = True  # for qwen
         args.o_proj_bias = False  # for qwen
         self.vocab_size = args.vocab_size
@@ -60,6 +65,16 @@ class MLXQwen2Model(nn.Module):
     def merge_weights(self, state_dict: Dict[str, mx.array], is_merge: bool = True) -> Dict[str, mx.array]:
         if not is_merge:
             return state_dict
+        layer_name_mapper = {
+            "self_attn.o_proj": "self_attn.o_proj.layer",
+            "mlp.down_proj": "mlp.down_proj.layer",
+        }
+        key_list = list(state_dict.keys())
+        for key in key_list:
+            for s_key, t_key in layer_name_mapper.items():
+                if s_key in key:
+                    state_dict[key.replace(s_key, t_key)] = state_dict.pop(key)
+
         state_dict = default_merge_attn(state_dict)
         state_dict = default_merge_mlp(state_dict)
         return state_dict

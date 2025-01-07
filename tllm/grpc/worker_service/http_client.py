@@ -93,7 +93,7 @@ class HTTPClient:
                 register_request = RegisterClientRequest(client_id=client_id, host=ip_addr_list, port=port)
                 response: RegisterClientResponse = await self.register_client(register_request)
                 if response.start_idx == -1:
-                    self.logger.error(f"Connection failed")
+                    self.logger.error("Connection failed(start_idx == -1)")
                     raise Exception("Connection failed")
 
                 s1 = time.perf_counter()
@@ -125,5 +125,5 @@ class HTTPClient:
                     raise Exception("Connection failed")
 
         except Exception as e:
-            self.logger.error(f"Connection failed")
+            self.logger.error(f"Connection failed {str(e)}")
             raise

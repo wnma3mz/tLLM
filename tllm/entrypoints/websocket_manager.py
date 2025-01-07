@@ -3,8 +3,8 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from fastapi import WebSocket
 
+from tllm.entrypoints.helper import find_continuous_path, tcp_ping_test
 from tllm.models.file_helper import auto_set_client_size, parse_model_size, split_model_layers
-from tllm.network.helper import find_continuous_path, tcp_ping_test
 from tllm.schemas import ClientData, InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
 from tllm.singleton_logger import SingletonLogger
 
