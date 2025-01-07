@@ -83,8 +83,8 @@ class HTTPClient:
 
             await asyncio.sleep(self.ping_interval)
 
-    async def load_model(self, model: str, start_idx: int, end_idx: int):
-        self.model = load_client_model(start_idx, end_idx, self.comm, model)
+    async def load_model(self, model_path: str, start_idx: int, end_idx: int):
+        self.model = load_client_model(start_idx, end_idx, self.comm, model_path)
 
     async def connect(self, client_id: str, ip_addr_list: List[str], port: int):
         """定期发送连接请求的协程"""
@@ -97,9 +97,9 @@ class HTTPClient:
                     raise Exception("Connection failed")
 
                 s1 = time.perf_counter()
-                await self.load_model(response.model, response.start_idx, response.end_idx)
+                await self.load_model(response.repo_path, response.start_idx, response.end_idx)
                 self.logger.info(
-                    f"Model loaded in {time.perf_counter() - s1:.4f}s: [start_idx={response.start_idx}, end_idx={response.end_idx}]"
+                    f"Model loaded in {time.perf_counter() - s1:.4f}s: layer={response.start_idx}-{response.end_idx}"
                 )
 
                 self.init_model_info = {

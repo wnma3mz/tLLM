@@ -220,10 +220,10 @@ class RegisterClientResponse(BaseModel):
     start_idx: int
     end_idx: int
     msg: Optional[str] = None
-    model: Optional[str] = None
+    repo_path: Optional[str] = None
 
     def __repr__(self):
-        return f"pp_rank={self.pp_rank} layer={self.start_idx}-{self.end_idx} model={self.model}"
+        return f"pp_rank={self.pp_rank} layer={self.start_idx}-{self.end_idx} model={self.repo_path}"
 
     def __str__(self):
         return self.__repr__()

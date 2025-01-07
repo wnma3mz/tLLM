@@ -51,7 +51,7 @@ class WebsocketManager:
                 pp_rank=pp_rank,
                 start_idx=start_idx,
                 end_idx=end_idx,
-                model=model_path,
+                repo_path=model_path,
                 msg="success",
             )
         else:
