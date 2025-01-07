@@ -6,6 +6,7 @@ from fastapi import WebSocket
 from tllm.models.file_helper import auto_set_client_size, parse_model_size, split_model_layers
 from tllm.network.helper import find_continuous_path, tcp_ping_test
 from tllm.schemas import ClientData, InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
+from tllm.singleton_logger import SingletonLogger
 
 
 class WebsocketManager:
@@ -14,6 +15,7 @@ class WebsocketManager:
         self.model_name = model_name
         self.clients: Dict[str, ClientData] = {}  # 连接的客户端, client_id -> ClientData
         self.monitor_websockets: Set[WebSocket] = set()  # 前端页面的websocket连接
+        self.logger = SingletonLogger.setup_master_logger()
 
         self.connect_clients = []
         if client_size is None:
@@ -40,7 +42,7 @@ class WebsocketManager:
         if ip is None:
             return RegisterClientResponse(msg="ping failed", pp_rank=-1, start_idx=-1, end_idx=-1)
         host = f"{ip}:{request.port}"
-        print(f"ping {host} delay: {delay:.2f}ms")
+        self.logger.debug(f"ping {host} delay: {delay:.2f}ms")
         if request.pp_rank == -1:
             self.clients[request.client_id] = ClientData(client_id=request.client_id, host=host)
 
@@ -115,7 +117,7 @@ class WebsocketManager:
         self.connect_clients = []
 
     def print_host_list(self):
-        print("route path: ", "->".join([f"[{x.host}]" for x in self.connect_clients]))
+        self.logger.info("Route Path: " + "->".join([f"[{x.host}]" for x in self.connect_clients]))
 
     def find_connect_clients(self, client_id) -> bool:
         for client in self.clients.values():

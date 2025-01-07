@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime
+import time
 from typing import List, Optional
 
 import aiohttp
@@ -97,7 +98,11 @@ class HTTPClient:
                     self.logger.error(f"Connection failed")
                     raise Exception("Connection failed")
 
+                s1 = time.perf_counter()
                 await self.load_model(response.model, response.start_idx, response.end_idx)
+                self.logger.info(
+                    f"Model loaded in {time.time() - s1:.2f}s: [start_idx={response.start_idx}, end_idx={response.end_idx}]"
+                )
 
                 self.init_model_info = {
                     "pp_rank": response.pp_rank,

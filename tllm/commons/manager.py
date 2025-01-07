@@ -143,8 +143,6 @@ class WeightManager:
         return new_state_dict
 
     def _hf_read_client_weight(self, start_idx: int, end_idx: int):
-        print(f"start_idx: {start_idx}, end_idx: {end_idx}")
-
         prefix_key_list = [f"model.layers.{layer_idx}." for layer_idx in range(start_idx, end_idx)]
         state_dict = self._hf_read_weight(prefix_key_list)
         return state_dict
@@ -170,9 +168,7 @@ def load_client_model(start_idx: int, end_idx: int, comm: BaseCommunicator, mode
     if weight_manager.arch == "FLUX":
         kwargs.update({"quantization_level": weight_manager.config.quantization_level})
 
-    s1 = time.perf_counter()
     model = MY_MODEL_CLASS.from_pretrained(config, state_dict, **kwargs)
-    print(f"Model loaded in {time.perf_counter() - s1:.2f}s")
     return model
 
 

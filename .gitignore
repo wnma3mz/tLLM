@@ -12,3 +12,6 @@ weights/
 build/
 *.egg-info/
 *.bak
+mpi_hosts
+run_mpirun.sh
+test.py

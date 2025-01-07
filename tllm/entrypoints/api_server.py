@@ -15,7 +15,7 @@ from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionRespo
 from tllm.entrypoints.server_chat import OpenAIServing
 from tllm.entrypoints.utils import parse_master_args, serve_http, update_master_args
 from tllm.generate import ImageGenerator, LLMGenerator
-from tllm.network.manager import LocalRPCManager, RPCManager, WebsocketManager
+from tllm.network.manager import RPCManager, WebsocketManager
 from tllm.schemas import InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
 from tllm.singleton_logger import SingletonLogger
 from tllm.utils import init_rpc_manager, setup_seed
@@ -23,7 +23,7 @@ from tllm.utils import init_rpc_manager, setup_seed
 openai_serving_chat: OpenAIServing = None
 image_serving: ImageServing = None
 ws_manager: WebsocketManager = None
-rpc_manager: Union[RPCManager, LocalRPCManager]
+rpc_manager: RPCManager
 app = FastAPI()
 
 
@@ -47,7 +47,7 @@ async def get_index():
 
 @app.post("/v1/chat/completions")
 async def create_chat_completion(request: ChatCompletionRequest, raw_request: Request) -> ChatCompletionResponse:
-    if not ws_manager.has_full_model and not args.is_local:
+    if not ws_manager.has_full_model:
         raise ValueError("No available Full Node to process the request")
     if openai_serving_chat is None:
         raise ValueError("OpenAIServing instance is not initialized")
@@ -65,7 +65,7 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
 
 @app.post("/v1/completions")
 async def create_completion(request: ChatCompletionRequest, raw_request: Request) -> ChatCompletionResponse:
-    if not ws_manager.has_full_model and not args.is_local:
+    if not ws_manager.has_full_model:
         raise ValueError("No available Full Node to process the request")
     if openai_serving_chat is None:
         raise ValueError("OpenAIServing instance is not initialized")
@@ -79,7 +79,7 @@ async def create_completion(request: ChatCompletionRequest, raw_request: Request
 
 @app.post("/v1/create_image")
 async def create_image(request: Text2ImageRequest, raw_request: Request) -> Text2ImageResponse:
-    if not ws_manager.has_full_model and not args.is_local:
+    if not ws_manager.has_full_model:
         raise ValueError("No available Full Node to process the request")
     if image_serving is None:
         raise ValueError("ImageServing instance is not initialized")
@@ -194,9 +194,7 @@ async def init_engine(args):
     global ws_manager, rpc_manager
 
     ws_manager = WebsocketManager(total_layers, args.model_path, client_size=args.client_size)
-    rpc_manager, master_handler = await init_rpc_manager(
-        args.model_path, ws_manager.client_size, args.grpc_port, args.is_local
-    )
+    rpc_manager, master_handler = init_rpc_manager(ws_manager.client_size)
     logger.info(f"Engine init Cost Time: {time.time() - s1:.4f}s. Total Layers: {total_layers}")
     if args.is_image:
         generator = ImageGenerator(rpc_manager, model)
@@ -204,6 +202,8 @@ async def init_engine(args):
         generator = LLMGenerator(rpc_manager, model)
     engine = AsyncEngine(generator)
 
+    if master_handler is not None:
+        await master_handler.start(args.grpc_port)
     await engine.start()
     return engine
 
@@ -216,7 +216,8 @@ async def run_server(args) -> None:
     app = await init_app(engine, args)
 
     uvicorn_kwargs = {"host": ["::", "0.0.0.0"], "port": args.http_port, "timeout_graceful_shutdown": 5}
-    shutdown_task = await serve_http(app, **uvicorn_kwargs)
+    shutdown_task = await serve_http(app, args, **uvicorn_kwargs)
+
     await shutdown_task
 
 
