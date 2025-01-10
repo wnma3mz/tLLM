@@ -54,17 +54,15 @@ class WorkerServer(schemas_pb2_grpc.RPCServiceServicer):
         await self.server.start()
 
         self.http_client.is_running = True
-        connection_task = asyncio.create_task(self.http_client.connect(self.client_id, ip_addr_list, port))
         ping_task = asyncio.create_task(self.http_client.maintain_connection(self.client_id, ip_addr_list, port))
 
         try:
             await self.server.wait_for_termination()
         except (KeyboardInterrupt, asyncio.CancelledError):
             self.http_client.is_running = False
-            connection_task.cancel()
             ping_task.cancel()
             try:
-                await asyncio.gather(connection_task, ping_task, return_exceptions=True)
+                await asyncio.gather(ping_task, return_exceptions=True)
             except asyncio.CancelledError:
                 pass
             await self.stop()

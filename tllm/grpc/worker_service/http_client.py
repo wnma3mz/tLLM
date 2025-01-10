@@ -23,12 +23,13 @@ class HTTPClient:
         self.is_running = False
         self.init_model_info = None
         self.last_ping_time: Optional[datetime] = None
-        self.ping_interval = ping_interval
-        self.max_retry_attempts = max_retry_attempts
-        self.retry_delay = retry_delay
+        self.ping_interval = ping_interval  # 健康检查的时间间隔
+        self.retry_delay = retry_delay  # ping 不通时，重试的时间间隔
+        self.max_retry_attempts = max_retry_attempts  # 最大重试机制，重试失败后，抛出异常
         self.model = None
         self.logger = logger
         self.comm = comm
+        self.has_connected = False
 
     async def ping(self) -> bool:
         try:
@@ -55,31 +56,33 @@ class HTTPClient:
                 return InitModelResponse(**await response.json())
 
     async def maintain_connection(self, client_id: str, ip_addr_list: List[str], port: int):
-        """维护连接的协程，定期发送ping请求"""
         while self.is_running:
-            is_connected = await self.ping()
+            # 初次连接 or 连接断开时，尝试重连
+            retry_count, is_connected = 0, False
+            while retry_count < self.max_retry_attempts:
+                is_connected = await self.ping()
+                if is_connected:
+                    break
 
-            if not is_connected:
+                self.has_connected = False
                 self.logger.warning("Connection lost, attempting to reconnect...")
-                retry_count = 0
+                retry_count += 1
+                await asyncio.sleep(self.retry_delay)
 
-                while retry_count < self.max_retry_attempts and self.is_running:
-                    try:
-                        # 尝试重新注册
-                        await self.connect(client_id, ip_addr_list, port)
-                        if await self.ping():
-                            self.logger.info("Reconnection successful")
-                            break
-                    except Exception as e:
-                        self.logger.error(f"Reconnection attempt {retry_count + 1}")
+            # 超过最大重试次数，抛出异常
+            if not is_connected:
+                self.is_running = False
+                raise asyncio.CancelledError("Max retry attempts reached, connection lost")
 
-                    retry_count += 1
-                    if retry_count < self.max_retry_attempts:
-                        await asyncio.sleep(self.retry_delay)
-
-                if retry_count >= self.max_retry_attempts:
-                    self.logger.error("Max retry attempts reached, connection lost")
-                    # 可以在这里添加额外的错误处理逻辑
+            # ping 通后，需要连接
+            if not self.has_connected:
+                try:
+                    await self.connect(client_id, ip_addr_list, port)
+                    if await self.ping():
+                        self.logger.info("Reconnection successful")
+                        break
+                except Exception as e:
+                    self.logger.error(f"Connection Failed {str(e)}")
 
             await asyncio.sleep(self.ping_interval)
 
@@ -88,42 +91,39 @@ class HTTPClient:
 
     async def connect(self, client_id: str, ip_addr_list: List[str], port: int):
         """定期发送连接请求的协程"""
-        try:
-            if not self.init_model_info:
-                register_request = RegisterClientRequest(client_id=client_id, host=ip_addr_list, port=port)
-                response: RegisterClientResponse = await self.register_client(register_request)
-                if response.start_idx == -1:
-                    self.logger.error("Connection failed(start_idx == -1)")
-                    raise Exception("Connection failed")
+        if not self.init_model_info:
+            register_request = RegisterClientRequest(client_id=client_id, host=ip_addr_list, port=port)
+            response: RegisterClientResponse = await self.register_client(register_request)
+            if response.start_idx == -1:
+                self.logger.error("Connection failed(start_idx == -1)")
+                raise Exception("Connection failed")
 
-                s1 = time.perf_counter()
-                await self.load_model(response.repo_path, response.start_idx, response.end_idx)
-                self.logger.info(
-                    f"Model loaded in {time.perf_counter() - s1:.4f}s: layer={response.start_idx}-{response.end_idx}"
-                )
+            s1 = time.perf_counter()
+            await self.load_model(response.repo_path, response.start_idx, response.end_idx)
+            self.logger.info(
+                f"Model loaded in {time.perf_counter() - s1:.4f}s: layer={response.start_idx}-{response.end_idx}"
+            )
 
-                self.init_model_info = {
-                    "pp_rank": response.pp_rank,
-                    "start_idx": response.start_idx,
-                    "end_idx": response.end_idx,
-                }
-                init_request = InitModelRequest(client_id=client_id, **self.init_model_info)
-                response = await self.init_model(init_request)
-                self.logger.info(f"Connection successful")
-            else:
-                register_request = RegisterClientRequest(
-                    client_id=client_id,
-                    host=ip_addr_list,
-                    port=port,
-                    pp_rank=self.init_model_info["pp_rank"],
-                    start_idx=self.init_model_info["start_idx"],
-                    end_idx=self.init_model_info["end_idx"],
-                )
-                response: RegisterClientResponse = await self.register_client(register_request)
-                if response.start_idx == -1:
-                    self.logger.error(f"Connection failed")
-                    raise Exception("Connection failed")
-
-        except Exception as e:
-            self.logger.error(f"Connection failed {str(e)}")
-            raise
+            self.init_model_info = {
+                "pp_rank": response.pp_rank,
+                "start_idx": response.start_idx,
+                "end_idx": response.end_idx,
+            }
+            init_request = InitModelRequest(client_id=client_id, **self.init_model_info)
+            response = await self.init_model(init_request)
+            self.logger.info(f"Connection successful")
+            self.has_connected = True
+        else:
+            register_request = RegisterClientRequest(
+                client_id=client_id,
+                host=ip_addr_list,
+                port=port,
+                pp_rank=self.init_model_info["pp_rank"],
+                start_idx=self.init_model_info["start_idx"],
+                end_idx=self.init_model_info["end_idx"],
+            )
+            response: RegisterClientResponse = await self.register_client(register_request)
+            if response.start_idx == -1:
+                self.logger.error(f"Connection failed")
+                raise Exception("Connection failed")
+            self.has_connected = True
