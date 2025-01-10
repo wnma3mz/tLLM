@@ -4,6 +4,7 @@ from typing import List
 import mlx.core as mx
 import mlx.nn as nn
 from mlx_lm.models.llama import MLP, Attention, ModelArgs, TransformerBlock, initialize_rope
+from mpi4py import MPI
 
 from tllm.commons.cache import AttentionData, RequestsCache, cat_func
 
@@ -187,8 +188,7 @@ class MergedAttention(nn.Module):
         output = output.reshape(L, -1)
 
         attn_output = self.o_proj(output)
-        attn_output = self.comm.all_reduce(attn_output)
-        return attn_output
+        return self.comm.all_reduce(attn_output)
 
 
 class PlainAttention(Attention):
@@ -258,7 +258,8 @@ class MergedMLP(nn.Module):
 
     def __call__(self, x) -> mx.array:
         gate_out, up_out = self.gate_up_proj(x)
-        return self.comm.all_reduce(self.down_proj(nn.silu(gate_out) * up_out))
+        out = self.down_proj(nn.silu(gate_out) * up_out)
+        return self.comm.all_reduce(out)
 
 
 class MLXTransformerBlock(TransformerBlock):

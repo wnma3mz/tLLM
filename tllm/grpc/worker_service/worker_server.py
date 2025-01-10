@@ -9,6 +9,7 @@ import grpc
 from tllm import CLIENT_SOCKET_PATH, GRPC_OPTIONS
 from tllm.commons.communicator import BaseCommunicator, Communicator
 from tllm.commons.convert import Convertor
+from tllm.commons.manager import load_client_model
 from tllm.entrypoints.utils import parse_handler_args, update_handler_args
 from tllm.grpc.proto import schemas_pb2, schemas_pb2_grpc
 from tllm.grpc.worker_service.http_client import HTTPClient
@@ -16,14 +17,16 @@ from tllm.grpc.worker_service.master_manager import MasterRPCManager
 from tllm.schemas import SeqInput
 from tllm.singleton_logger import SingletonLogger
 
+INIT_MODEL_TAG = 11
+
 
 class WorkerServer(schemas_pb2_grpc.RPCServiceServicer):
     def __init__(self, comm: BaseCommunicator, logger, master_url: str):
         self.comm = comm
         self.client_id = f"{str(uuid.uuid4())[:8]}"
 
-        uuid_shape_list = [None, None]
         self.server = None
+        self.model = None
         self.logger = logger
 
         self.grpc_options = GRPC_OPTIONS
@@ -34,15 +37,34 @@ class WorkerServer(schemas_pb2_grpc.RPCServiceServicer):
         if comm.rank == 0:
             pass
         else:
-            import torch
+            init_model_dict = None
+            input_dict = None
+            while self.comm.world_size > 1:
+                init_model_dict = self.comm.broadcast_object(init_model_dict)
+                self.model = load_client_model(
+                    init_model_dict["start_idx"], init_model_dict["end_idx"], self.comm, init_model_dict["model_path"]
+                )
+                break
 
             while self.comm.world_size > 1:
-                self.comm.broadcast_object(uuid_shape_list)
-                seq_input, hidden_states_shape = uuid_shape_list
-                hidden_states = torch.empty(hidden_states_shape, dtype=self.http_client.model.dtype)
-                self.comm.broadcast(hidden_states)
+                input_dict = self.comm.broadcast_object(input_dict)
+                seq_input = SeqInput(uuid_list=input_dict["uuid_list"], seq_len_list=input_dict["seq_len_list"])
+                self.model(input_dict["hidden_states"], seq_input)
 
-                _ = self.http_client.model.forward(hidden_states, seq_input=seq_input)
+            # import torch
+            # uuid_shape_list = [None, None]
+
+            # while self.comm.world_size > 1:
+            #     self.comm.broadcast_object(uuid_shape_list)
+            #     seq_input, hidden_states_shape = uuid_shape_list
+            #     hidden_states = torch.empty(hidden_states_shape, dtype=self.model.dtype)
+            #     self.comm.broadcast(hidden_states)
+
+            #     _ = self.model.forward(hidden_states, seq_input=seq_input)
+
+    def load_model_func(self, model_path: str, start_idx: int, end_idx: int):
+        self.comm.broadcast_object({"model_path": model_path, "start_idx": start_idx, "end_idx": end_idx})
+        self.model = load_client_model(start_idx, end_idx, self.comm, model_path)
 
     async def start(self, ip_addr_list: List[str], port: int = 50051):
         self.server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=10), options=self.grpc_options)
@@ -54,7 +76,9 @@ class WorkerServer(schemas_pb2_grpc.RPCServiceServicer):
         await self.server.start()
 
         self.http_client.is_running = True
-        ping_task = asyncio.create_task(self.http_client.maintain_connection(self.client_id, ip_addr_list, port))
+        ping_task = asyncio.create_task(
+            self.http_client.maintain_connection(self.client_id, ip_addr_list, port, self.load_model_func)
+        )
 
         try:
             await self.server.wait_for_termination()
@@ -77,16 +101,22 @@ class WorkerServer(schemas_pb2_grpc.RPCServiceServicer):
 
     async def forward_func(self, request: schemas_pb2.ForwardRequest):
         s1 = time.perf_counter()
-        convertor = Convertor()
+        import mlx.core as mx
+
+        convertor = Convertor(dtype=mx.float16)
         hidden_states = convertor.deserialize(request.hidden_states)
 
         seq_input = SeqInput(uuid_list=list(request.uuid), seq_len_list=list(request.seq_len))
-        self.comm.broadcast_object([seq_input, tuple(hidden_states.shape)])
-        self.comm.broadcast(hidden_states)
+        # self.comm.broadcast_object([seq_input, tuple(hidden_states.shape)])
+        # self.comm.broadcast(hidden_states)
+        self.comm.broadcast_object(
+            {"hidden_states": hidden_states, "uuid_list": list(request.uuid), "seq_len_list": list(request.seq_len)}
+        )
+
         self.logger.debug(f"deserialize_tensor cost time: {time.perf_counter() - s1:.4f}")
 
         s1 = time.perf_counter()
-        output_hidden_states = self.http_client.model(hidden_states, seq_input)
+        output_hidden_states = self.model(hidden_states, seq_input)
         cost_time = time.perf_counter() - s1
         self.logger.debug(f"forward cost time: {cost_time:.4f}")
 
@@ -113,10 +143,10 @@ class WorkerServer(schemas_pb2_grpc.RPCServiceServicer):
             uuid: List[str]
             seq_len: List[int]
         """
-        if hasattr(self.http_client, "model") is None:
-            return schemas_pb2.ForwardResponse(msg="Model not initialized", status=400)
+        if self.model is None:
+            return schemas_pb2.ForwardResponse(msg="Model not initialized", status=500)
         if hasattr(self.master_rpc_manager, "master_stub") is None:
-            return schemas_pb2.ForwardResponse(msg="Manager not initialized", status=400)
+            return schemas_pb2.ForwardResponse(msg="Manager not initialized", status=500)
         asyncio.create_task(self.forward_func(request))
 
         await asyncio.sleep(0)
@@ -135,7 +165,7 @@ class WorkerServer(schemas_pb2_grpc.RPCServiceServicer):
         self.logger.debug(f"deserialize_tensor cost time: {time.perf_counter() - s1:.4f}")
 
         s1 = time.perf_counter()
-        output_hidden_states = self.http_client.model(
+        output_hidden_states = self.model(
             hidden_states, text_embeddings, request.seq_len, request.height, request.width, request.uuid
         )
         cost_time = time.perf_counter() - s1
@@ -151,10 +181,10 @@ class WorkerServer(schemas_pb2_grpc.RPCServiceServicer):
     async def ImageForward(
         self, request: schemas_pb2.ImageForwardRequest, context: grpc.ServicerContext
     ) -> schemas_pb2.ForwardResponse:
-        if not hasattr(self.http_client, "model") and self.http_client is None:
-            return schemas_pb2.ForwardResponse(msg="Model not initialized", status=400)
+        if self.model is None:
+            return schemas_pb2.ForwardResponse(msg="Model not initialized", status=500)
         if hasattr(self.master_rpc_manager, "master_stub") is None:
-            return schemas_pb2.ForwardResponse(msg="Manager not initialized", status=400)
+            return schemas_pb2.ForwardResponse(msg="Manager not initialized", status=500)
         asyncio.create_task(self.image_forward_func(request))
 
         await asyncio.sleep(0)
@@ -167,20 +197,23 @@ class WorkerServer(schemas_pb2_grpc.RPCServiceServicer):
 async def run(args):
     SingletonLogger.set_level("DEBUG" if args.is_debug else "INFO")
     args, ip_addr_list = update_handler_args(args)
+
     comm = Communicator()
 
     logger = SingletonLogger.setup_handler_logger(f"handler-{args.grpc_port}")
+    logger.info(f"[MLXCommunicator] Rank: {comm.rank}; World Size: {comm.world_size}")
 
     rpc_servicer = WorkerServer(comm, logger, args.master_addr)
-    # if comm.rank == 0:
-    try:
-        await rpc_servicer.start(ip_addr_list, args.grpc_port)
-    except Exception as e:
-        logger.error(f"Error occurred: {str(e)}")
-        await rpc_servicer.stop()
-        raise
-    finally:
-        await rpc_servicer.stop()
+    if comm.rank == 0:
+        logger.info("args: %s", args)
+        try:
+            await rpc_servicer.start(ip_addr_list, args.grpc_port)
+        except Exception as e:
+            logger.error(f"Error occurred: {str(e)}")
+            await rpc_servicer.stop()
+            raise
+        finally:
+            await rpc_servicer.stop()
 
 
 def main():

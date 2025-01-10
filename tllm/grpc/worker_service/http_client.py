@@ -1,11 +1,10 @@
 import asyncio
 from datetime import datetime
 import time
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 import aiohttp
 
-from tllm.commons.manager import load_client_model
 from tllm.schemas import InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
 
 
@@ -26,7 +25,6 @@ class HTTPClient:
         self.ping_interval = ping_interval  # 健康检查的时间间隔
         self.retry_delay = retry_delay  # ping 不通时，重试的时间间隔
         self.max_retry_attempts = max_retry_attempts  # 最大重试机制，重试失败后，抛出异常
-        self.model = None
         self.logger = logger
         self.comm = comm
         self.has_connected = False
@@ -55,7 +53,7 @@ class HTTPClient:
             async with session.post(f"{self.master_url}/init_model", json=request_data.dict(), timeout=3) as response:
                 return InitModelResponse(**await response.json())
 
-    async def maintain_connection(self, client_id: str, ip_addr_list: List[str], port: int):
+    async def maintain_connection(self, client_id: str, ip_addr_list: List[str], port: int, load_model_func: Callable):
         while self.is_running:
             # 初次连接 or 连接断开时，尝试重连
             retry_count, is_connected = 0, False
@@ -74,22 +72,18 @@ class HTTPClient:
                 self.is_running = False
                 raise asyncio.CancelledError("Max retry attempts reached, connection lost")
 
-            # ping 通后，需要连接
+            # ping 通后，进行连接
             if not self.has_connected:
                 try:
-                    await self.connect(client_id, ip_addr_list, port)
+                    await self.connect(client_id, ip_addr_list, port, load_model_func)
                     if await self.ping():
-                        self.logger.info("Reconnection successful")
                         break
                 except Exception as e:
                     self.logger.error(f"Connection Failed {str(e)}")
 
             await asyncio.sleep(self.ping_interval)
 
-    async def load_model(self, model_path: str, start_idx: int, end_idx: int):
-        self.model = load_client_model(start_idx, end_idx, self.comm, model_path)
-
-    async def connect(self, client_id: str, ip_addr_list: List[str], port: int):
+    async def connect(self, client_id: str, ip_addr_list: List[str], port: int, load_model_func: Callable):
         """定期发送连接请求的协程"""
         if not self.init_model_info:
             register_request = RegisterClientRequest(client_id=client_id, host=ip_addr_list, port=port)
@@ -99,7 +93,7 @@ class HTTPClient:
                 raise Exception("Connection failed")
 
             s1 = time.perf_counter()
-            await self.load_model(response.repo_path, response.start_idx, response.end_idx)
+            load_model_func(response.repo_path, response.start_idx, response.end_idx)
             self.logger.info(
                 f"Model loaded in {time.perf_counter() - s1:.4f}s: layer={response.start_idx}-{response.end_idx}"
             )

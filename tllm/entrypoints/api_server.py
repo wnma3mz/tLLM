@@ -26,6 +26,7 @@ openai_serving_chat: OpenAIServing = None
 image_serving: ImageServing = None
 ws_manager: WebsocketManager = None
 worker_rpc_manager: WorkerRPCManager = None
+logger = SingletonLogger.setup_master_logger()
 app = FastAPI()
 
 
@@ -175,10 +176,7 @@ async def init_model_func(
 
 
 async def init_app(engine: AsyncEngine, args):
-    global app
-    global logger, openai_serving_chat, image_serving
-    logger = SingletonLogger.setup_master_logger()
-
+    global app, openai_serving_chat, image_serving
     logger.info("args: %s", args)
     if args.is_image:
         image_serving = ImageServing(engine, args)
@@ -189,7 +187,6 @@ async def init_app(engine: AsyncEngine, args):
 
 async def init_engine(args):
     setup_seed()
-    logger = SingletonLogger.setup_master_logger()
 
     s1 = time.time()
     model = load_master_model(args.model_path)
@@ -226,15 +223,15 @@ async def run_server(args) -> None:
         if os.path.isfile(CLIENT_SOCKET_PATH):
             os.remove(CLIENT_SOCKET_PATH)
 
-        args_handler = copy.deepcopy(args)
-        args_handler.hostname = "localhost"
-        args_handler.grpc_port = None
-        args_handler.master_addr = f"http://{args_handler.hostname}:{args_handler.http_port}"
+        worker_args = copy.deepcopy(args)
+        worker_args.hostname = "localhost"
+        worker_args.grpc_port = None
+        worker_args.master_addr = f"http://{worker_args.hostname}:{worker_args.http_port}"
         args.hostname = f"unix://{MASTER_SOCKET_PATH}"
     else:
-        args_handler = None
+        worker_args = None
 
-    grpc_process = GRPCProcess(args_handler)
+    grpc_process = GRPCProcess(worker_args)
     shutdown_task = await serve_http(app, grpc_process, engine, master_server, **uvicorn_kwargs)
 
     await shutdown_task

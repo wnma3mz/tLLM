@@ -35,17 +35,22 @@ class BaseCommunicator:
 
 if BACKEND == BackendEnum.MLX:
     import mlx.core as mx
+    from mpi4py import MPI
 
     class MLXCommunicator(BaseCommunicator):
         def __init__(self) -> None:
-            world = mx.distributed.init()
-            self.world_size = world.size()
-            self.rank = world.rank()
-            print(f"MLXCommunicator: rank={self.rank}, world_size={self.world_size}")
+            # world = mx.distributed.init()
+            self.comm = MPI.COMM_WORLD
+            self.world_size = self.comm.Get_size()
+            self.rank = self.comm.Get_rank()
 
         def all_reduce(self, x: mx.array) -> mx.array:
             # input shape == output shape
-            return mx.distributed.all_sum(x)
+            # return mx.distributed.all_sum(x)
+            x = x.astype(mx.float32)
+            global_out = mx.zeros_like(x)
+            self.comm.Allreduce(x, global_out, op=MPI.SUM)
+            return global_out.astype(mx.float16)
 
         def all_gather(self, x: mx.array):
             raise NotImplementedError
@@ -56,15 +61,15 @@ if BACKEND == BackendEnum.MLX:
         def broadcast(self, x: mx.array):
             raise NotImplementedError
 
-        def broadcast_object(self, obj_list: List[Any]):
-            raise NotImplementedError
+        def broadcast_object(self, obj_list: Any):
+            return self.comm.bcast(obj_list, root=0)
 
     # Feature: MLXCommunicator
-    if "WORLD_SIZE" in os.environ and int(os.environ["WORLD_SIZE"]) > 1:
-        print("Using MLXCommunicator")
-        Communicator = MLXCommunicator
-    else:
-        Communicator = BaseCommunicator
+    # if "WORLD_SIZE" in os.environ and int(os.environ["WORLD_SIZE"]) > 1:
+    #     print("Using MLXCommunicator")
+    Communicator = MLXCommunicator
+    # else:
+    #     Communicator = BaseCommunicator
 elif BACKEND == BackendEnum.TORCH:
     import torch
     import torch.distributed as dist
