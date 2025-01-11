@@ -35,11 +35,14 @@ class DynamicNTKScalingRoPE:
 class MLXLlamaModel(nn.Module):
     def __init__(self, config: AutoConfig, is_merge: bool = True):
         super().__init__()
+
+        config_dict = config.to_dict()
+        comm = config_dict.pop("comm")
         args = ModelArgs.from_dict(config.to_dict())
 
-        args.comm = config.comm
-        self.world_size = config.comm.world_size
-        self.rank = config.comm.rank
+        args.comm = comm
+        self.world_size = args.comm.world_size
+        self.rank = args.comm.rank
 
         self.vocab_size = args.vocab_size
         self.cache_manager = CacheManager()

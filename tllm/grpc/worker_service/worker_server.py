@@ -169,7 +169,10 @@ async def run(args):
     args, ip_addr_list = update_handler_args(args)
 
     logger = SingletonLogger.setup_handler_logger(f"handler-{args.grpc_port}")
-    comm = Communicator(logger)
+    # comm = Communicator(logger)
+    comm_ip_list = ["192.168.124.30", "192.168.124.5"]
+    comm_port_list = [50051, 50051]
+    comm = Communicator(logger, 2, 0, comm_ip_list, comm_port_list)
 
     logger.info(f"[MLXCommunicator] Rank: {comm.rank}; World Size: {comm.world_size}")
 
