@@ -101,14 +101,12 @@ class WorkerServer(schemas_pb2_grpc.RPCServiceServicer):
 
     async def forward_func(self, request: schemas_pb2.ForwardRequest):
         s1 = time.perf_counter()
-        import mlx.core as mx
 
-        convertor = Convertor(dtype=mx.float16)
+        convertor = Convertor()
         hidden_states = convertor.deserialize(request.hidden_states)
 
         seq_input = SeqInput(uuid_list=list(request.uuid), seq_len_list=list(request.seq_len))
-        # self.comm.broadcast_object([seq_input, tuple(hidden_states.shape)])
-        # self.comm.broadcast(hidden_states)
+
         self.comm.broadcast_object(
             {"hidden_states": hidden_states, "uuid_list": list(request.uuid), "seq_len_list": list(request.seq_len)}
         )

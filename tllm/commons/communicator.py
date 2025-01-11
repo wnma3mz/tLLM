@@ -39,17 +39,15 @@ if BACKEND == BackendEnum.MLX:
 
     class MLXCommunicator(BaseCommunicator):
         def __init__(self) -> None:
-            # world = mx.distributed.init()
             self.comm = MPI.COMM_WORLD
             self.world_size = self.comm.Get_size()
             self.rank = self.comm.Get_rank()
 
         def all_reduce(self, x: mx.array) -> mx.array:
             # input shape == output shape
-            # return mx.distributed.all_sum(x)
             x = x.astype(mx.float32)
             global_out = mx.zeros_like(x)
-            self.comm.Allreduce(x, global_out, op=MPI.SUM)
+            self.comm.Allreduce(memoryview(x), memoryview(global_out), op=MPI.SUM)
             return global_out.astype(mx.float16)
 
         def all_gather(self, x: mx.array):
@@ -65,11 +63,11 @@ if BACKEND == BackendEnum.MLX:
             return self.comm.bcast(obj_list, root=0)
 
     # Feature: MLXCommunicator
-    # if "WORLD_SIZE" in os.environ and int(os.environ["WORLD_SIZE"]) > 1:
-    #     print("Using MLXCommunicator")
-    Communicator = MLXCommunicator
-    # else:
-    #     Communicator = BaseCommunicator
+    if "WORLD_SIZE" in os.environ and int(os.environ["WORLD_SIZE"]) > 1:
+        print("Using MLXCommunicator")
+        Communicator = MLXCommunicator
+    else:
+        Communicator = BaseCommunicator
 elif BACKEND == BackendEnum.TORCH:
     import torch
     import torch.distributed as dist
@@ -109,6 +107,8 @@ elif BACKEND == BackendEnum.TORCH:
             dist.broadcast(x, src=0)
 
         def broadcast_object(self, obj_list: List[Any]):
+            # self.comm.broadcast_object([seq_input, tuple(hidden_states.shape)])
+            # self.comm.broadcast(hidden_states)
             dist.broadcast_object_list(obj_list, src=0)
 
     if "WORLD_SIZE" in os.environ and int(os.environ["WORLD_SIZE"]) > 1:

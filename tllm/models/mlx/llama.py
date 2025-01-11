@@ -60,6 +60,8 @@ class MLXLlamaModel(nn.Module):
 
         # cos, sin = self.rotary_emb(attention_data.position_ids)
         # attention_data.cos, attention_data.sin = mx.expand_dims(cos, axis=1), mx.expand_dims(sin, axis=1)
+        if hidden_states.dtype == mx.float16:  # float16 is much slower than bfloat16
+            hidden_states = hidden_states.astype(mx.bfloat16)
         mask = attention_data.attn_mask
         mask = mask if mask is None else mask.astype(hidden_states.dtype)
         output = self.model(hidden_states, mask=mask, cache=attention_data)

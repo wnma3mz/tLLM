@@ -34,7 +34,8 @@ else:
     import mlx.core as mx
     import numpy as np
 
-    DTYPE = mx.bfloat16
+    # DTYPE = mx.bfloat16
+    DTYPE = mx.float16
     CONVERT_DTYPE = mx.float16
     DES_DTYPE = np.float16
     DEVICE = None
