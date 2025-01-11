@@ -19,8 +19,8 @@ args = parse_args()
 os.environ["TLLM_BACKEND"] = args.backend.upper()
 
 
-from tllm.commons.communicator import Communicator
 from tllm.commons.manager import load_client_model, load_master_model
+from tllm.commons.tp_communicator import Communicator
 from tllm.engine import AsyncEngine
 from tllm.entrypoints.image_server.image_protocol import Text2ImageRequest
 from tllm.entrypoints.image_server.server_image import ImageServing

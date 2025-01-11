@@ -50,23 +50,28 @@ class WorkerRPCManager:
         self.pending_requests = pending_requests
         self.grpc_options = GRPC_OPTIONS
         self.client_size = client_size
-        self.stub_list = [None for _ in range(client_size)]
+        self.stub_list: List[List[schemas_pb2_grpc.RPCServiceStub]] = [None for _ in range(client_size)]
 
         self.task: Optional[asyncio.Task] = None
         self.last_check_result: List[int] = []
         self.last_check_time: Optional[float] = None
 
-    def update_url(self, url_list: List[str]):
-        for i, url in enumerate(url_list):
-            channel = grpc.aio.insecure_channel(url, options=self.grpc_options)
-            self.stub_list[i] = schemas_pb2_grpc.RPCServiceStub(channel)
+    def update_url(self, url_list_list: List[List[str]]):
+        for i, url_list in enumerate(url_list_list):
+            pp_stub_list = []
+            for url in url_list:
+                channel = grpc.aio.insecure_channel(url, options=self.grpc_options)
+                stub = schemas_pb2_grpc.RPCServiceStub(channel)
+                pp_stub_list.append(stub)
+            self.stub_list[i] = pp_stub_list
 
-    async def send_config(self, master_url: str, host_list: List[str]):
+    async def send_config(self, master_url: str, host_list: List[List[str]]):
         assert len(host_list) == self.client_size
 
         async def set_single_config(i: int) -> None:
-            url = master_url if i == self.client_size - 1 else host_list[i + 1]
-            await rpc_set_config(self.stub_list[i], {"forward_url": url, "master_url": master_url, "pp_rank": i})
+            url = master_url if i == self.client_size - 1 else host_list[i + 1][0] # TODO: 对于多个 PP，这里有 bug
+            for stub in self.stub_list[i]:
+                await rpc_set_config(stub, {"forward_url": url, "master_url": master_url, "pp_rank": i})
 
         tasks = [set_single_config(i) for i in range(self.client_size)]
         await asyncio.gather(*tasks)
@@ -74,7 +79,7 @@ class WorkerRPCManager:
     async def health_check(self) -> Tuple[int]:
         async def check_single_client(index: int) -> Tuple[int, bool]:
             try:
-                await rpc_health_check(self.stub_list[index])
+                await rpc_health_check(self.stub_list[index][0]) # 只需要检查一个
                 return (index, True)
             except Exception as e:
                 return (index, False)
@@ -95,7 +100,8 @@ class WorkerRPCManager:
         forward_future, status_future = self.pending_requests.add_request(
             "-".join(x for x in seq_input.uuid_list), self.client_size
         )
-        asyncio.create_task(rpc_forward(self.stub_list[0], seq_input.uuid_list, seq_input.seq_len_list, hidden_states))
+        for stub in self.stub_list[0]:
+            asyncio.create_task(rpc_forward(stub, seq_input.uuid_list, seq_input.seq_len_list, hidden_states))
         await asyncio.sleep(0)
         try:
             output = await asyncio.wait_for(forward_future, timeout=PP_TIMEOUT)
@@ -123,9 +129,11 @@ class WorkerRPCManager:
         forward_future, status_future = self.pending_requests.add_request(
             "-".join(x for x in [request_id]), self.client_size
         )
-        asyncio.create_task(
-            rpc_image_forward(self.stub_list[0], [request_id], hidden_states, text_embeddings, seq_len, height, width)
-        )
+
+        for stub in self.stub_list[0]:
+            asyncio.create_task(
+                rpc_image_forward(stub, [request_id], hidden_states, text_embeddings, seq_len, height, width)
+            )
         await asyncio.sleep(0)
         try:
             output = await asyncio.wait_for(forward_future, timeout=PP_TIMEOUT)

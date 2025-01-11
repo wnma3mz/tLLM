@@ -2,6 +2,7 @@ import asyncio
 import copy
 import os
 import time
+from typing import List
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -141,9 +142,12 @@ async def update_model_url():
     # 如果有操作需要更新各个客户端的信息，需要在这里更新
     # if ws_manager.has_full_model:
     #     return
-    host_list = ws_manager.set_connect_clients()
+    host_list: List[List[str]] = ws_manager.set_connect_clients()
     if len(host_list) > 0:
-        host_list = [f"unix://{CLIENT_SOCKET_PATH}" if x.startswith("localhost") else x for x in host_list]
+        host_list = [
+            [f"unix://{CLIENT_SOCKET_PATH}" if x.startswith("localhost") else x for x in clients]
+            for clients in host_list
+        ]
         worker_rpc_manager.update_url(host_list)
         master_url = args.hostname if args.is_local else f"{args.hostname}:{args.grpc_port}"
         await worker_rpc_manager.send_config(master_url, host_list)

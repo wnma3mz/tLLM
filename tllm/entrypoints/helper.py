@@ -1,3 +1,4 @@
+from collections import defaultdict
 import ipaddress
 import socket
 import time
@@ -65,21 +66,21 @@ def get_ips() -> List[Optional[str]]:
                             },
                         )
                     )
-            elif addr.family == socket.AF_INET6:  # IPv6
-                # 过滤本地链接地址和回环地址
-                ip = addr.address.split("%")[0]  # 移除接口标识符
-                if not ip.startswith("fe80:") and not ip.startswith("::1"):
-                    ip_info.append(
-                        (
-                            ip,
-                            {
-                                "interface": interface,
-                                "type": "ipv6",
-                                "speed": getattr(stats, "speed", 0),
-                                "is_private": ipaddress.ip_address(ip).is_private,
-                            },
-                        )
-                    )
+            # elif addr.family == socket.AF_INET6:  # IPv6
+            #     # 过滤本地链接地址和回环地址
+            #     ip = addr.address.split("%")[0]  # 移除接口标识符
+            #     if not ip.startswith("fe80:") and not ip.startswith("::1"):
+            #         ip_info.append(
+            #             (
+            #                 ip,
+            #                 {
+            #                     "interface": interface,
+            #                     "type": "ipv6",
+            #                     "speed": getattr(stats, "speed", 0),
+            #                     "is_private": ipaddress.ip_address(ip).is_private,
+            #                 },
+            #             )
+            #         )
 
     scored_ips = [(ip_info, score_ip(ip_info)) for ip_info in ip_info]
     scored_ips.sort(key=lambda x: x[1], reverse=True)
@@ -135,11 +136,13 @@ def is_ipv6(ip: str) -> bool:
         return False
 
 
-def find_continuous_path(clients: Dict[str, ClientData], end_idx: int) -> Optional[List[ClientData]]:
-    # 创建一个映射，记录每个start_layer_idx对应的id和end_layer_idx
-    layer_map = {item.start_idx: item for item in clients.values()}
+def find_continuous_path(clients: Dict[str, ClientData], end_idx: int) -> Optional[List[List[ClientData]]]:
+    # 创建一个映射，记录每个 start_idx 对应的 id 和 end_idx
+    layer_map = defaultdict(list)
+    for client_data in clients.values():
+        layer_map[client_data.start_idx].append(client_data)
 
-    # 找到start_layer_idx为0的起始点
+    # 找到 start_idx 为0的起始点
     if 0 not in layer_map:
         return None
 
@@ -147,16 +150,31 @@ def find_continuous_path(clients: Dict[str, ClientData], end_idx: int) -> Option
     current_layer = 0
 
     while current_layer in layer_map:
-        current_item = layer_map[current_layer]
-        path.append(current_item)
+        current_item_list: List[ClientData] = layer_map[current_layer]
+        for current_item in current_item_list:
+            if current_item.tp_rank == -1:
+                path.append([current_item])
+            else:
+                # tensor parallel，需要记录多个节点
+                # TODO: 不校验 TP SIZE，找到所有 client 前缀相同的
+                tp_node_list = [
+                    item
+                    for item in current_item_list
+                    if item.client_id.split("-", 1)[0] == current_item.client_id.split("-", 1)[0]
+                ]
+                path.append(tp_node_list)
 
-        # 如果达到了目标，返回路径
-        if end_idx == current_item.start_idx:
-            return path
+            # 如果达到了目标，返回路径
+            if end_idx == current_item.start_idx:
+                return path
 
-        # 更新当前层为下一个起始层
-        current_layer = current_item.end_idx
+            # 更新当前层为下一个起始层
+            current_layer = current_item.end_idx
 
-        if end_idx == current_layer:
-            return path
+            # 提前退出
+            if end_idx == current_layer:
+                return path
+
+            # TODO: ADD DFS
+            break
     return None

@@ -7,9 +7,9 @@ import uuid
 import grpc
 
 from tllm import CLIENT_SOCKET_PATH, GRPC_OPTIONS
-from tllm.commons.communicator import BaseCommunicator, Communicator
 from tllm.commons.convert import Convertor
 from tllm.commons.manager import load_client_model
+from tllm.commons.tp_communicator import BaseCommunicator, Communicator
 from tllm.entrypoints.utils import parse_handler_args, update_handler_args
 from tllm.grpc.proto import schemas_pb2, schemas_pb2_grpc
 from tllm.grpc.worker_service.http_client import HTTPClient
@@ -17,13 +17,11 @@ from tllm.grpc.worker_service.master_manager import MasterRPCManager
 from tllm.schemas import SeqInput
 from tllm.singleton_logger import SingletonLogger
 
-INIT_MODEL_TAG = 11
-
 
 class WorkerServer(schemas_pb2_grpc.RPCServiceServicer):
-    def __init__(self, comm: BaseCommunicator, logger, master_url: str):
+    def __init__(self, comm: BaseCommunicator, logger, master_url: str, client_id: str):
         self.comm = comm
-        self.client_id = f"{str(uuid.uuid4())[:8]}"
+        self.client_id = client_id
 
         self.server = None
         self.model = None
@@ -34,36 +32,7 @@ class WorkerServer(schemas_pb2_grpc.RPCServiceServicer):
         self.master_rpc_manager = MasterRPCManager(self.grpc_options)
         self.http_client = HTTPClient(master_url, comm, logger)
 
-        if comm.rank == 0:
-            pass
-        else:
-            init_model_dict = None
-            input_dict = None
-            while self.comm.world_size > 1:
-                init_model_dict = self.comm.broadcast_object(init_model_dict)
-                self.model = load_client_model(
-                    init_model_dict["start_idx"], init_model_dict["end_idx"], self.comm, init_model_dict["model_path"]
-                )
-                break
-
-            while self.comm.world_size > 1:
-                input_dict = self.comm.broadcast_object(input_dict)
-                seq_input = SeqInput(uuid_list=input_dict["uuid_list"], seq_len_list=input_dict["seq_len_list"])
-                self.model(input_dict["hidden_states"], seq_input)
-
-            # import torch
-            # uuid_shape_list = [None, None]
-
-            # while self.comm.world_size > 1:
-            #     self.comm.broadcast_object(uuid_shape_list)
-            #     seq_input, hidden_states_shape = uuid_shape_list
-            #     hidden_states = torch.empty(hidden_states_shape, dtype=self.model.dtype)
-            #     self.comm.broadcast(hidden_states)
-
-            #     _ = self.model.forward(hidden_states, seq_input=seq_input)
-
     def load_model_func(self, model_path: str, start_idx: int, end_idx: int):
-        self.comm.broadcast_object({"model_path": model_path, "start_idx": start_idx, "end_idx": end_idx})
         self.model = load_client_model(start_idx, end_idx, self.comm, model_path)
 
     async def start(self, ip_addr_list: List[str], port: int = 50051):
@@ -71,13 +40,19 @@ class WorkerServer(schemas_pb2_grpc.RPCServiceServicer):
 
         schemas_pb2_grpc.add_RPCServiceServicer_to_server(self, self.server)
         self.server.add_insecure_port(f"[::]:{port}")
-        self.server.add_insecure_port(f"unix://{CLIENT_SOCKET_PATH}")
+        # self.server.add_insecure_port(f"unix://{CLIENT_SOCKET_PATH}_{self.comm.rank}")
         self.logger.info(f"Starting gRPC server on [::]:{port}")
         await self.server.start()
 
         self.http_client.is_running = True
         ping_task = asyncio.create_task(
-            self.http_client.maintain_connection(self.client_id, ip_addr_list, port, self.load_model_func)
+            self.http_client.maintain_connection(
+                self.client_id,
+                ip_addr_list,
+                port,
+                self.load_model_func,
+                self.comm.rank if self.comm.world_size > 1 else -1,
+            )
         )
 
         try:
@@ -107,28 +82,25 @@ class WorkerServer(schemas_pb2_grpc.RPCServiceServicer):
 
         seq_input = SeqInput(uuid_list=list(request.uuid), seq_len_list=list(request.seq_len))
 
-        self.comm.broadcast_object(
-            {"hidden_states": hidden_states, "uuid_list": list(request.uuid), "seq_len_list": list(request.seq_len)}
-        )
-
-        self.logger.debug(f"deserialize_tensor cost time: {time.perf_counter() - s1:.4f}")
+        self.comm.debug_rank0(f"deserialize_tensor cost time: {time.perf_counter() - s1:.4f}")
 
         s1 = time.perf_counter()
         output_hidden_states = self.model(hidden_states, seq_input)
         cost_time = time.perf_counter() - s1
-        self.logger.debug(f"forward cost time: {cost_time:.4f}")
+        self.comm.debug_rank0(f"forward cost time: {cost_time:.4f}")
 
         s1 = time.perf_counter()
         output = convertor.serialize(output_hidden_states)
-        self.logger.debug(f"serialize_tensor cost time: {time.perf_counter() - s1:.4f}")
-        self.logger.debug("=" * 20)
+        self.comm.debug_rank0(f"serialize_tensor cost time: {time.perf_counter() - s1:.4f}")
+        self.comm.debug_rank0("=" * 20)
 
-        await self.master_rpc_manager.rpc_func(request.uuid, request.seq_len, output, cost_time)
+        if self.comm.is_rank0():
+            await self.master_rpc_manager.rpc_func(request.uuid, request.seq_len, output, cost_time)
 
     async def SetConfig(
         self, request: schemas_pb2.SetConfigRequest, context: grpc.ServicerContext
     ) -> schemas_pb2.SetConfigResponse:
-        self.logger.debug(f"forward_url: {request.forward_url}")
+        self.comm.debug_rank0(f"forward_url: {request.forward_url}")
         self.master_rpc_manager.update_url(request.master_url, request.forward_url, request.pp_rank)
         return schemas_pb2.SetConfigResponse(msg="SetConfig Completed", status=200)
 
@@ -160,19 +132,19 @@ class WorkerServer(schemas_pb2_grpc.RPCServiceServicer):
         hidden_states = convertor.deserialize(request.hidden_states)
         text_embeddings = convertor.deserialize(request.text_embeddings)
 
-        self.logger.debug(f"deserialize_tensor cost time: {time.perf_counter() - s1:.4f}")
+        self.comm.debug_rank0(f"deserialize_tensor cost time: {time.perf_counter() - s1:.4f}")
 
         s1 = time.perf_counter()
         output_hidden_states = self.model(
             hidden_states, text_embeddings, request.seq_len, request.height, request.width, request.uuid
         )
         cost_time = time.perf_counter() - s1
-        self.logger.debug(f"forward cost time: {cost_time:.4f}")
+        self.comm.debug_rank0(f"forward cost time: {cost_time:.4f}")
 
         s1 = time.perf_counter()
         output = convertor.serialize(output_hidden_states)
-        self.logger.debug(f"serialize_tensor cost time: {time.perf_counter() - s1:.4f}")
-        self.logger.debug("=" * 20)
+        self.comm.debug_rank0(f"serialize_tensor cost time: {time.perf_counter() - s1:.4f}")
+        self.comm.debug_rank0("=" * 20)
 
         await self.master_rpc_manager.rpc_image_func(request, output, cost_time)
 
@@ -196,22 +168,22 @@ async def run(args):
     SingletonLogger.set_level("DEBUG" if args.is_debug else "INFO")
     args, ip_addr_list = update_handler_args(args)
 
-    comm = Communicator()
-
     logger = SingletonLogger.setup_handler_logger(f"handler-{args.grpc_port}")
+    comm = Communicator(logger)
+
     logger.info(f"[MLXCommunicator] Rank: {comm.rank}; World Size: {comm.world_size}")
 
-    rpc_servicer = WorkerServer(comm, logger, args.master_addr)
-    if comm.rank == 0:
-        logger.info("args: %s", args)
-        try:
-            await rpc_servicer.start(ip_addr_list, args.grpc_port)
-        except Exception as e:
-            logger.error(f"Error occurred: {str(e)}")
-            await rpc_servicer.stop()
-            raise
-        finally:
-            await rpc_servicer.stop()
+    client_id = f"test-{str(uuid.uuid4())[:8]}-{comm.rank}"
+    rpc_servicer = WorkerServer(comm, logger, args.master_addr, client_id)
+    logger.info("args: %s", args)
+    try:
+        await rpc_servicer.start(ip_addr_list, args.grpc_port)
+    except Exception as e:
+        logger.error(f"Error occurred: {str(e)}")
+        await rpc_servicer.stop()
+        raise
+    finally:
+        await rpc_servicer.stop()
 
 
 def main():

@@ -4,7 +4,7 @@ import socket
 import mlx.core as mx
 from mpi4py import MPI
 
-from tllm.commons.communicator import MLXCommunicator
+from tllm.commons.tp_communicator import MLXCommunicator
 
 hostname = socket.gethostname()
 comm = MLXCommunicator()

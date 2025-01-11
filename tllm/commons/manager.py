@@ -5,7 +5,7 @@ from typing import Any, List
 from transformers import AutoConfig
 
 from tllm import BACKEND, BackendEnum
-from tllm.commons.communicator import BaseCommunicator
+from tllm.commons.tp_communicator import BaseCommunicator
 from tllm.models.file_helper import find_weight_file, get_model_path
 from tllm.models.register import MODEL_REGISTER
 from tllm.models.weight_helper import load_gguf_weight, read_from_safetensors, tie_embedding_weights

@@ -53,7 +53,7 @@ class HTTPClient:
             async with session.post(f"{self.master_url}/init_model", json=request_data.dict(), timeout=3) as response:
                 return InitModelResponse(**await response.json())
 
-    async def maintain_connection(self, client_id: str, ip_addr_list: List[str], port: int, load_model_func: Callable):
+    async def maintain_connection(self, client_id: str, ip_addr_list: List[str], port: int, load_model_func: Callable, tp_rank: int = -1):
         while self.is_running:
             # 初次连接 or 连接断开时，尝试重连
             retry_count, is_connected = 0, False
@@ -75,7 +75,7 @@ class HTTPClient:
             # ping 通后，进行连接
             if not self.has_connected:
                 try:
-                    await self.connect(client_id, ip_addr_list, port, load_model_func)
+                    await self.connect(client_id, ip_addr_list, port, load_model_func, tp_rank)
                     if await self.ping():
                         break
                 except Exception as e:
@@ -83,10 +83,10 @@ class HTTPClient:
 
             await asyncio.sleep(self.ping_interval)
 
-    async def connect(self, client_id: str, ip_addr_list: List[str], port: int, load_model_func: Callable):
+    async def connect(self, client_id: str, ip_addr_list: List[str], port: int, load_model_func: Callable, tp_rank: int):
         """定期发送连接请求的协程"""
         if not self.init_model_info:
-            register_request = RegisterClientRequest(client_id=client_id, host=ip_addr_list, port=port)
+            register_request = RegisterClientRequest(client_id=client_id, host=ip_addr_list, port=port, tp_rank=tp_rank)
             response: RegisterClientResponse = await self.register_client(register_request)
             if response.start_idx == -1:
                 self.logger.error("Connection failed(start_idx == -1)")
@@ -104,6 +104,7 @@ class HTTPClient:
                 "end_idx": response.end_idx,
             }
             init_request = InitModelRequest(client_id=client_id, **self.init_model_info)
+            self.init_model_info["tp_rank"] = tp_rank           
             response = await self.init_model(init_request)
             self.logger.info(f"Connection successful")
             self.has_connected = True
@@ -112,6 +113,7 @@ class HTTPClient:
                 client_id=client_id,
                 host=ip_addr_list,
                 port=port,
+                tp_rank=self.init_model_info["tp_rank"],
                 pp_rank=self.init_model_info["pp_rank"],
                 start_idx=self.init_model_info["start_idx"],
                 end_idx=self.init_model_info["end_idx"],
