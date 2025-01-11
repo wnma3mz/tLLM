@@ -6,6 +6,7 @@ from mlx_lm.models.llama import ModelArgs
 import numpy as np
 from transformers import AutoConfig
 
+from tllm import DTYPE
 from tllm.commons.cache import CacheManager
 from tllm.models.mlx.helper import build_forward_cache, get_last_hidden_states, quantization_func
 from tllm.models.mlx.layers import Decoder
@@ -107,5 +108,5 @@ class MLXQwen2ForCausalLM(nn.Module):
         return self.embed_tokens(mx.array(x))
 
     def get_logits(self, hidden_states: mx.array) -> mx.array:
-        logits = self.lm_head(self.norm(hidden_states))
+        logits = self.lm_head(self.norm(hidden_states.astype(DTYPE)))
         return logits

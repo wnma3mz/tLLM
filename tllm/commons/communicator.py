@@ -36,6 +36,21 @@ class BaseCommunicator:
 if BACKEND == BackendEnum.MLX:
     import mlx.core as mx
     from mpi4py import MPI
+    import numpy as np
+
+    mpi_float16 = MPI.BYTE.Create_contiguous(2).Commit()
+    MPI._typedict["e"] = mpi_float16
+
+    def sum_f16_cb(inbuf, outbuf, t):
+        """Custom reduction function for float16 sum."""
+        assert t == mpi_float16  # Ensure data type consistency
+        array_a = np.frombuffer(inbuf, dtype="float16")
+        array_b = np.frombuffer(outbuf, dtype="float16")
+        array_b += array_a
+        return array_b  # Return the updated `outbuf`
+
+    # Create the custom reduction operation (commutative for efficiency)
+    mpi_sum_f16 = MPI.Op.Create(sum_f16_cb, commute=True)
 
     class MLXCommunicator(BaseCommunicator):
         def __init__(self) -> None:
@@ -44,11 +59,11 @@ if BACKEND == BackendEnum.MLX:
             self.rank = self.comm.Get_rank()
 
         def all_reduce(self, x: mx.array) -> mx.array:
-            # input shape == output shape
-            x = x.astype(mx.float32)
+            ori_dtype = x.dtype
+            x = x.astype(mx.float16)
             global_out = mx.zeros_like(x)
-            self.comm.Allreduce(memoryview(x), memoryview(global_out), op=MPI.SUM)
-            return global_out.astype(mx.float16)
+            self.comm.Allreduce([memoryview(x), mpi_float16], [memoryview(global_out), mpi_float16], op=mpi_sum_f16)
+            return global_out.astype(ori_dtype)
 
         def all_gather(self, x: mx.array):
             raise NotImplementedError
@@ -63,11 +78,11 @@ if BACKEND == BackendEnum.MLX:
             return self.comm.bcast(obj_list, root=0)
 
     # Feature: MLXCommunicator
-    if "WORLD_SIZE" in os.environ and int(os.environ["WORLD_SIZE"]) > 1:
-        print("Using MLXCommunicator")
-        Communicator = MLXCommunicator
-    else:
-        Communicator = BaseCommunicator
+    # if "WORLD_SIZE" in os.environ and int(os.environ["WORLD_SIZE"]) > 1:
+    #     print("Using MLXCommunicator")
+    Communicator = MLXCommunicator
+    # else:
+    #     Communicator = BaseCommunicator
 elif BACKEND == BackendEnum.TORCH:
     import torch
     import torch.distributed as dist

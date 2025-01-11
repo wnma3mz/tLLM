@@ -103,7 +103,7 @@ def list_to_protobuf(data: List):
 
 
 class Convertor:
-    def __init__(self, ser_dtype=CONVERT_DTYPE, des_dtype=DES_DTYPE, dtype=DTYPE):
+    def __init__(self, ser_dtype=CONVERT_DTYPE, des_dtype=DES_DTYPE, dtype=CONVERT_DTYPE):
         self.serialize_func = serialize_func
         self.deserialize_func = deserialize_func
         self.ser_dtype = ser_dtype

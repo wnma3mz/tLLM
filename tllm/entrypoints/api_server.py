@@ -139,8 +139,8 @@ async def monitor_websocket(websocket: WebSocket):
 
 async def update_model_url():
     # 如果有操作需要更新各个客户端的信息，需要在这里更新
-    if ws_manager.has_full_model:
-        return
+    # if ws_manager.has_full_model:
+    #     return
     host_list = ws_manager.set_connect_clients()
     if len(host_list) > 0:
         host_list = [f"unix://{CLIENT_SOCKET_PATH}" if x.startswith("localhost") else x for x in host_list]
