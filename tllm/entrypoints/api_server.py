@@ -153,6 +153,8 @@ async def update_model_url():
         await worker_rpc_manager.send_config(master_url, host_list)
         # 后台持续进行健康检查，如果有节点挂掉，需要重新分配
         await worker_rpc_manager.start_health_check()
+    if not ws_manager.has_full_model:
+        logger.info("No available Full Node to process the request")
 
 
 @app.post("/register_client")

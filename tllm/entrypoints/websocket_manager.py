@@ -45,7 +45,9 @@ class WebsocketManager:
         self.logger.debug(f"ping {host} delay: {delay:.2f}ms")
         if request.pp_rank == -1:
             # 其他属性会在 init_client 中初始化
-            self.clients[request.client_id] = ClientData(client_id=request.client_id, host=host, tp_rank=request.tp_rank)
+            self.clients[request.client_id] = ClientData(
+                client_id=request.client_id, host=host, tp_rank=request.tp_rank
+            )
 
             pp_rank, start_idx, end_idx = self.get_free_layer()
             return RegisterClientResponse(
@@ -115,11 +117,14 @@ class WebsocketManager:
 
     def unset_connect_clients(self, idx_list: List[int]):
         for idx in idx_list:
-            self.unregister_client(self.connect_clients[idx].client_id)
+            for client in self.connect_clients[idx]:
+                self.unregister_client(client.client_id)
         self.connect_clients = []
 
     def print_host_list(self):
-        self.logger.info("Route Path: " + "->".join([f"[{','.join(x.host for x in clients)}]" for clients in self.connect_clients]))
+        self.logger.info(
+            "Route Path: " + "->".join([f"[{','.join(x.host for x in clients)}]" for clients in self.connect_clients])
+        )
 
     def find_connect_clients(self, client_id) -> bool:
         for client in self.clients.values():

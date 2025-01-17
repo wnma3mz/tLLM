@@ -17,9 +17,9 @@ if BACKEND == BackendEnum.MLX:
 else:
     import torch
 
-    serialize_func = lambda tensor, tensor_dtype: tensor.to(tensor_dtype).cpu().detach().numpy().tobytes()
+    serialize_func = lambda tensor, tensor_dtype: tensor.to(tensor_dtype).detach().cpu().numpy().tobytes()
     deserialize_func = (
-        lambda proto, x, dtype, des_dtype: torch.frombuffer(x, dtype=des_dtype).to(dtype).view(*proto.shape)
+        lambda proto, x, dtype, des_dtype: torch.frombuffer(np.copy(x), dtype=des_dtype).to(dtype).view(*proto.shape)
     )
 
 
