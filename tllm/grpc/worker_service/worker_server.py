@@ -40,7 +40,7 @@ class WorkerServer(schemas_pb2_grpc.RPCServiceServicer):
 
         schemas_pb2_grpc.add_RPCServiceServicer_to_server(self, self.server)
         self.server.add_insecure_port(f"[::]:{port}")
-        self.server.add_insecure_port(f"unix://{CLIENT_SOCKET_PATH}_{self.comm.rank}")
+        self.server.add_insecure_port(f"unix://{CLIENT_SOCKET_PATH}")
         self.logger.info(f"Starting gRPC server on [::]:{port}")
         await self.server.start()
 
