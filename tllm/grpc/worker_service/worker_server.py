@@ -40,7 +40,7 @@ class WorkerServer(schemas_pb2_grpc.RPCServiceServicer):
 
         schemas_pb2_grpc.add_RPCServiceServicer_to_server(self, self.server)
         self.server.add_insecure_port(f"[::]:{port}")
-        # self.server.add_insecure_port(f"unix://{CLIENT_SOCKET_PATH}_{self.comm.rank}")
+        self.server.add_insecure_port(f"unix://{CLIENT_SOCKET_PATH}_{self.comm.rank}")
         self.logger.info(f"Starting gRPC server on [::]:{port}")
         await self.server.start()
 
@@ -169,12 +169,8 @@ async def run(args):
     args, ip_addr_list = update_handler_args(args)
 
     logger = SingletonLogger.setup_handler_logger(f"handler-{args.grpc_port}")
-    # comm = Communicator(logger)
-    comm_ip_list = ["192.168.124.30", "192.168.124.5"]
-    comm_port_list = [50051, 50051]
-    comm = Communicator(logger, 2, 0, comm_ip_list, comm_port_list)
-
-    logger.info(f"[MLXCommunicator] Rank: {comm.rank}; World Size: {comm.world_size}")
+    comm = Communicator(logger)
+    logger.info(f"[{Communicator.__name__}] Rank: {comm.rank}; World Size: {comm.world_size}")
 
     client_id = f"test-{str(uuid.uuid4())[:8]}-{comm.rank}"
     rpc_servicer = WorkerServer(comm, logger, args.master_addr, client_id)

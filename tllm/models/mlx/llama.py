@@ -36,8 +36,8 @@ class MLXLlamaModel(nn.Module):
     def __init__(self, config: AutoConfig, is_merge: bool = True):
         super().__init__()
 
-        config_dict = config.to_dict()
-        comm = config_dict.pop("comm")
+        comm = config.comm
+        del config.comm
         args = ModelArgs.from_dict(config.to_dict())
 
         args.comm = comm

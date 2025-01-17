@@ -20,7 +20,8 @@ class MLXQwen2Model(nn.Module):
         super().__init__()
         config_dict = config.to_dict()
         config_dict.pop("rope_scaling")  # TODO: remove this line
-        comm = config_dict.pop("comm")
+        comm = config.comm
+        del config.comm
         args = ModelArgs.from_dict(config_dict)
 
         args.comm = comm
