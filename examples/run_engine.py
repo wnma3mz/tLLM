@@ -1,6 +1,5 @@
 import argparse
 import asyncio
-from dataclasses import dataclass
 import math
 import os
 import time
@@ -12,12 +11,12 @@ from PIL import Image
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--backend", type=str, default="MLX", choices=["MLX", "TORCH", "mlx", "torch"])
+    parser.add_argument("--model_path", type=str, default="mlx-community/Llama-3.2-1B-Instruct-4bit")
     return parser.parse_args()
 
 
 args = parse_args()
 os.environ["TLLM_BACKEND"] = args.backend.upper()
-
 
 from tllm.commons.manager import load_client_model, load_master_model
 from tllm.commons.tp_communicator import Communicator
@@ -29,23 +28,16 @@ from tllm.entrypoints.server_chat import OpenAIServing
 from tllm.generate import ImageGenerator, LLMGenerator
 from tllm.img_helper import base64_to_pil_image
 from tllm.schemas import MIX_TENSOR, SeqInput
+from tllm.singleton_logger import SingletonLogger
 
-
-@dataclass
-class Args:
-    # model_path: str = "/Users/lujianghu/Documents/Llama-3.2-1B-Instruct"
-    # model_path: str = "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit"
-    model_path: str = "mlx-community/Llama-3.2-1B-Instruct-4bit"
-    # model_path: str = "/Users/lujianghu/Documents/flux/schnell_4bit"
-    # model_path: str = "Qwen/Qwen2.5-0.5B-Instruct"
-    # model_path: str = "Qwen/Qwen2-VL-2B-Instruct"
-    is_debug: bool = False
+SingletonLogger.set_level("INFO")
+logger = SingletonLogger.setup_master_logger()
 
 
 class LocalRPCManager:
     # 并不发生通信，直接调用模型
     def __init__(self, model_path: str):
-        self.model = load_client_model(0, math.inf, Communicator(), model_path)
+        self.model = load_client_model(0, math.inf, Communicator(logger), model_path)
 
     async def forward(self, hidden_states: MIX_TENSOR, seq_input: SeqInput) -> Tuple[MIX_TENSOR, List[float]]:
         s1 = time.perf_counter()
@@ -132,7 +124,7 @@ async def image_generate(args):
 
 
 if __name__ == "__main__":
-    args = Args()
+    args = parse_args()
     asyncio.run(llm_generate(args, llm_message()))
     # asyncio.run(llm_generate(args, mllm_message()))
     # asyncio.run(image_generate(args))
