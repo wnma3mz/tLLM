@@ -158,6 +158,7 @@ class SequenceRequestData:
     output_text: Optional[str] = None  # 最终生成的 text
 
     generate_text: Optional[str] = None  # 每次生成的 text
+    cache_token_ids: Optional[List[int]] = None  # 缓存的 token id
 
     ttft_cost_time: Optional[float] = None
     decode_start_ts: Optional[float] = None

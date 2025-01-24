@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from transformers import AutoTokenizer
 
@@ -39,5 +39,19 @@ class TokenizerUtils:
             input_ids.pop(0)
         return TokenizerResult(input_ids=input_ids, input_str=text)
 
-    def decode(self, token_ids: List[int]) -> List[str]:
-        return self.tokenizer.batch_decode(token_ids)
+    def decode(
+        self, token_ids: List[int], cache_token_ids: List[Optional[List[int]]]
+    ) -> Tuple[List[str], List[Optional[List[int]]]]:
+        for i, cache_token_id in enumerate(cache_token_ids):
+            if cache_token_id is not None:
+                token_ids[i] = cache_token_id + [token_ids[i]]
+
+        decode_str_list = self.tokenizer.batch_decode(token_ids, skip_special_tokens=True)
+        for i, (token_id, decode_str) in enumerate(zip(token_ids, decode_str_list)):
+            # BPE 解码失败，返回 token_ids, 提供给下次解码
+            if decode_str.endswith("�"):
+                cache_token_ids[i] = token_id if isinstance(token_id, list) else [token_id]
+                decode_str_list[i] = ""
+            else:
+                cache_token_ids[i] = None
+        return decode_str_list, cache_token_ids

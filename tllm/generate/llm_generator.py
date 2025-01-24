@@ -145,9 +145,16 @@ class LLMGenerator:
         # TODO: batch decode by group
         # TODO: sequence_request.sampling_params
         seq_generate_ids: List[int] = sampling_func(seq_logits)
-        seq_generate_texts = self.tok.decode(seq_generate_ids)
+        seq_generate_texts, cache_token_ids_list = self.tok.decode(
+            seq_generate_ids, [x.cache_token_ids for x in request_list]
+        )
 
-        for generate_id, generate_text, sequence_request in zip(seq_generate_ids, seq_generate_texts, request_list):
+        for seq_idx, sequence_request in enumerate(request_list):
+            generate_id = seq_generate_ids[seq_idx]
+            generate_id = generate_id[-1] if isinstance(generate_id, list) else generate_id
+            generate_text = seq_generate_texts[seq_idx]
+            sequence_request.cache_token_ids = cache_token_ids_list[seq_idx]
+
             sequence_request.output_ids.append(generate_id)
 
             end = is_generate_end(
