@@ -10,7 +10,6 @@ from tllm import DTYPE
 from tllm.commons.cache import CacheManager
 from tllm.models.mlx.helper import build_forward_cache, get_last_hidden_states, quantization_func
 from tllm.models.mlx.layers import Decoder
-from tllm.models.utils import read_eos_token_ids
 from tllm.models.weight_helper import default_merge_attn, default_merge_mlp
 from tllm.schemas import SeqInput
 
@@ -97,7 +96,6 @@ class MLXQwen2ForCausalLM(nn.Module):
 
         cls.config = config
         cls.num_layers = config.num_hidden_layers
-        cls.eos_token_ids = read_eos_token_ids(config)
 
         model = quantization_func(config, model, state_dict)
         model.load_weights(list(state_dict.items()))  # , strict=False

@@ -6,8 +6,8 @@ from dataclasses import dataclass
 import mlx.core as mx
 import mlx.nn as nn
 
-from tllm.models.mlx.layers import VisionEmbeddings
 from tllm.models.mlx.llama import Decoder
+from tllm.models.mlx.qwen_vl.layers import VisionEmbeddings
 
 # only vision model
 

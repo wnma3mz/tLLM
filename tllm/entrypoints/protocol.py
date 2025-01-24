@@ -168,15 +168,19 @@ class ChatCompletionRequest(OpenAIBaseModel):
         if max_tokens is None:
             max_tokens = default_max_tokens
         if isinstance(tokenizer.eos_token_id, list):
-            stop_token_ids = tokenizer.eos_token_id
+            eos_token_ids = tokenizer.eos_token_id
         else:
-            stop_token_ids = [tokenizer.eos_token_id]
+            eos_token_ids = [tokenizer.eos_token_id]
+        eot_token_id = tokenizer.convert_tokens_to_ids("<|eot_id|>")
+        if isinstance(eot_token_id, int):
+            eos_token_ids.append(eot_token_id)
+
         return SamplingParams(
             top_k=self.top_k,
             top_p=self.top_p,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
-            stop_token_ids=self.stop_token_ids + stop_token_ids,
+            stop_token_ids=self.stop_token_ids + eos_token_ids,
         )
 
     @model_validator(mode="before")

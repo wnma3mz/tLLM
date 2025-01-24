@@ -14,7 +14,6 @@ from tllm.models.mlx.qwen_vl.layers import (
     VisionRotaryEmbedding,
     VisionSdpaAttention,
 )
-from tllm.models.utils import read_eos_token_ids
 
 
 class Qwen2VLVisionBlock(nn.Module):
@@ -121,7 +120,6 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
 
         cls.config = config
         cls.num_layers = config.num_hidden_layers
-        cls.eos_token_ids = read_eos_token_ids(config)
 
         model = quantization_func(config, model, state_dict)
         model.load_weights(list(state_dict.items()))  # , strict=False

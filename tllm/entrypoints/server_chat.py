@@ -53,7 +53,7 @@ class OpenAIServing:
             request_id=request_id,
             history_request_id=history_request_id,
             q_len=q_len,
-            sampling_params=request.to_sampling_params(self.message_processor.tok.tokenizer),
+            sampling_params=request.to_sampling_params(self.engine.tok.tokenizer),
             input_ids=input_ids,
             multi_modal_inputs=mm_input_dict,
         )

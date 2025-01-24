@@ -84,6 +84,7 @@ class LLMGenerator:
         self.logger = SingletonLogger.setup_master_logger()
         self.model = model
         self.tok: TokenizerUtils = model.tok
+        self.stop_token_ids = model.eos_token_ids
         self.processor = getattr(model, "processor", None)
         self.mm_config = getattr(model, "mm_config", None)
         if self.processor is not None:

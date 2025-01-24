@@ -8,7 +8,6 @@ from transformers import AutoProcessor
 from transformers.models.qwen2_vl.modeling_qwen2_vl import Qwen2VisionTransformerPretrainedModel
 
 from tllm import DEVICE, DTYPE
-from tllm.models.utils import read_eos_token_ids
 
 
 class HFQwen2VisionTransformerPretrainedModel(Qwen2VisionTransformerPretrainedModel):
@@ -52,7 +51,6 @@ class HFQwen2VLForConditionalGeneration(nn.Module):
 
         cls.config = config
         cls.num_layers = config.num_hidden_layers
-        cls.eos_token_ids = read_eos_token_ids(config)
 
         model.load_state_dict(state_dict)
         model.to(DTYPE).to(DEVICE)

@@ -10,7 +10,6 @@ from tllm.commons.attn import get_attention_implementation
 from tllm.commons.cache import CacheManager
 from tllm.models.torch.helper import build_forward_cache, get_last_hidden_states
 from tllm.models.torch.llama import Decoder
-from tllm.models.utils import read_eos_token_ids
 from tllm.models.weight_helper import default_merge_attn, default_merge_mlp
 from tllm.schemas import SeqInput
 
@@ -134,7 +133,6 @@ class HFQwen2ForCausalLM(nn.Module):
 
         cls.config = config
         cls.num_layers = config.num_hidden_layers
-        cls.eos_token_ids = read_eos_token_ids(config)
 
         model.load_state_dict(state_dict)
         model.to(DTYPE).to(DEVICE)
