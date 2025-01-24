@@ -52,6 +52,7 @@ def read_from_safetensors(file_path: str, key_list: List[str] = None) -> Dict[st
             for key in f.keys():
                 for prefix_key in key_list:
                     if key.startswith(prefix_key):
+                        print(f"file_path: {file_path}, key: {key}")
                         tensors[key] = f.get_tensor(key)
     else:
         with safe_open(file_path, framework="pt", device="cpu") as f:

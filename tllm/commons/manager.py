@@ -98,11 +98,11 @@ class WeightManager:
         return state_dict
 
     def _hf_read_weight(self, prefix_key_list: List[str]):
-        file_set = find_weight_file(self.model_path, prefix_key_list)
+        file_key_dict = find_weight_file(self.model_path, prefix_key_list)
         state_dict = {}
-        for file in file_set:
+        for file, key_list in file_key_dict.items():
             weight_path = os.path.join(self.model_path, file)
-            state_dict.update(read_from_safetensors(weight_path, prefix_key_list))
+            state_dict.update(read_from_safetensors(weight_path, key_list))
         return state_dict
 
     def _hf_read_master_weight(self):

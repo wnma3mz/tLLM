@@ -45,6 +45,7 @@ def mllm_message():
             ],
         }
     ]
+    # 图片太大，内存不够，TTFT 过慢
     messages2 = [
         {
             "role": "user",
@@ -54,7 +55,7 @@ def mllm_message():
             ],
         }
     ]
-    messages_list = [messages1, messages2]
+    messages_list = [messages1, messages1]
     return messages_list
 
 
@@ -72,5 +73,5 @@ async def main(messages_list: List[List[Dict[str, Any]]]):
 
 
 if __name__ == "__main__":
-    asyncio.run(main(llm_message()))
-    # asyncio.run(main(mllm_message()))
+    # asyncio.run(main(llm_message()))
+    asyncio.run(main(mllm_message()))
