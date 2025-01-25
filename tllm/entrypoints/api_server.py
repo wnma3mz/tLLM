@@ -55,6 +55,8 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
         raise ValueError("No available Full Node to process the request")
     if openai_serving_chat is None:
         raise ValueError("OpenAIServing instance is not initialized")
+    if raw_request.headers.get("authorization") == "Bearer anythingllm":
+        request.max_tokens = 8192
     try:
         generator = await openai_serving_chat.create_chat_completion(request, raw_request)
         if request.stream:

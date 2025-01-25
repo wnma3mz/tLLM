@@ -12,6 +12,7 @@ from transformers.models.llama.modeling_llama import (
     apply_rotary_pos_emb,
 )
 
+from tllm import DEVICE, DTYPE
 from tllm.commons.attn import get_attention_implementation
 from tllm.commons.cache import AttentionData, RequestsCache
 
@@ -153,9 +154,8 @@ class MergedSdpaAttention(nn.Module):
         )
 
         max_seq_len = 1024
-        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        # self._k_cache = torch.zeros(size=(max_seq_len, self.num_key_value_heads, self.head_dim), dtype=torch.bfloat16, device=self.device)
-        # self._v_cache = torch.zeros(size=(max_seq_len, self.num_key_value_heads, self.head_dim), dtype=torch.bfloat16, device=self.device)
+        # self._k_cache = torch.zeros(size=(max_seq_len, self.num_key_value_heads, self.head_dim), dtype=DTYPE, device=DEVICE)
+        # self._v_cache = torch.zeros(size=(max_seq_len, self.num_key_value_heads, self.head_dim), dtype=DTYPE, device=DEVICE)
         self._k_cache, self._v_cache = None, None
 
     def forward(

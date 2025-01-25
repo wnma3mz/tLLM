@@ -21,7 +21,6 @@ if os.environ.get("TLLM_BACKEND", None):
 if BACKEND == BackendEnum.TORCH:
     import torch
 
-    # DTYPE = torch.bfloat16
     DTYPE = torch.float16
     CONVERT_DTYPE = torch.float16
     DES_DTYPE = torch.float16

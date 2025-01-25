@@ -34,8 +34,15 @@ def build_mlx_mask(q_len_list: List[int], k_len_list: List[int]) -> mx.array:
     return final_mask
 
 
-def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_layers: int) -> AttentionData:
-    request_cache = RequestsCache(num_layers)
+def build_forward_cache(
+    seq_input: SeqInput,
+    cache_manager: CacheManager,
+    num_layers: int = -1,
+    max_seq_len: int = -1,
+    num_key_value_heads: int = -1,
+    head_dim: int = -1,
+) -> AttentionData:
+    request_cache = RequestsCache(num_layers, max_seq_len, num_key_value_heads, head_dim)
     q_len_list, k_len_list, position_ids_list = request_cache.build(seq_input, cache_manager)
 
     return AttentionData(

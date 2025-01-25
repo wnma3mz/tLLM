@@ -5,6 +5,7 @@ import mlx.core as mx
 import mlx.nn as nn
 from mlx_lm.models.llama import MLP, Attention, ModelArgs, TransformerBlock, initialize_rope
 
+from tllm import DTYPE
 from tllm.commons.cache import AttentionData, RequestsCache, cat_func
 
 
@@ -143,11 +144,12 @@ class MergedAttention(nn.Module):
         self.layer_idx = layer_idx
         self.offset = offset
 
-        # max_seq_len = 1024
-        # self._k_cache = mx.zeros(shape=(max_seq_len, args.num_key_value_heads, self.head_dim), dtype=self.o_proj.weight.dtype)
-        # self._v_cache = mx.zeros(shape=(max_seq_len, args.num_key_value_heads, self.head_dim), dtype=self.o_proj.weight.dtype)
-        self._k_cache, self._v_cache = None, None
         self.rope = initialize_rope(args)
+        # self.max_seq_len = 1024
+        # self._k_cache = mx.zeros(shape=(self.max_seq_len, self.n_kv_heads, self.head_dim), dtype=DTYPE)
+        # self._v_cache = mx.zeros(shape=(self.max_seq_len, self.n_kv_heads, self.head_dim), dtype=DTYPE)
+        self.max_seq_len = -1
+        self._k_cache, self._v_cache = None, None
 
     def _rope(self, xs: mx.array, request_cache: RequestsCache, uuid_list: List[str]) -> List[mx.array]:
         offset_list = request_cache.get_offset_list(uuid_list, self.layer_idx - self.offset)

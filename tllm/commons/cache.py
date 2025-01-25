@@ -144,13 +144,13 @@ class RequestsCache:
         value_states: MIX_TENSOR,
         uuid_list: List[str],
         layer_idx: int,
-        empty_k_cache: Optional[MIX_TENSOR] = None,
-        empty_v_cache: Optional[MIX_TENSOR] = None,
-    ) -> KV_CACHE_TYPE:
+        empty_k_cache: MIX_TENSOR,
+        empty_v_cache: MIX_TENSOR,
+    ):
+        assert empty_k_cache is not None and empty_v_cache is not None
         start = 0
         total_start = 0
 
-        k_list, v_list = [], []
         for uuid in uuid_list:
             kv_cache: KVCache = self.get_layer_idx_kv_cache(uuid, layer_idx)
             end = start + self.get_seq_len(uuid)  # 获取每个请求对应的区间
@@ -174,18 +174,11 @@ class RequestsCache:
 
             # 最后拼接为整体
             total_end = total_start + kv_cache.kv_len
-            if empty_k_cache is None:
-                k_list.append(kv_cache.key_states[: kv_cache.kv_len])
-                v_list.append(kv_cache.value_states[: kv_cache.kv_len])
-            else:
-                empty_k_cache[total_start:total_end] = kv_cache.key_states[: kv_cache.kv_len]
-                empty_v_cache[total_start:total_end] = kv_cache.value_states[: kv_cache.kv_len]
+            empty_k_cache[total_start:total_end] = kv_cache.key_states[: kv_cache.kv_len]
+            empty_v_cache[total_start:total_end] = kv_cache.value_states[: kv_cache.kv_len]
 
             total_start = total_end
-        if empty_k_cache is None:
-            return cat_func(k_list), cat_func(v_list)
-        else:
-            return empty_k_cache[:total_end], empty_v_cache[:total_end]
+        return empty_k_cache[:total_end], empty_v_cache[:total_end]
 
     def update_tinygrad(self, key_states, value_states, uuid_list, layer_idx):
         key_lst, value_lst = [], []
