@@ -56,6 +56,10 @@ class HFQwen2Model(nn.Module):
         self.num_decoder_layers = config.decoder_end_layer_idx - config.decoder_start_layer_idx
         self.rotary_emb = HFQwen2RotaryEmbedding(config=config)
 
+        self.max_seq_len = self.model.layers[-1].self_attn.max_seq_len
+        self.num_key_value_heads = self.model.layers[-1].self_attn.num_key_value_heads
+        self.head_dim = self.model.layers[-1].self_attn.head_dim
+
     @classmethod
     def from_pretrained(cls, config, state_dict: Dict[str, torch.Tensor], is_merge: bool = True, **kwargs):
         model = cls(config, is_merge)
@@ -95,7 +99,14 @@ class HFQwen2Model(nn.Module):
 
         @return: seq_len x hidden_size
         """
-        attention_data = build_forward_cache(seq_input, self.cache_manager, self.num_decoder_layers)
+        attention_data = build_forward_cache(
+            seq_input,
+            self.cache_manager,
+            self.num_decoder_layers,
+            self.max_seq_len,
+            self.num_key_value_heads,
+            self.head_dim,
+        )
         hidden_states = hidden_states.to(DTYPE).to(DEVICE)
         position_embeddings = self.rotary_emb(hidden_states, attention_data.position_ids.to(DEVICE))
         if attention_type == "flash_attention":

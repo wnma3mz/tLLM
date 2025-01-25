@@ -153,9 +153,10 @@ class MergedSdpaAttention(nn.Module):
             self.num_heads * self.head_dim, self.hidden_size, self.world_size, self.rank, bias=o_proj_bias
         )
 
-        max_seq_len = 1024
+        # self.max_seq_len = 1024
         # self._k_cache = torch.zeros(size=(max_seq_len, self.num_key_value_heads, self.head_dim), dtype=DTYPE, device=DEVICE)
         # self._v_cache = torch.zeros(size=(max_seq_len, self.num_key_value_heads, self.head_dim), dtype=DTYPE, device=DEVICE)
+        self.max_seq_len = -1
         self._k_cache, self._v_cache = None, None
 
     def forward(

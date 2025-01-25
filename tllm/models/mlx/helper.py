@@ -37,7 +37,7 @@ def build_mlx_mask(q_len_list: List[int], k_len_list: List[int]) -> mx.array:
 def build_forward_cache(
     seq_input: SeqInput,
     cache_manager: CacheManager,
-    num_layers: int = -1,
+    num_layers: int,
     max_seq_len: int = -1,
     num_key_value_heads: int = -1,
     head_dim: int = -1,

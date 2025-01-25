@@ -67,9 +67,18 @@ if attention_type == "xformers":
     from xformers.ops import fmha
 
 
-def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_layers: int) -> AttentionData:
+def build_forward_cache(
+    seq_input: SeqInput,
+    cache_manager: CacheManager,
+    num_layers: int,
+    max_seq_len: int = -1,
+    num_key_value_heads: int = -1,
+    head_dim: int = -1,
+) -> AttentionData:
     request_cache = RequestsCache(num_layers)
-    q_len_list, k_len_list, position_ids_list = request_cache.build(seq_input, cache_manager)
+    q_len_list, k_len_list, position_ids_list = request_cache.build(
+        seq_input, cache_manager, max_seq_len, num_key_value_heads, head_dim
+    )
 
     if attention_type == "flash_attention":
         attn_mask = {
