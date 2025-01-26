@@ -1,4 +1,6 @@
+from enum import Enum
 import importlib.util
+import os
 from typing import Dict, Optional
 
 from tllm import BACKEND, BackendEnum
@@ -7,7 +9,16 @@ if BACKEND == BackendEnum.TORCH:
     import torch
     import torch.nn.functional as F
 
-    if importlib.util.find_spec("vllm"):
+    class AttnBackendEnum(Enum):
+        AUTO = 0
+        TORCH = 1
+        VLLM = 2
+        XFormers = 3
+
+    if os.environ.get("TLLM_ATTN_BACKEND", None):
+        ATTN_BACKEND = AttnBackendEnum[os.environ["TLLM_ATTN_BACKEND"]]
+
+    if ATTN_BACKEND in [AttnBackendEnum.AUTO, AttnBackendEnum.VLLM] and importlib.util.find_spec("vllm"):
         from vllm.vllm_flash_attn import flash_attn_varlen_func
 
         def flash_attention(
@@ -26,7 +37,7 @@ if BACKEND == BackendEnum.TORCH:
             )
 
         ATTN_FUNC, ATTN_TYPE = flash_attention, "flash_attention"
-    elif importlib.util.find_spec("xformers"):
+    elif ATTN_BACKEND in [AttnBackendEnum.AUTO, AttnBackendEnum.XFormers] and importlib.util.find_spec("xformers"):
         from xformers.components.attention.core import scaled_dot_product_attention as xformers_attention
         from xformers.ops import fmha
 
