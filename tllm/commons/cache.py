@@ -2,7 +2,7 @@
 import time
 from typing import Dict, List, Optional, Tuple, Union
 
-from tllm import BACKEND, DTYPE, BackendEnum
+from tllm import BACKEND, DEVICE, DTYPE, BackendEnum
 from tllm.schemas import MIX_TENSOR
 
 if BACKEND == BackendEnum.MLX:
@@ -16,7 +16,7 @@ else:
     import torch
 
     cat_func = lambda tensors: torch.cat(tensors, dim=0)
-    zeros_func = lambda x0, x1, x2: torch.zeros(size=(x0, x1, x2), dtype=DTYPE)
+    zeros_func = lambda x0, x1, x2: torch.zeros(size=(x0, x1, x2), dtype=DTYPE, device=DEVICE)
     array_func = lambda x: torch.tensor([x], dtype=torch.long)
     arange_func = lambda x: torch.arange(0, x, dtype=torch.long)
 

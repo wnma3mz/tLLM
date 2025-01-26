@@ -12,9 +12,8 @@ from transformers.models.llama.modeling_llama import (
     apply_rotary_pos_emb,
 )
 
-from tllm import DEVICE, DTYPE
 from tllm.commons.attn import ATTN_FUNC
-from tllm.commons.cache import AttentionData, RequestsCache
+from tllm.commons.cache import AttentionData, RequestsCache, zeros_func
 
 self_attn_func = ATTN_FUNC
 
@@ -153,8 +152,8 @@ class MergedSdpaAttention(nn.Module):
         )
 
         # self.max_seq_len = 1024
-        # self._k_cache = torch.zeros(size=(max_seq_len, self.num_key_value_heads, self.head_dim), dtype=DTYPE, device=DEVICE)
-        # self._v_cache = torch.zeros(size=(max_seq_len, self.num_key_value_heads, self.head_dim), dtype=DTYPE, device=DEVICE)
+        # self._k_cache = zeros_func(max_seq_len, self.num_key_value_heads, self.head_dim)
+        # self._v_cache = zeros_func(max_seq_len, self.num_key_value_heads, self.head_dim)
         self.max_seq_len = -1
         self._k_cache, self._v_cache = None, None
 

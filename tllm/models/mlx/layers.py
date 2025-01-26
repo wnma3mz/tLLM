@@ -5,8 +5,7 @@ import mlx.core as mx
 import mlx.nn as nn
 from mlx_lm.models.llama import MLP, Attention, ModelArgs, TransformerBlock, initialize_rope
 
-from tllm import DTYPE
-from tllm.commons.cache import AttentionData, RequestsCache, cat_func
+from tllm.commons.cache import AttentionData, RequestsCache, cat_func, zeros_func
 
 
 class BaseParallelLayer(nn.Module):
@@ -146,8 +145,8 @@ class MergedAttention(nn.Module):
 
         self.rope = initialize_rope(args)
         # self.max_seq_len = 1024
-        # self._k_cache = mx.zeros(shape=(self.max_seq_len, self.n_kv_heads, self.head_dim), dtype=DTYPE)
-        # self._v_cache = mx.zeros(shape=(self.max_seq_len, self.n_kv_heads, self.head_dim), dtype=DTYPE)
+        # self._k_cache = zeros_func(self.max_seq_len, self.n_kv_heads, self.head_dim)
+        # self._v_cache = zeros_func(self.max_seq_len, self.n_kv_heads, self.head_dim)
         self.max_seq_len = -1
         self._k_cache, self._v_cache = None, None
 
