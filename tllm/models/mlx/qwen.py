@@ -35,7 +35,7 @@ class MLXQwen2Model(nn.Module):
         self.model = Decoder(args, config.decoder_start_layer_idx, config.decoder_end_layer_idx, is_merge)
         self.num_layers = config.decoder_end_layer_idx - config.decoder_start_layer_idx
 
-        self.max_seq_len = self.model.layers[-1].self_attn.max_seq_len
+        self.max_seq_len = getattr(self.model.layers[-1].self_attn, "max_seq_len", -1)
         self.n_kv_heads = self.model.layers[-1].self_attn.n_kv_heads
         self.head_dim = self.model.layers[-1].self_attn.head_dim
 

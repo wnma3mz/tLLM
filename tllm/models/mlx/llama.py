@@ -57,7 +57,7 @@ class MLXLlamaModel(nn.Module):
         #     rope_type="default",
         #     rope_scaling=1.0,
         # )
-        self.max_seq_len = self.model.layers[-1].self_attn.max_seq_len
+        self.max_seq_len = getattr(self.model.layers[-1].self_attn, "max_seq_len", -1)
         self.n_kv_heads = self.model.layers[-1].self_attn.n_kv_heads
         self.head_dim = self.model.layers[-1].self_attn.head_dim
 

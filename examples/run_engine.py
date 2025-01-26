@@ -23,8 +23,8 @@ def parse_args():
 
 
 args = parse_args()
-os.environ["TLLM_BACKEND"] = args.backend.upper()
-os.environ["TLLM_ATTN_BACKEND"] = args.attn_backend.upper()
+os.environ["TLLM_BACKEND"] = args.backend
+os.environ["TLLM_ATTN_BACKEND"] = args.attn_backend
 
 from tllm.commons.manager import load_client_model, load_master_model
 from tllm.commons.tp_communicator import Communicator

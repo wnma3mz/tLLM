@@ -49,7 +49,7 @@ class HFLlamaModel(nn.Module):
         self.num_decoder_layers = config.decoder_end_layer_idx - config.decoder_start_layer_idx
         self.rotary_emb = HFLlamaRotaryEmbedding(config=config)
 
-        self.max_seq_len = self.model.layers[-1].self_attn.max_seq_len
+        self.max_seq_len = getattr(self.model.layers[-1].self_attn, "max_seq_len", -1)
         self.num_key_value_heads = self.model.layers[-1].self_attn.num_key_value_heads
         self.head_dim = self.model.layers[-1].self_attn.head_dim
 
@@ -126,8 +126,8 @@ class HFLlamaForCausalLM(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.vocab_size = config.vocab_size
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, device=DEVICE)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False, device=DEVICE)
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @classmethod

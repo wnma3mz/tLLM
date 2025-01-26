@@ -32,8 +32,8 @@ class HFQwen2VLForConditionalGeneration(nn.Module):
         super().__init__()
         self.vocab_size = config.vocab_size
         self.visual = HFQwen2VisionTransformerPretrainedModel._from_config(config.vision_config)
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, device=DEVICE)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False, device=DEVICE)
         self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @classmethod

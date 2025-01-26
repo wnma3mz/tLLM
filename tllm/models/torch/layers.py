@@ -12,6 +12,7 @@ from transformers.models.llama.modeling_llama import (
     apply_rotary_pos_emb,
 )
 
+from tllm import DEVICE
 from tllm.commons.attn import ATTN_FUNC
 from tllm.commons.cache import AttentionData, RequestsCache, zeros_func
 
@@ -45,7 +46,7 @@ class MergeParallelLayer(BaseParallelLayer):
         assert col_size % self.world_size == 0
         self.row_size, self.col_size = row_size, col_size
         self.dup_layer = dup_layer
-        self.layer = nn.Linear(row_size, col_size * self.dup_layer // self.world_size, bias=bias)
+        self.layer = nn.Linear(row_size, col_size * self.dup_layer // self.world_size, bias=bias, device=DEVICE)
 
     def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
         node_output = self.layer(x)
@@ -62,7 +63,7 @@ class QKVParallelLayer(BaseParallelLayer):
 
         self.row_size, self.col_size = row_size, col_size
         self.col_size_list = [x // self.world_size for x in col_size_list]
-        self.layer = nn.Linear(row_size, col_size // self.world_size, bias=bias)
+        self.layer = nn.Linear(row_size, col_size // self.world_size, bias=bias, device=DEVICE)
 
     def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
         node_output = self.layer(x)
@@ -74,7 +75,7 @@ class RowParallelLayer(BaseParallelLayer):
         super().__init__(world_size, rank)
         assert row_size % self.world_size == 0
         self.row_size, self.col_size = row_size, col_size
-        self.layer = nn.Linear(row_size // self.world_size, col_size, bias=bias)
+        self.layer = nn.Linear(row_size // self.world_size, col_size, bias=bias, device=DEVICE)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.layer(x)
@@ -152,8 +153,8 @@ class MergedSdpaAttention(nn.Module):
         )
 
         # self.max_seq_len = 1024
-        # self._k_cache = zeros_func(max_seq_len, self.num_key_value_heads, self.head_dim)
-        # self._v_cache = zeros_func(max_seq_len, self.num_key_value_heads, self.head_dim)
+        # self._k_cache = zeros_func(self.max_seq_len, self.num_key_value_heads, self.head_dim)
+        # self._v_cache = zeros_func(self.max_seq_len, self.num_key_value_heads, self.head_dim)
         self.max_seq_len = -1
         self._k_cache, self._v_cache = None, None
 
