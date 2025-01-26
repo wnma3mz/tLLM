@@ -1,72 +1,63 @@
-from typing import Callable, Dict, Optional, Tuple, Union
+import importlib.util
+from typing import Dict, Optional
 
 from tllm import BACKEND, BackendEnum
 
-if BACKEND == BackendEnum.MLX:
+if BACKEND == BackendEnum.TORCH:
+    import torch
+    import torch.nn.functional as F
 
-    def get_attention_implementation():
-        return None, "mlx"
+    if importlib.util.find_spec("vllm"):
+        from vllm.vllm_flash_attn import flash_attn_varlen_func
 
-else:
+        def flash_attention(
+            q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, attn_mask: Dict[str, torch.Tensor]
+        ) -> torch.Tensor:
+            """FlashAttention with variable length support"""
+            return flash_attn_varlen_func(
+                q=q,
+                k=k,
+                v=v,
+                cu_seqlens_q=attn_mask["cu_seqlens_q"],
+                cu_seqlens_k=attn_mask["cu_seqlens_k"],
+                max_seqlen_q=attn_mask["max_seqlen_q"],
+                max_seqlen_k=attn_mask["max_seqlen_k"],
+                causal=True,
+            )
 
-    def get_attention_implementation() -> Tuple[Callable, str]:
-        """
-        Get the best available attention implementation.
-        Returns a tuple of (attention_func, implementation_name)
-        """
-        import torch
+        ATTN_FUNC, ATTN_TYPE = flash_attention, "flash_attention"
+    elif importlib.util.find_spec("xformers"):
+        from xformers.components.attention.core import scaled_dot_product_attention as xformers_attention
+        from xformers.ops import fmha
 
-        try:
-            from vllm.vllm_flash_attn import flash_attn_varlen_func
+        def xformers_attn(
+            q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, attn_mask: Optional[torch.Tensor]
+        ) -> torch.Tensor:
+            """XFormers attention implementation"""
+            # return fmha.memory_efficient_attention(q.unsqueeze(0), k.unsqueeze(0), v.unsqueeze(0), attn_bias=attn_mask)[0]
+            return (
+                xformers_attention(q.transpose(0, 1), k.transpose(0, 1), v.transpose(0, 1), att_mask=attn_mask)
+                .transpose(0, 1)
+                .contiguous()
+            )
 
-            def flash_attention(
-                q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, attn_mask: Dict[str, Union[torch.Tensor, int]]
-            ) -> torch.Tensor:
-                """FlashAttention with variable length support"""
-                return flash_attn_varlen_func(
-                    q=q,
-                    k=k,
-                    v=v,
-                    cu_seqlens_q=attn_mask["cu_seqlens_q"],
-                    cu_seqlens_k=attn_mask["cu_seqlens_k"],
-                    max_seqlen_q=attn_mask["max_seqlen_q"],
-                    max_seqlen_k=attn_mask["max_seqlen_k"],
-                    causal=True,
+        ATTN_FUNC, ATTN_TYPE = xformers_attn, "xformers"
+    else:
+
+        def torch_attn(
+            q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, attn_mask: Optional[torch.Tensor]
+        ) -> torch.Tensor:
+            """PyTorch native attention implementation"""
+            return (
+                F.scaled_dot_product_attention(
+                    q.transpose(0, 1), k.transpose(0, 1), v.transpose(0, 1), attn_mask=attn_mask
                 )
+                .transpose(0, 1)
+                .contiguous()
+            )
 
-            return flash_attention, "flash_attention"
-
-        except ImportError:
-            try:
-                from xformers.components.attention.core import scaled_dot_product_attention as xformers_attention
-                from xformers.ops import fmha
-
-                def xformers_attn(
-                    q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, attn_mask: Optional[torch.Tensor]
-                ) -> torch.Tensor:
-                    """XFormers attention implementation"""
-                    # return fmha.memory_efficient_attention(q.unsqueeze(0), k.unsqueeze(0), v.unsqueeze(0), attn_bias=attn_mask)[0]
-                    return (
-                        xformers_attention(q.transpose(0, 1), k.transpose(0, 1), v.transpose(0, 1), att_mask=attn_mask)
-                        .transpose(0, 1)
-                        .contiguous()
-                    )
-
-                return xformers_attn, "xformers"
-
-            except ImportError:
-                import torch.nn.functional as F
-
-                def torch_attn(
-                    q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, attn_mask: Optional[torch.Tensor]
-                ) -> torch.Tensor:
-                    """PyTorch native attention implementation"""
-                    return (
-                        F.scaled_dot_product_attention(
-                            q.transpose(0, 1), k.transpose(0, 1), v.transpose(0, 1), attn_mask=attn_mask
-                        )
-                        .transpose(0, 1)
-                        .contiguous()
-                    )
-
-                return torch_attn, "torch"
+        ATTN_FUNC, ATTN_TYPE = torch_attn, "torch"
+elif BACKEND == BackendEnum.MLX:
+    ATTN_FUNC, ATTN_TYPE = None, "mlx"
+else:
+    raise ValueError("Invalid backend")

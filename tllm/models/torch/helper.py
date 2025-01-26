@@ -4,7 +4,7 @@ from typing import Dict, List
 from safetensors import safe_open
 import torch
 
-from tllm.commons.attn import get_attention_implementation
+from tllm.commons.attn import ATTN_TYPE
 from tllm.commons.cache import AttentionData, CacheManager, RequestsCache
 from tllm.schemas import SeqInput
 
@@ -52,7 +52,6 @@ def read_from_safetensors(file_path: str, key_list: List[str] = None) -> Dict[st
             for key in f.keys():
                 for prefix_key in key_list:
                     if key.startswith(prefix_key):
-                        print(f"file_path: {file_path}, key: {key}")
                         tensors[key] = f.get_tensor(key)
     else:
         with safe_open(file_path, framework="pt", device="cpu") as f:
@@ -61,9 +60,7 @@ def read_from_safetensors(file_path: str, key_list: List[str] = None) -> Dict[st
     return tensors
 
 
-_, attention_type = get_attention_implementation()
-
-if attention_type == "xformers":
+if ATTN_TYPE == "xformers":
     from xformers.ops import fmha
 
 
@@ -75,19 +72,17 @@ def build_forward_cache(
     num_key_value_heads: int = -1,
     head_dim: int = -1,
 ) -> AttentionData:
-    request_cache = RequestsCache(num_layers)
-    q_len_list, k_len_list, position_ids_list = request_cache.build(
-        seq_input, cache_manager, max_seq_len, num_key_value_heads, head_dim
-    )
+    request_cache = RequestsCache(num_layers, max_seq_len, num_key_value_heads, head_dim)
+    q_len_list, k_len_list, position_ids_list = request_cache.build(seq_input, cache_manager)
 
-    if attention_type == "flash_attention":
+    if ATTN_TYPE == "flash_attention":
         attn_mask = {
             "cu_seqlens_q": torch.tensor([0] + list(itertools.accumulate(q_len_list)), dtype=torch.int32),
             "cu_seqlens_k": torch.tensor([0] + list(itertools.accumulate(k_len_list)), dtype=torch.int32),
             "max_seqlen_q": max(q_len_list),
             "max_seqlen_k": max(k_len_list),
         }
-    # elif attention_type == "xformers":
+    # elif ATTN_TYPE == "xformers":
     #     attn_mask = fmha.BlockDiagonalMask.from_seqlens(q_seqlen=q_len_list, kv_seqlen=k_len_list)
     else:
         attn_mask = build_mask(q_len_list, k_len_list)

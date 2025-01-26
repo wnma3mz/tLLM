@@ -29,7 +29,7 @@ if BACKEND == BackendEnum.TORCH:
         DTYPE = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
     else:
         DEVICE = "cpu"
-else:
+elif BACKEND == BackendEnum.MLX:
     import mlx.core as mx
     import numpy as np
 
@@ -37,6 +37,8 @@ else:
     CONVERT_DTYPE = mx.float16
     DES_DTYPE = np.float16
     DEVICE = None
+else:
+    raise ValueError("Invalid backend")
 
 GRPC_OPTIONS = [
     ("grpc.max_metadata_size", 32 * 1024 * 1024),

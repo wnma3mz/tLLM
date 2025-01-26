@@ -13,11 +13,10 @@ from transformers.models.llama.modeling_llama import (
 )
 
 from tllm import DEVICE, DTYPE
-from tllm.commons.attn import get_attention_implementation
+from tllm.commons.attn import ATTN_FUNC
 from tllm.commons.cache import AttentionData, RequestsCache
 
-# Get the best available attention implementation
-self_attn_func, attention_type = get_attention_implementation()
+self_attn_func = ATTN_FUNC
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:

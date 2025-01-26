@@ -6,14 +6,12 @@ import torch.nn as nn
 from transformers.models.llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
 
 from tllm import DEVICE, DTYPE
-from tllm.commons.attn import get_attention_implementation
+from tllm.commons.attn import ATTN_TYPE
 from tllm.commons.cache import CacheManager
 from tllm.models.torch.helper import build_forward_cache, get_last_hidden_states
 from tllm.models.torch.layers import Decoder
 from tllm.models.weight_helper import default_merge_attn, default_merge_mlp
 from tllm.schemas import SeqInput
-
-_, attention_type = get_attention_implementation()
 
 
 class HFLlamaRotaryEmbedding(LlamaRotaryEmbedding):
@@ -103,7 +101,7 @@ class HFLlamaModel(nn.Module):
         )
         hidden_states = hidden_states.to(DTYPE).to(DEVICE)
         position_embeddings = self.rotary_emb(hidden_states, attention_data.position_ids.to(DEVICE))
-        if attention_type == "flash_attention":
+        if ATTN_TYPE == "flash_attention":
             attention_data.attn_mask = {
                 k: v.to(DEVICE) if isinstance(v, torch.Tensor) else v for k, v in attention_data.attn_mask.items()
             }
