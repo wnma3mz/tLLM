@@ -14,7 +14,7 @@
    2.1 (no communication)
 
    ```bash
-   tllm.server --model_path mlx-community/Llama-3.2-1B-Instruct-4bit --hostname localhost --is_local
+   tllm.server --model_path mlx-community/Llama-3.2-1B-Instruct-4bit --hostname localhost --is_local --client_size 1
    ```
 
    2.2 (with communication)
@@ -37,25 +37,31 @@ python3 benchmarks/run_async_requests.py
 In `examples/config.json`
 
 ```json
-// 客户端的数量会决定模型拆分的数量
 {
     "server": {
-        "grpc_port": 25001,         // server 的 grpc 端口，用于每个 client 发送状态数据以及最后一个 client 发送计算后的结果
-        "http_port": 8022,          // server 的 http 端口，API 接口 以及 WebSocket 服务
-        "hostname": "mac-mini"      // server 的 hostname，可以用 ip 代替，如 192.168.1.10，需要确保 client 能够访问
+        "grpc_port": 25001,
+        "http_port": 8022,
+        "hostname": "mac-mini"
     },
     "client": [
         {
-            "grpc_port": 25002,     // 第一个 client 的 grpc 端口
-            "hostname": "m3pro"     // 第一个 client 的 hostname，需要确保 server 和 其他 client 能够访问
+            "grpc_port": 25002,
+            "hostname": "m3pro"
         },
         {
-            "grpc_port": 25003,     // 第二个 client 的 grpc 端口
-            "hostname": "m3"        // 第二个 client 的 hostname，需要确保 server 和 其他 client 能够访问
+            "grpc_port": 25003,
+            "hostname": "m3"
         }
     ]
 }
 ```
+
+- 客户端的数量会决定模型拆分的数量
+- `server.grpc_port`: server 的 grpc 端口，用于每个 client 发送状态数据以及最后一个 client 发送计算后的结果
+- `server.http_port`: server 的 http 端口，API 接口 以及 WebSocket 服务
+- `server.hostname`: server 的 hostname，可以用 ip 代替，如 192.168.1.10，需要确保 client 能够访问
+- `client.grpc_port`: client 的 grpc 端口
+- `client.hostname`: client 的 hostname，需要确保 server 和 其他 client 能够访问
 
 ### Features
 
@@ -75,6 +81,7 @@ In `examples/config.json`
 - [X] Attention
   - [X] xformers
   - [X] flash-attn
+  - [x] Prefill-Cache (Token-Level) 
   - [ ] PageAttention
 
 ### Performance

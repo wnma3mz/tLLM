@@ -8,8 +8,8 @@ class BackendEnum(Enum):
     MLX = 2
 
 
-ENABLE_PREFIX_CACHE = os.environ.get("TLLM_ENABLE_PREFIX_CACHE", "true").lower() == "true"
-ENABLE_PREFIX_CACHE = False
+ENABLE_PREFILL_CACHE = os.environ.get("TLLM_ENABLE_PREFILL_CACHE", "true").lower() == "true"
+
 if importlib.util.find_spec("mlx"):
     BACKEND = BackendEnum.MLX
 elif importlib.util.find_spec("torch"):

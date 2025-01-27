@@ -5,7 +5,7 @@ from typing import Dict, List
 import mlx.core as mx
 import mlx.nn as nn
 
-from tllm import DTYPE
+from tllm import DTYPE, ENABLE_PREFILL_CACHE
 from tllm.commons.cache import AttentionData, CacheManager, RequestsCache
 from tllm.schemas import SeqInput
 
@@ -87,8 +87,35 @@ def read_from_safetensors(file_path: str, key_list: List[str]) -> Dict[str, mx.a
     return tensors
 
 
-def get_last_hidden_states(hidden_states: mx.array, seq_len_list: List[int]) -> mx.array:
-    index_list = list(itertools.accumulate(seq_len_list[:-1]))
-    seq_hidden_states = mx.split(hidden_states, index_list, axis=0)
-    hidden_states = mx.concat([x[-1:, :] for x in seq_hidden_states], axis=0)
+def get_last_hidden_states(
+    hit_cache_flag: bool, is_end_pp: bool, attention_data: AttentionData, hidden_states: mx.array
+) -> mx.array:
+    split_len_list = attention_data.q_len_list
+    if hit_cache_flag:
+        q_start = 0
+        for i, (q_len, hit_cache_len) in enumerate(zip(attention_data.q_len_list, attention_data.hit_cache_len_list)):
+            if hit_cache_len != -1:
+                split_len_list[i] = q_len - hit_cache_len
+            q_start += q_len
+    if is_end_pp:
+        index_list = list(itertools.accumulate(split_len_list[:-1]))
+        seq_hidden_states = mx.split(hidden_states, index_list, axis=0)
+        hidden_states = mx.concat([x[-1:, :] for x in seq_hidden_states], axis=0)
+    return hidden_states
+
+
+def truncate_hidden_states(
+    hit_cache_flag: bool, is_start_pp: bool, attention_data: AttentionData, hidden_states: mx.array
+) -> mx.array:
+    # 截断 hidden_states
+    if ENABLE_PREFILL_CACHE and is_start_pp and hit_cache_flag:
+        hidden_states_list = []
+        q_start = 0
+        for q_len, hit_cache_len in zip(attention_data.q_len_list, attention_data.hit_cache_len_list):
+            if hit_cache_len != -1:
+                hidden_states_list.append(hidden_states[q_start : q_start + q_len][hit_cache_len:])
+            else:
+                hidden_states_list.append(hidden_states[q_start : q_start + q_len])
+            q_start += q_len
+        hidden_states = mx.concat(hidden_states_list, axis=0)
     return hidden_states

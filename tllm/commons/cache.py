@@ -3,7 +3,7 @@ import copy
 import time
 from typing import Dict, List, Optional
 
-from tllm import BACKEND, DEVICE, DTYPE, ENABLE_PREFIX_CACHE, BackendEnum
+from tllm import BACKEND, DEVICE, DTYPE, ENABLE_PREFILL_CACHE, BackendEnum
 from tllm.commons.radix_tree import RadixTree
 from tllm.schemas import MIX_TENSOR, SeqInput
 
@@ -79,7 +79,7 @@ class RequestsCache:
         self.cache_dict.clear()
 
     def insert_cache(self, seq_input: SeqInput):
-        if ENABLE_PREFIX_CACHE:
+        if ENABLE_PREFILL_CACHE:
             for input_ids, request_id in zip(seq_input.input_ids_list, seq_input.uuid_list):
                 self.radix_tree.append_to_request(input_ids, request_id)
 
@@ -108,7 +108,7 @@ class RequestsCache:
                 k_len_list.append(cache_seq_len + q_len)
             # prefilling 阶段
             else:
-                if ENABLE_PREFIX_CACHE:
+                if ENABLE_PREFILL_CACHE:
                     hit_uuid, hit_cache_len = self.radix_tree.longest_common_prefix(input_ids)
                 else:
                     # 不启用 prefix cache
