@@ -47,10 +47,6 @@ class DecoderCache:
         self.kv_cache_list = [KVCache(max_seq_len, num_key_value_heads, head_dim) for _ in range(num_layers)]
         self.q_len = q_len
 
-    @property
-    def kv_len(self):
-        return self.kv_cache_list[0].kv_len
-
     def __getitem__(self, idx: int) -> KVCache:
         return self.kv_cache_list[idx]
 
@@ -104,18 +100,20 @@ class RequestsCache:
             hit_cache_len = -1
             q_len = len(input_ids)
             # decoding 阶段
-            if q_len == 1 and uuid in cache_manager.cache_dict:
+            if uuid in cache_manager.cache_dict:
                 decoder_cache: DecoderCache = cache_manager.get(uuid)
-                cache_seq_len = decoder_cache.kv_len
+                decoder_cache.set_q_len(q_len)
+                cache_seq_len = decoder_cache[0].kv_len
                 position_ids = array_func(cache_seq_len)
                 k_len_list.append(cache_seq_len + q_len)
             # prefilling 阶段
             else:
-                # 命中了之前的 kv cache，使用历史 cache
                 if ENABLE_PREFIX_CACHE:
                     hit_uuid, hit_cache_len = self.radix_tree.longest_common_prefix(input_ids)
                 else:
-                    hit_uuid, hit_cache_len = None, -1  # 不启用 prefix cache
+                    # 不启用 prefix cache
+                    hit_uuid, hit_cache_len = None, -1
+                # 命中了之前的 kv cache，使用历史 cache
                 if hit_uuid is not None and cache_manager.get(hit_uuid) is not None:
                     hid_decoder_cache: DecoderCache = copy.deepcopy(cache_manager.get(hit_uuid))
                     # 相同请求时，避免过超过 cache 长度
@@ -139,15 +137,15 @@ class RequestsCache:
             self.add(uuid, q_len, decoder_cache)
         return q_len_list, k_len_list, position_ids_list, hit_cache_len_list
 
-    def get_kv_cache(self, uuid: str) -> DecoderCache:
+    def get_decoder_cache(self, uuid: str) -> DecoderCache:
         return self.cache_dict[uuid]
 
     def get_layer_idx_kv_cache(self, uuid: str, layer_idx: int) -> KVCache:
-        return self.get_kv_cache(uuid)[layer_idx]
+        return self.get_decoder_cache(uuid)[layer_idx]
 
     def get_q_len(self, uuid: str) -> int:
         # 获取每个 uuid 请求的 q_len
-        return self.get_kv_cache(uuid).q_len
+        return self.get_decoder_cache(uuid).q_len
 
     def get_kv_len(self, uuid: str, layer_idx: Optional[int] = 0) -> int:
         # 获取每个 uuid 请求的 kv cache 的 kv_len
@@ -173,6 +171,7 @@ class RequestsCache:
             interval = self.get_q_len(uuid)
             end = start + interval
             cur_key_states, cur_value_states = key_states[start:end], value_states[start:end]
+
             if kv_cache.key_states is None:
                 kv_cache.key_states, kv_cache.value_states = cur_key_states, cur_value_states
             else:
@@ -269,8 +268,8 @@ class AttentionData:
         self.hit_cache_len_list = hit_cache_len_list  # 用于 PP=0 截断 hidden_states
         self.q_len_list = q_len_list
 
-    def get_kv_cache_list(self, uuid: str) -> List[KVCache]:
-        return self.request_cache.get_kv_cache(uuid)
+    def get_decoder_cache(self, uuid: str) -> DecoderCache:
+        return self.request_cache.get_decoder_cache(uuid)
 
     def get_kv_len(self, uuid: str) -> int:
         return self.request_cache.get_kv_len(uuid)

@@ -107,20 +107,17 @@ class LLMGenerator:
                     input_ids: List[int]
 
         """
-        uuid_list, input_ids_list, seq_len_list, mm_input_list = [], [], [], []
+        uuid_list, input_ids_list, mm_input_list = [], [], []
         for sequence_request in request_list:
             uuid_list.append(sequence_request.request_id)
             # 如果是 prefilling，则为 input_ids; 否则，为 output_ids[-1]
-            # input_ids: seq_len
             if sequence_request.is_prefill:
                 if self.processor is not None:
                     mm_input_list.append(process_mm_input(sequence_request, self.processor, **self.mm_config))
 
                 input_ids_list.append(np.array(sequence_request.input_ids))
-                seq_len_list.append(len(sequence_request.input_ids))
             else:
                 input_ids_list.append(np.array([sequence_request.output_ids[-1]]))
-                seq_len_list.append(1)
 
         mm_input = merge_mm_input(mm_input_list)
         input_ids = np.concatenate(input_ids_list, axis=-1)

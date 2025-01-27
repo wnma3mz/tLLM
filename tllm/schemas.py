@@ -6,6 +6,8 @@ from PIL import Image
 import numpy as np
 from pydantic import BaseModel
 
+from tllm.grpc.proto import schemas_pb2, schemas_pb2_grpc
+
 finish_reason_type = Literal["length", "stop", None]
 modal_type = Literal["text", "image_url"]
 
@@ -62,9 +64,6 @@ class SamplingParams:
         self.temperature = temperature
         self.n = n
         self.stop_token_ids = stop_token_ids
-
-
-from tllm.grpc.proto import schemas_pb2, schemas_pb2_grpc
 
 
 def numpy_to_grpc_input_ids(input_ids_list: List[np.ndarray]) -> List[schemas_pb2.InputIds]:
@@ -188,7 +187,6 @@ class SequenceRequestData:
     timeout: int = 100000  # 请求的总超时时间
     is_stop: bool = False
     is_prefill: bool = True
-    q_len: int = -1
 
     condition: asyncio.Condition = field(default_factory=asyncio.Condition)
 
@@ -198,7 +196,6 @@ class SequenceRequestData:
         self.generate_text = None
         self.finish_reason_list = [None] * self.sampling_params.n
         self.decode_start_ts = None
-        self.q_len = len(self.input_ids) if self.q_len == -1 else self.q_len
 
     def __repr__(self) -> str:
         return f"request_id={self.request_id}; output_ids={self.output_ids}"

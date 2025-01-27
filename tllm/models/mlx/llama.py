@@ -86,7 +86,7 @@ class MLXLlamaModel(nn.Module):
 
         # TODO 异步保存 cache
         for uuid in seq_input.uuid_list:
-            self.cache_manager.set(uuid, attention_data.get_kv_cache_list(uuid))
+            self.cache_manager.set(uuid, attention_data.get_decoder_cache(uuid))
             self.cache_manager.check_alive()
         self.request_cache.clear()
         self.request_cache.insert_cache(seq_input)
