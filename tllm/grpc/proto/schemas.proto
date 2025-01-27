@@ -8,17 +8,20 @@ message BFloat16Tensor {
     repeated int32 shape = 2;  // 形状信息
 }
 
+message InputIds {
+    repeated int32 input_ids = 1;
+}
+
 message ForwardRequest {
-    repeated string uuid = 1;
-    repeated int32 seq_len = 2;
+    repeated string uuid_list = 1;
+    repeated InputIds input_ids_list = 2;
     BFloat16Tensor hidden_states = 3;
 }
 
 message StatusRequest {
     repeated string uuid = 1;
-    repeated int32 seq_len = 2;    
-    int32 pp_idx = 3;
-    float cost_time = 4;
+    int32 pp_idx = 2;
+    float cost_time = 3;
 }
 
 message StatusResponse {

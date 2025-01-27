@@ -7,49 +7,6 @@ from tllm.generate import ImageGenerator, LLMGenerator
 from tllm.schemas import SequenceRequestData
 from tllm.singleton_logger import SingletonLogger
 
-conversations_dict = {}  # List[int] -> str, TODO LRU 缓存
-
-
-class Node:
-    def __init__(self):
-        self.children = {}  # int -> Node
-        self.is_end_of_word = False  # 是否是单词的结束
-        self.path = None
-
-
-class RadixTree:
-    def __init__(self):
-        self.root = Node()  # 根节点
-
-    def insert(self, input_ids: List[int]):
-        node = self.root
-        path = []
-        for id_ in input_ids:
-            if id_ not in node.children:
-                node.children[id_] = Node()
-            node = node.children[id_]
-            path.append(id_)
-            node.path = path[:]
-        node.is_end_of_word = True
-
-    def longest_common_prefix(self, input_ids: List[int]) -> List[int]:
-        node = self.root
-        longest = []
-        for id_ in input_ids:
-            if id_ not in node.children:
-                return longest
-            node = node.children[id_]
-            if node.path is not None and len(node.path) > len(longest):
-                longest = node.path[:]
-        return longest
-
-
-def post_process(data: SequenceRequestData):
-    # 保存输入 + 输出
-    token_ids = data.input_ids + data.output_ids
-    conversations_dict[token_ids] = data.history_request_id if data.history_request_id else data.request_id
-    return
-
 
 class AsyncEngine:
     def __init__(self, generator: Union[LLMGenerator, ImageGenerator], sleep_time: float = 0.0, limit_size: int = 5):
@@ -143,8 +100,8 @@ class AsyncEngine:
             async with request_data.condition:
                 while not request_data.is_stop:
                     await asyncio.wait_for(request_data.condition.wait(), request_data.timeout)
-                    yield request_data.to_request_output()  # 流式返回数据的内容，可以控制
-                # post_process(request_data)
+                    # 流式返回数据的内容
+                    yield request_data.to_request_output()
                 try:
                     if hasattr(request_data, "ttft_cost_time"):
                         self.logger.info(

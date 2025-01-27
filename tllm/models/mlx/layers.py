@@ -155,7 +155,7 @@ class MergedAttention(nn.Module):
         x_list = []
         start = 0
         for uuid, offset in zip(uuid_list, offset_list):
-            end = start + request_cache.get_seq_len(uuid)
+            end = start + request_cache.get_q_len(uuid)
             x_list.append(self.rope(xs[start:end].transpose(1, 0, 2), offset).transpose(1, 0, 2))
             start = end
         return cat_func(x_list)

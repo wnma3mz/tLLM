@@ -74,7 +74,7 @@ class FLUXModel(nn.Module):
         super().__init__()
         self.num_hidden_layers = 38
         self.transformer = SingleTransformer(0, self.num_hidden_layers, self.num_hidden_layers)
-        self.cache_dict = CacheManager()
+        self.cache_manager = CacheManager()
 
     @classmethod
     def from_pretrained(cls, config, state_dict, **kwargs):
@@ -115,11 +115,11 @@ class FLUXModel(nn.Module):
     ) -> mx.array:
 
         request_id = request_id_list[0]
-        if request_id in self.cache_dict.cache_dict:
-            image_rotary_emb, _ = self.cache_dict.get(request_id)
+        if self.cache_manager.is_contain(request_id):
+            image_rotary_emb = self.cache_dict.get(request_id)
         else:
             image_rotary_emb = self.get_image_rotary_emb(height, width, seq_len)
-            self.cache_dict.set(request_id, image_rotary_emb, -1)
+            self.cache_dict.set(request_id, image_rotary_emb)
             self.cache_dict.check_alive()
 
         hidden_states = self.transformer(hidden_states, text_embeddings, image_rotary_emb, seq_len)

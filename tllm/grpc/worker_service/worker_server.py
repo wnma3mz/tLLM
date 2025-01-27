@@ -80,7 +80,7 @@ class WorkerServer(schemas_pb2_grpc.RPCServiceServicer):
         convertor = Convertor()
         hidden_states = convertor.deserialize(request.hidden_states)
 
-        seq_input = SeqInput(uuid_list=list(request.uuid), seq_len_list=list(request.seq_len))
+        seq_input = SeqInput.from_request_data(request)
 
         self.comm.debug_rank0(f"deserialize_tensor cost time: {time.perf_counter() - s1:.4f}")
 
@@ -95,7 +95,7 @@ class WorkerServer(schemas_pb2_grpc.RPCServiceServicer):
         self.comm.debug_rank0("=" * 20)
 
         if self.comm.is_rank0():
-            await self.master_rpc_manager.rpc_func(request.uuid, request.seq_len, output, cost_time)
+            await self.master_rpc_manager.rpc_func(request, output, cost_time)
 
     async def SetConfig(
         self, request: schemas_pb2.SetConfigRequest, context: grpc.ServicerContext

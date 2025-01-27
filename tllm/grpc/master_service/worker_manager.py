@@ -32,8 +32,9 @@ async def rpc_image_forward(
     stub.ImageForward(schemas_pb2.ImageForwardRequest(**forward_request))
 
 
-async def rpc_forward(stub, uuid, seq_len, hidden_states: schemas_pb2.BFloat16Tensor):
-    forward_request = {"uuid": uuid, "seq_len": seq_len, "hidden_states": hidden_states}
+async def rpc_forward(stub, seq_input: SeqInput, hidden_states: schemas_pb2.BFloat16Tensor):
+    forward_request = seq_input.to_dict()
+    forward_request["hidden_states"] = hidden_states
     stub.Forward(schemas_pb2.ForwardRequest(**forward_request))
 
 
@@ -69,7 +70,7 @@ class WorkerRPCManager:
         assert len(host_list) == self.client_size
 
         async def set_single_config(i: int) -> None:
-            url = master_url if i == self.client_size - 1 else host_list[i + 1][0] # TODO: 对于多个 PP，这里有 bug
+            url = master_url if i == self.client_size - 1 else host_list[i + 1][0]  # TODO: 对于多个 PP，这里有 bug
             for stub in self.stub_list[i]:
                 await rpc_set_config(stub, {"forward_url": url, "master_url": master_url, "pp_rank": i})
 
@@ -79,7 +80,7 @@ class WorkerRPCManager:
     async def health_check(self) -> Tuple[int]:
         async def check_single_client(index: int) -> Tuple[int, bool]:
             try:
-                await rpc_health_check(self.stub_list[index][0]) # 只需要检查一个
+                await rpc_health_check(self.stub_list[index][0])  # 只需要检查一个
                 return (index, True)
             except Exception as e:
                 return (index, False)
@@ -101,7 +102,7 @@ class WorkerRPCManager:
             "-".join(x for x in seq_input.uuid_list), self.client_size
         )
         for stub in self.stub_list[0]:
-            asyncio.create_task(rpc_forward(stub, seq_input.uuid_list, seq_input.seq_len_list, hidden_states))
+            asyncio.create_task(rpc_forward(stub, seq_input, hidden_states))
         await asyncio.sleep(0)
         try:
             output = await asyncio.wait_for(forward_future, timeout=PP_TIMEOUT)

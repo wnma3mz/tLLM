@@ -22,9 +22,19 @@ class MasterRPCManager:
         self.forward_stub = schemas_pb2_grpc.RPCServiceStub(forward_channel)
         self.pp_idx = pp_idx
 
-    async def rpc_func(self, uuid, seq_len, hidden_states: schemas_pb2.BFloat16Tensor, cost_time: float):
-        forward_request = {"uuid": uuid, "seq_len": seq_len, "hidden_states": hidden_states}
-        status_request = {"uuid": uuid, "seq_len": seq_len, "pp_idx": self.pp_idx, "cost_time": cost_time}
+    async def rpc_func(
+        self, request: schemas_pb2.ForwardRequest, hidden_states: schemas_pb2.BFloat16Tensor, cost_time: float
+    ):
+        forward_request = {
+            "uuid_list": request.uuid_list,
+            "hidden_states": hidden_states,
+            "input_ids_list": request.input_ids_list,
+        }
+        status_request = {
+            "uuid": request.uuid_list,
+            "pp_idx": self.pp_idx,
+            "cost_time": cost_time,
+        }
         self.master_stub.Status(schemas_pb2.StatusRequest(**status_request))
         self.forward_stub.Forward(schemas_pb2.ForwardRequest(**forward_request))
 

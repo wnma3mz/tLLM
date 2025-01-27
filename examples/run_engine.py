@@ -104,13 +104,13 @@ async def llm_generate(args, messages):
     engine = init_engine(args.model_path)
     await engine.start()
     messages = [{"role": "user", "content": "Hello, how are you?"}]
-    messages = [
-        {
-            "role": "system",
-            "content": "Given the following conversation, relevant context, and a follow up question, reply with an answer to the current question the user is asking. Return only your response to the question given the above information following the users instructions as needed.",
-        },
-        {"role": "user", "content": "hello"},
-    ]
+    # messages = [
+    #     {
+    #         "role": "system",
+    #         "content": "Given the following conversation, relevant context, and a follow up question, reply with an answer to the current question the user is asking. Return only your response to the question given the above information following the users instructions as needed.",
+    #     },
+    #     {"role": "user", "content": "hello"},
+    # ]
     openai_serving_chat = OpenAIServing(engine, args)
 
     # for _ in range(3):
@@ -126,15 +126,15 @@ async def llm_generate(args, messages):
         },
         {"role": "user", "content": "今天天气怎么样？"},
     ]
-    messages = [
-        {
-            "role": "system",
-            "content": "Given the following conversation, relevant context, and a follow up question, reply with an answer to the current question the user is asking. Return only your response to the question given the above information following the users instructions as needed.",
-        },
-        {"role": "user", "content": "hello"},
-        {"role": "assistant", "content": "Hello! How can I assist you today?"},
-        {"role": "user", "content": "今年天气怎么样"},
-    ]
+    # messages = [
+    #     {
+    #         "role": "system",
+    #         "content": "Given the following conversation, relevant context, and a follow up question, reply with an answer to the current question the user is asking. Return only your response to the question given the above information following the users instructions as needed.",
+    #     },
+    #     {"role": "user", "content": "hello"},
+    #     {"role": "assistant", "content": "Hello! How can I assist you today?"},
+    #     {"role": "user", "content": "今年天气怎么样"},
+    # ]
     for _ in range(3):
         request = ChatCompletionRequest(model="test", messages=messages, max_tokens=100)
         response = await openai_serving_chat.create_chat_completion(request, None)

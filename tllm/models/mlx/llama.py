@@ -7,7 +7,7 @@ import numpy as np
 from transformers import AutoConfig
 
 from tllm import DTYPE
-from tllm.commons.cache import CacheManager
+from tllm.commons.cache import CacheManager, RequestsCache
 from tllm.models.mlx.helper import build_forward_cache, get_last_hidden_states, quantization_func
 from tllm.models.mlx.layers import Decoder
 from tllm.models.weight_helper import default_merge_attn, default_merge_mlp, tensor_parallel_state_dict
@@ -60,11 +60,21 @@ class MLXLlamaModel(nn.Module):
         self.max_seq_len = getattr(self.model.layers[-1].self_attn, "max_seq_len", -1)
         self.n_kv_heads = self.model.layers[-1].self_attn.n_kv_heads
         self.head_dim = self.model.layers[-1].self_attn.head_dim
+        self.request_cache = RequestsCache(self.num_layers, self.max_seq_len, self.n_kv_heads, self.head_dim)
 
     def __call__(self, hidden_states: mx.array, seq_input: SeqInput) -> mx.array:
-        attention_data = build_forward_cache(
-            seq_input, self.cache_manager, self.num_layers, self.max_seq_len, self.n_kv_heads, self.head_dim
-        )
+        attention_data = build_forward_cache(seq_input, self.cache_manager, self.request_cache)
+        # 截断 hidden_states
+        if self.config.decoder_start_layer_idx == 0 and any(x != -1 for x in attention_data.hit_cache_len_list):
+            hidden_states_list = []
+            q_start = 0
+            for q_len, hit_cache_len in zip(attention_data.q_len_list, attention_data.hit_cache_len_list):
+                if hit_cache_len != -1:
+                    hidden_states_list.append(hidden_states[q_start:q_len][hit_cache_len:])
+                else:
+                    hidden_states_list.append(hidden_states[q_start:q_len])
+                q_start += q_len
+            hidden_states = mx.concat(hidden_states_list, axis=0)
 
         # cos, sin = self.rotary_emb(attention_data.position_ids)
         # attention_data.cos, attention_data.sin = mx.expand_dims(cos, axis=1), mx.expand_dims(sin, axis=1)
@@ -75,12 +85,15 @@ class MLXLlamaModel(nn.Module):
         output = self.model(hidden_states, mask=mask, cache=attention_data)
 
         # TODO 异步保存 cache
-        for uuid, seq_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
-            self.cache_manager.set(uuid, attention_data.get_kv_cache_list(uuid), attention_data.get_cache_seq_len(uuid))
+        for uuid in seq_input.uuid_list:
+            self.cache_manager.set(uuid, attention_data.get_kv_cache_list(uuid))
             self.cache_manager.check_alive()
+        self.request_cache.clear()
+        self.request_cache.insert_cache(seq_input)
 
         if self.config.decoder_end_layer_idx == self.config.num_hidden_layers:
-            output = get_last_hidden_states(output, seq_input.seq_len_list)
+            split_len_list = attention_data.q_len_list
+            output = get_last_hidden_states(output, split_len_list)
         return output
 
     @classmethod

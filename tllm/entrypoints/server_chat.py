@@ -48,12 +48,7 @@ class OpenAIServing:
     async def create_chat_completion(self, request: ChatCompletionRequest, raw_request: Request):
         request_id = f"chat-{random_uuid()}"
         messages, mm_input_dict = await self.message_processor.parse_message(request.messages)
-        # print("messages", messages)
         input_ids = self.message_processor.preprocess(messages)
-        history_request_id, q_len = self.message_processor.fetch_request_id(messages)
-
-        if history_request_id is not None:
-            request_id = history_request_id
 
         if request.temperature == 0.0:
             method = "greedy"
@@ -62,8 +57,6 @@ class OpenAIServing:
 
         sequence_data = SequenceRequestData(
             request_id=request_id,
-            history_request_id=history_request_id,
-            q_len=q_len,
             sampling_params=request.to_sampling_params(self.engine.tok.tokenizer),
             input_ids=input_ids,
             multi_modal_inputs=mm_input_dict,
@@ -71,11 +64,9 @@ class OpenAIServing:
         result_generator = self.engine.generate_stream(sequence_data)
 
         if request.stream:
-            return self.chat_completion_stream_generator(request, raw_request, request_id, result_generator, messages)
+            return self.chat_completion_stream_generator(request, raw_request, request_id, result_generator)
         else:
-            return await self.chat_completion_full_generator(
-                request, raw_request, request_id, result_generator, messages
-            )
+            return await self.chat_completion_full_generator(request, raw_request, request_id, result_generator)
 
     async def chat_completion_stream_generator(
         self,
@@ -83,14 +74,11 @@ class OpenAIServing:
         raw_request: Request,
         request_id: str,
         result_generator: AsyncIterator,
-        messages,
     ) -> AsyncIterator[str]:
         created_time = int(time.time())
         n = 1
         previous_texts = [""] * n
         try:
-            response_text = ""
-            num_generated_tokens = 0
             async for res in result_generator:
                 if raw_request is not None and await raw_request.is_disconnected():
                     # Abort the request if the client disconnects.
@@ -102,8 +90,6 @@ class OpenAIServing:
 
                 delta_text = output.text
                 previous_texts[i] = output.text
-                num_prompt_tokens = len(res.prompt_token_ids)
-                num_generated_tokens += 1
 
                 # 根据 finish_reason 判断是否结束，分别处理
                 if output.finish_reason is not None:
@@ -117,16 +103,11 @@ class OpenAIServing:
                         logprobs=None,
                         finish_reason=output.finish_reason,
                     )
-                    response_text += delta_text
                 chunk = ChatCompletionStreamResponse(
                     id=request_id, model=self.model_name, created=created_time, choices=[choice_data]
                 )
                 data = chunk.model_dump_json(exclude_unset=True)
                 yield f"data: {data}\n\n"
-
-            messages.append({"role": self.response_role, "content": response_text})
-            total_tokens = num_prompt_tokens + num_generated_tokens
-            self.message_processor.update_conversations_dict(request_id, messages, total_tokens - 2)
             yield "data: [DONE]\n\n"
         except asyncio.CancelledError:
             await self.engine.abort(request_id)
@@ -138,7 +119,6 @@ class OpenAIServing:
         raw_request: Request,
         request_id: str,
         result_generator: AsyncIterator,
-        messages,
     ) -> ChatCompletionResponse:
         final_res = None
         created_time = int(time.time())
@@ -182,6 +162,4 @@ class OpenAIServing:
             usage=usage,
         )
 
-        messages.append({"role": self.response_role, "content": output.text})
-        self.message_processor.update_conversations_dict(request_id, messages, total_tokens - 1)
         return response

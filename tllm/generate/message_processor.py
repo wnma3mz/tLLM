@@ -14,7 +14,6 @@ class MessageProcessor:
     def __init__(self, tok: TokenizerUtils):
         self.tok = tok
         self.role_set = {"user", "system", "assistant"}
-        self.conversations_dict: Dict[MESSAGES, str] = {}
 
     async def read_image(self, image: UrlItem) -> ImageFile:
         if image.base64 is not None:
@@ -65,23 +64,3 @@ class MessageProcessor:
     def preprocess(self, messages: List[Dict[str, str]]) -> List[int]:
         input_ids = self.tok.preprocess(messages=messages).input_ids
         return input_ids
-
-    def fetch_request_id(self, messages: List[MESSAGES]) -> Optional[str]:
-        messages = copy.deepcopy(messages)
-        while len(messages) > 0 and messages[-1]["role"] == "user":
-            messages.pop()
-        if len(messages) == 0:
-            return None, -1
-        # 查询历史 messages 是否在 conversations_dict 中
-        key_str = tuple(self.tok.preprocess(messages=messages, add_generation_prompt=False).input_ids)
-        if key_str in self.conversations_dict:
-            request_id, total_token_num = self.conversations_dict[key_str]
-            # TODO: maybe have the bug
-            if len(key_str) <= total_token_num:
-                return None, -1
-            return request_id + f"-{len(messages)}", total_token_num
-        return None, -1
-
-    def update_conversations_dict(self, request_id: str, messages: List[MESSAGES], total_token_num: int) -> None:
-        key_str = tuple(self.tok.preprocess(messages=messages, add_generation_prompt=False).input_ids)
-        self.conversations_dict[key_str] = (request_id, total_token_num)

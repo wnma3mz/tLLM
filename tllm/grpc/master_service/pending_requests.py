@@ -1,4 +1,3 @@
-
 import asyncio
 from typing import Any, Dict, Tuple
 
@@ -60,4 +59,3 @@ class PendingRequests:
             if not tracker.future.done():
                 tracker.future.set_exception(error)
             del self._status_requests[trace_id]
-

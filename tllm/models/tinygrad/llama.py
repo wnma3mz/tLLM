@@ -169,9 +169,10 @@ def build_tinygrad_mask(q_len_list: List[int], k_len_list: List[int]) -> Tensor:
 def build_forward_cache(seq_input: SeqInput, cache_manager: CacheManager, num_layers: int) -> AttentionData:
     request_cache = RequestsCache(num_layers)
     q_len_list, k_len_list = [], []
-    for uuid, q_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
+    for uuid, q_len in zip(seq_input.uuid_list, ...):
         if uuid in cache_manager.cache_dict:
-            layer_cache_list, cache_seq_len = cache_manager.get(uuid)
+            layer_cache_list = cache_manager.get(uuid)
+            cache_seq_len = ...
             k_len_list.append(cache_seq_len + q_len)
         else:
             layer_cache_list = None
@@ -291,10 +292,11 @@ class TinyGradLlamaModel:
         hidden_states = self.model(hidden_states, freqs_cis=freqs_cis, attention_data=attention_data)
 
         if self.config.decoder_end_layer_idx == self.config.num_hidden_layers:
-            hidden_states = get_last_hidden_states(hidden_states, seq_input.seq_len_list)
+            split_len_list = attention_data.q_len_list
+            hidden_states = get_last_hidden_states(hidden_states, split_len_list)
 
-        for uuid, seq_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
-            self.cache_manager.set(uuid, attention_data.get_kv_cache_list(uuid), attention_data.get_cache_seq_len(uuid))
+        for uuid in seq_input.uuid_list:
+            self.cache_manager.set(uuid, attention_data.get_kv_cache_list(uuid))
             self.cache_manager.check_alive()
 
         return hidden_states

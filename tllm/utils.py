@@ -1,8 +1,10 @@
+from typing import Tuple
+
 from tllm import BACKEND, BackendEnum
 from tllm.grpc.master_service.master_server import MasterServer
 from tllm.grpc.master_service.pending_requests import PendingRequests
 from tllm.grpc.master_service.worker_manager import WorkerRPCManager
-from typing import Tuple
+
 
 def setup_seed(seed: int = 42):
     if BACKEND == BackendEnum.TORCH:

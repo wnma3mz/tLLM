@@ -64,10 +64,34 @@ class SamplingParams:
         self.stop_token_ids = stop_token_ids
 
 
+from tllm.grpc.proto import schemas_pb2, schemas_pb2_grpc
+
+
+def numpy_to_grpc_input_ids(input_ids_list: List[np.ndarray]) -> List[schemas_pb2.InputIds]:
+    rows = []
+    for input_ids in input_ids_list:
+        row = schemas_pb2.InputIds(input_ids=input_ids.tolist())
+        rows.append(row)
+    return rows
+
+
 @dataclass
 class SeqInput:
     uuid_list: List[str]
-    seq_len_list: List[int]
+    input_ids_list: List[List[int]]
+
+    @classmethod
+    def from_request_data(cls, forward_request: "schemas_pb2.ForwardRequest"):
+        return cls(
+            uuid_list=list(forward_request.uuid_list),
+            input_ids_list=[list(input_ids.input_ids) for input_ids in forward_request.input_ids_list],
+        )
+
+    def to_dict(self):
+        return {
+            "uuid_list": self.uuid_list,
+            "input_ids_list": numpy_to_grpc_input_ids(self.input_ids_list),
+        }
 
 
 @dataclass
@@ -151,7 +175,6 @@ class SequenceRequestData:
     sampling_params: SamplingParams
 
     multi_modal_inputs: Optional[Dict[str, List[Image.Image]]] = None
-    history_request_id: Optional[str] = None
     finish_reason_list: Optional[List[str]] = None
 
     output_ids: Optional[List[int]] = None  # 最终生成的 token id

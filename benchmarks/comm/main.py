@@ -79,7 +79,9 @@ class PerformanceTester:
 
         with grpc.insecure_channel(f"{self.host}:{self.port}") as channel:
             stub = schemas_pb2_grpc.RPCServiceStub(channel)
-            request = schemas_pb2.ForwardRequest(uuid=["123"], seq_len=[1], hidden_states=compress_bytes(byte_tensor))
+            request = schemas_pb2.ForwardRequest(
+                uuid_list=["123"], input_ids_list=[1], hidden_states=compress_bytes(byte_tensor)
+            )
 
             for _ in range(num_iterations):
                 start_time = time.time()

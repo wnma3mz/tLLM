@@ -116,18 +116,8 @@ class LLMGenerator:
                 if self.processor is not None:
                     mm_input_list.append(process_mm_input(sequence_request, self.processor, **self.mm_config))
 
-                # 已经存在的 message，需要更新使用之前的 request_id
-                if sequence_request.history_request_id is not None:
-                    uuid_list[-1] = sequence_request.history_request_id
-                    new_q_len = len(sequence_request.input_ids) - sequence_request.q_len
-                    # print("new_q_len", len(sequence_request.input_ids[-new_q_len:]))
-                    input_ids_list.append(np.array(sequence_request.input_ids[-new_q_len:]))
-                    # print("q_len", len(sequence_request.input_ids))
-                    # input_ids_list.append(np.array(sequence_request.input_ids))
-                    seq_len_list.append(len(sequence_request.input_ids))
-                else:
-                    input_ids_list.append(np.array(sequence_request.input_ids))
-                    seq_len_list.append(len(sequence_request.input_ids))
+                input_ids_list.append(np.array(sequence_request.input_ids))
+                seq_len_list.append(len(sequence_request.input_ids))
             else:
                 input_ids_list.append(np.array([sequence_request.output_ids[-1]]))
                 seq_len_list.append(1)
@@ -140,7 +130,7 @@ class LLMGenerator:
         else:
             input_embeds = self.model.get_input_embeddings(input_ids, **mm_input)
 
-        seq_input = SeqInput(uuid_list=uuid_list, seq_len_list=seq_len_list)
+        seq_input = SeqInput(uuid_list=uuid_list, input_ids_list=input_ids_list)
         s0 = time.perf_counter()
         forward_result = await self.forward(input_embeds, seq_input)
         self.logger.debug(f"decoder cost time: {time.perf_counter() - s0:.4f}s")

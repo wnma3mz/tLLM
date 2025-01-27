@@ -39,6 +39,14 @@ def llm_message():
         },
         {"role": "user", "content": "今天天气怎么样？"},
     ]
+    # messages2 = [
+    #     {"role": "user", "content": "Hello, how are you?"},
+    #     {
+    #         "role": "assistant",
+    #         "content": "Hello! I'm just a virtual assistant, so I don't have feelings, but I'm here and ready to help you with whatever you need. How are you doing? 😊",
+    #     },
+    #     {"role": "user", "content": "今天天气怎么样？"},
+    # ]
     messages_list = [messages1, messages2, messages2]
     return messages_list
 
@@ -68,15 +76,16 @@ def mllm_message():
 
 
 async def main(messages_list: List[List[Dict[str, Any]]]):
-    # print("异步并发请求结果")
-    # s1 = time.time()
-    # await asyncio.gather(*[requests_func(messages) for messages in messages_list])
-    # print(f"time cost: {time.time() - s1:.4f} s")
+    print("异步并发请求结果")
+    s1 = time.time()
+    await asyncio.gather(*[requests_func(messages) for messages in messages_list])
+    print(f"time cost: {time.time() - s1:.4f} s")
 
     print("单独请求结果")
     s1 = time.time()
     for message in messages_list:
         await requests_func(message)
+        print("=" * 20)
     print(f"time cost: {time.time() - s1:.4f} s")
 
 

@@ -1,10 +1,11 @@
 # coding: utf-8
 import copy
 import time
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional
 
-from tllm import BACKEND, DEVICE, DTYPE, BackendEnum
-from tllm.schemas import MIX_TENSOR
+from tllm import BACKEND, DEVICE, DTYPE, ENABLE_PREFIX_CACHE, BackendEnum
+from tllm.commons.radix_tree import RadixTree
+from tllm.schemas import MIX_TENSOR, SeqInput
 
 if BACKEND == BackendEnum.MLX:
     import mlx.core as mx
@@ -21,8 +22,6 @@ else:
     array_func = lambda x: torch.tensor([x], dtype=torch.long)
     arange_func = lambda x: torch.arange(0, x, dtype=torch.long)
 
-KV_CACHE_TYPE = Tuple[MIX_TENSOR, MIX_TENSOR]
-
 
 class KVCache:
     def __init__(
@@ -35,21 +34,41 @@ class KVCache:
         else:
             self.key_states = zeros_func(max_seq_len, num_key_value_heads, head_dim)
             self.value_states = zeros_func(max_seq_len, num_key_value_heads, head_dim)
-        self._len = 0
+        self.kv_len = 0
 
-    def set_kv_len(self, len_: int):
-        self._len = len_
+    def set_kv_len(self, kv_len: int):
+        self.kv_len = kv_len
+
+
+class DecoderCache:
+    def __init__(
+        self, num_layers: int, q_len: int, max_seq_len: int = -1, num_key_value_heads: int = -1, head_dim: int = -1
+    ):
+        self.kv_cache_list = [KVCache(max_seq_len, num_key_value_heads, head_dim) for _ in range(num_layers)]
+        self.q_len = q_len
 
     @property
     def kv_len(self):
-        return self._len
+        return self.kv_cache_list[0].kv_len
+
+    def __getitem__(self, idx: int) -> KVCache:
+        return self.kv_cache_list[idx]
+
+    def truncate(self, len_: int):
+        for kv_cache in self.kv_cache_list:
+            kv_cache.key_states = kv_cache.key_states[:len_]
+            kv_cache.value_states = kv_cache.value_states[:len_]
+            kv_cache.set_kv_len(len_)
+
+    def set_q_len(self, q_len: int):
+        self.q_len = q_len
 
 
 class RequestsCache:
     def __init__(
         self, num_layers: int, max_seq_len: int = -1, num_key_value_heads: int = -1, head_dim: int = -1
     ) -> None:
-        self.cache_dict: Dict[str : Dict[str, Union[List[KVCache], int]]] = {}
+        self.cache_dict: Dict[str, DecoderCache] = {}
         self.num_layers = num_layers
         self.max_seq_len, self.num_key_value_heads, self.head_dim = max_seq_len, num_key_value_heads, head_dim
         if self.max_seq_len == -1:
@@ -58,70 +77,85 @@ class RequestsCache:
         else:
             # cat attention to save time
             self.update = self.update_no_cat
+        self.radix_tree = RadixTree()
 
-    def add(self, uuid: str, seq_len: int, layer_cache_list: Optional[List[KVCache]] = None):
+    def clear(self):
+        self.cache_dict.clear()
+
+    def insert_cache(self, seq_input: SeqInput):
+        if ENABLE_PREFIX_CACHE:
+            for input_ids, request_id in zip(seq_input.input_ids_list, seq_input.uuid_list):
+                self.radix_tree.append_to_request(input_ids, request_id)
+
+    def add(self, uuid: str, q_len: int, decoder_cache: Optional[DecoderCache] = None):
         # 保存每个 uuid 请求所有层的 cache
-        self.cache_dict[uuid] = {
-            "cache": (
-                [KVCache(self.max_seq_len, self.num_key_value_heads, self.head_dim) for _ in range(self.num_layers)]
-                if layer_cache_list is None
-                else layer_cache_list
-            ),
-            "seq_len": seq_len,
-        }
+        self.cache_dict[uuid] = (
+            DecoderCache(self.num_layers, q_len, self.max_seq_len, self.num_key_value_heads, self.head_dim)
+            if decoder_cache is None
+            else decoder_cache
+        )
 
-    def build(self, seq_input, cache_manager):
+    def build(self, seq_input: SeqInput, cache_manager: "CacheManager"):
         q_len_list, k_len_list = [], []
         position_ids_list = []
-        conv_len_list = []
+        hit_cache_len_list = []
 
-        for uuid, q_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
-            conv_len = -1
+        for uuid, input_ids in zip(seq_input.uuid_list, seq_input.input_ids_list):
+            hit_cache_len = -1
+            q_len = len(input_ids)
             # decoding 阶段
             if q_len == 1 and uuid in cache_manager.cache_dict:
-                layer_cache_list, cache_seq_len = cache_manager.get(uuid)
+                decoder_cache: DecoderCache = cache_manager.get(uuid)
+                cache_seq_len = decoder_cache.kv_len
                 position_ids = array_func(cache_seq_len)
                 k_len_list.append(cache_seq_len + q_len)
             # prefilling 阶段
             else:
-                # 如果是历史对话，则使用历史的 kv_cache
-                chat_uuid, chat_len = uuid.rsplit("-", 1)
-                if uuid.count("-") == 2 and chat_uuid in cache_manager.cache_dict:
-                    layer_cache_list, cache_seq_len = cache_manager.get(chat_uuid)
-                    layer_cache_list = copy.deepcopy(layer_cache_list)
+                # 命中了之前的 kv cache，使用历史 cache
+                if ENABLE_PREFIX_CACHE:
+                    hit_uuid, hit_cache_len = self.radix_tree.longest_common_prefix(input_ids)
+                else:
+                    hit_uuid, hit_cache_len = None, -1  # 不启用 prefix cache
+                if hit_uuid is not None and cache_manager.get(hit_uuid) is not None:
+                    hid_decoder_cache: DecoderCache = copy.deepcopy(cache_manager.get(hit_uuid))
+                    # 相同请求时，避免过超过 cache 长度
+                    if q_len <= hit_cache_len:
+                        hit_cache_len = q_len - 1
+
+                    hid_decoder_cache.truncate(hit_cache_len)
+                    hid_decoder_cache.set_q_len(q_len - hit_cache_len)
+                    decoder_cache = hid_decoder_cache
                     position_ids = arange_func(q_len)
                     k_len_list.append(q_len)
-                    conv_len = q_len - cache_seq_len
-                # 首次出现过的 uuid，第一次 conversation
+                # 未命中任何 kv cache，新建 cache
                 else:
-                    layer_cache_list = None
+                    decoder_cache = None
                     position_ids = arange_func(q_len)
                     k_len_list.append(q_len)
             q_len_list.append(q_len)
             position_ids_list.append(position_ids)
-            conv_len_list.append(conv_len)
+            hit_cache_len_list.append(hit_cache_len)
 
-            self.add(uuid, q_len, layer_cache_list)
-        return q_len_list, k_len_list, position_ids_list, conv_len_list
+            self.add(uuid, q_len, decoder_cache)
+        return q_len_list, k_len_list, position_ids_list, hit_cache_len_list
 
-    def get_kv_cache(self, uuid: str) -> List[KVCache]:
-        return self.cache_dict[uuid]["cache"]
+    def get_kv_cache(self, uuid: str) -> DecoderCache:
+        return self.cache_dict[uuid]
 
     def get_layer_idx_kv_cache(self, uuid: str, layer_idx: int) -> KVCache:
         return self.get_kv_cache(uuid)[layer_idx]
 
-    def get_seq_len(self, uuid: str) -> int:
-        # 获取每个 uuid 请求的 key_states/value_states 的 seq_len
-        return self.cache_dict[uuid]["seq_len"]
+    def get_q_len(self, uuid: str) -> int:
+        # 获取每个 uuid 请求的 q_len
+        return self.get_kv_cache(uuid).q_len
 
-    def get_cache_seq_len(self, uuid: str, layer_idx: Optional[int] = 0) -> int:
-        # 获取每个 uuid 请求的 kv cache 的 seq_len
-        x = self.get_kv_cache(uuid)[layer_idx].kv_len
-        return x
+    def get_kv_len(self, uuid: str, layer_idx: Optional[int] = 0) -> int:
+        # 获取每个 uuid 请求的 kv cache 的 kv_len
+        return self.get_layer_idx_kv_cache(uuid, layer_idx).kv_len
 
     def get_offset_list(self, uuid_list: List[str], layer_idx: int) -> List[int]:
         # 获取每个 uuid 请求的 offset，用于 mlx framework 旋转位置编码
-        return [self.get_cache_seq_len(uuid, layer_idx) for uuid in uuid_list]
+        return [self.get_kv_len(uuid, layer_idx) for uuid in uuid_list]
 
     def update_cat(
         self,
@@ -136,7 +170,7 @@ class RequestsCache:
         start = 0
         for uuid in uuid_list:
             kv_cache: KVCache = self.get_layer_idx_kv_cache(uuid, layer_idx)
-            interval = self.get_seq_len(uuid)
+            interval = self.get_q_len(uuid)
             end = start + interval
             cur_key_states, cur_value_states = key_states[start:end], value_states[start:end]
             if kv_cache.key_states is None:
@@ -166,7 +200,7 @@ class RequestsCache:
 
         for uuid in uuid_list:
             kv_cache: KVCache = self.get_layer_idx_kv_cache(uuid, layer_idx)
-            end = start + self.get_seq_len(uuid)  # 获取每个请求对应的区间
+            end = start + self.get_q_len(uuid)  # 获取每个请求对应的区间
             cur_key_states, cur_value_states = key_states[start:end], value_states[start:end]
 
             if kv_cache.kv_len == 0:
@@ -199,7 +233,7 @@ class RequestsCache:
 
         for uuid in uuid_list:
             kv_cache = self.get_layer_idx_kv_cache(uuid, layer_idx)
-            interval = self.get_seq_len(uuid)
+            interval = self.get_q_len(uuid)
             end = start + interval
 
             cur_key, cur_value = key_states[start:end], value_states[start:end]
@@ -225,31 +259,40 @@ class AttentionData:
         request_cache: RequestsCache,
         attn_mask: MIX_TENSOR,
         position_ids=None,
+        hit_cache_len_list=None,
+        q_len_list=None,
     ) -> None:
         self.uuid_list = uuid_list
         self.request_cache = request_cache
         self.attn_mask = attn_mask
         self.position_ids = position_ids  # 只在 torch 下有意义
+        self.hit_cache_len_list = hit_cache_len_list  # 用于 PP=0 截断 hidden_states
+        self.q_len_list = q_len_list
 
     def get_kv_cache_list(self, uuid: str) -> List[KVCache]:
         return self.request_cache.get_kv_cache(uuid)
 
-    def get_cache_seq_len(self, uuid: str) -> int:
-        return self.request_cache.get_cache_seq_len(uuid)
+    def get_kv_len(self, uuid: str) -> int:
+        return self.request_cache.get_kv_len(uuid)
 
 
 class CacheManager:
-    # 管理每个节点的 cache kv_cache
+    # 管理每个节点的所有层 kv_cache
     # max_alive_time: 超过多久没有访问就删除，单位秒
     def __init__(self, max_alive_time=60):
         self.max_alive_time = max_alive_time
         self.cache_dict = {}
 
-    def get(self, key) -> Tuple[AttentionData, int]:
-        return self.cache_dict.get(key)["cache"], self.cache_dict.get(key)["seq_len"]
+    def get(self, key) -> Optional[DecoderCache]:
+        if self.is_contain(key):
+            return self.cache_dict.get(key)["cache"]
+        return None
 
-    def set(self, key, value: List[KV_CACHE_TYPE], seq_len: int) -> None:
-        self.cache_dict[key] = {"cache": value, "ts": time.time(), "seq_len": seq_len}
+    def set(self, key, value: DecoderCache) -> None:
+        self.cache_dict[key] = {"cache": value, "ts": time.time()}
+
+    def is_contain(self, key) -> bool:
+        return key in self.cache_dict
 
     def delete(self, key):
         self.cache_dict.pop(key)
