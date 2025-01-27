@@ -73,7 +73,7 @@ def build_forward_cache(
     head_dim: int = -1,
 ) -> AttentionData:
     request_cache = RequestsCache(num_layers, max_seq_len, num_key_value_heads, head_dim)
-    q_len_list, k_len_list, position_ids_list = request_cache.build(seq_input, cache_manager)
+    q_len_list, k_len_list, position_ids_list, _ = request_cache.build(seq_input, cache_manager)
 
     if ATTN_TYPE == "flash_attention":
         attn_mask = {

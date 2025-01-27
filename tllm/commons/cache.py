@@ -1,4 +1,5 @@
 # coding: utf-8
+import copy
 import time
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -72,24 +73,36 @@ class RequestsCache:
     def build(self, seq_input, cache_manager):
         q_len_list, k_len_list = [], []
         position_ids_list = []
+        conv_len_list = []
 
         for uuid, q_len in zip(seq_input.uuid_list, seq_input.seq_len_list):
-            if uuid in cache_manager.cache_dict:
-                # kv_cache 是整个历史的 kv_cache
-                # 当 q_len 为 1 时，直接使用 kv_cache，使用历史的全部 token kv cache
-                # TODO: 当 q_len > 1 时，表示只需要使用前 q_len 的 kv_cache，后面的 kv_cache 需要重新计算
+            conv_len = -1
+            # decoding 阶段
+            if q_len == 1 and uuid in cache_manager.cache_dict:
                 layer_cache_list, cache_seq_len = cache_manager.get(uuid)
                 position_ids = array_func(cache_seq_len)
                 k_len_list.append(cache_seq_len + q_len)
+            # prefilling 阶段
             else:
-                layer_cache_list = None
-                position_ids = arange_func(q_len)
-                k_len_list.append(q_len)
+                # 如果是历史对话，则使用历史的 kv_cache
+                chat_uuid, chat_len = uuid.rsplit("-", 1)
+                if uuid.count("-") == 2 and chat_uuid in cache_manager.cache_dict:
+                    layer_cache_list, cache_seq_len = cache_manager.get(chat_uuid)
+                    layer_cache_list = copy.deepcopy(layer_cache_list)
+                    position_ids = arange_func(q_len)
+                    k_len_list.append(q_len)
+                    conv_len = q_len - cache_seq_len
+                # 首次出现过的 uuid，第一次 conversation
+                else:
+                    layer_cache_list = None
+                    position_ids = arange_func(q_len)
+                    k_len_list.append(q_len)
             q_len_list.append(q_len)
             position_ids_list.append(position_ids)
+            conv_len_list.append(conv_len)
 
             self.add(uuid, q_len, layer_cache_list)
-        return q_len_list, k_len_list, position_ids_list
+        return q_len_list, k_len_list, position_ids_list, conv_len_list
 
     def get_kv_cache(self, uuid: str) -> List[KVCache]:
         return self.cache_dict[uuid]["cache"]

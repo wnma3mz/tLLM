@@ -16,13 +16,22 @@ def greedy_decode(logits: mx.array) -> List[int]:
     return out.tolist()  # TODO: first requests is too slow
 
 
-def build_mlx_mask(q_len_list: List[int], k_len_list: List[int]) -> mx.array:
-    mask_list = [
-        mx.tril(mx.ones((L, S), dtype=mx.bool_), k=0) if L > 1 else mx.ones((L, S), dtype=mx.bool_)
-        for (L, S) in zip(q_len_list, k_len_list)
-    ]
+def build_mlx_mask(q_len_list: List[int], k_len_list: List[int], conv_len_list: List[int]) -> mx.array:
+    mask_list = []
+    sum_q_len = sum(q_len_list)
+    sum_k_len = sum(k_len_list)
+    for q_len, k_len, conv_len in zip(q_len_list, k_len_list, conv_len_list):
+        # prefilling
+        if q_len > 1:
+            mask = mx.tril(mx.ones((q_len, k_len), dtype=mx.bool_), k=0)
+            if conv_len != -1:
+                sum_q_len -= q_len - conv_len
+                mask = mask[-conv_len:]
+        else:
+            mask = mx.ones((q_len, k_len), dtype=mx.bool_)
+        mask_list.append(mask)
 
-    combined_mask = mx.zeros((sum(q_len_list), sum(k_len_list)), dtype=mx.bool_)
+    combined_mask = mx.zeros((sum_q_len, sum_k_len), dtype=mx.bool_)
 
     l_index, r_index = 0, 0
     for mask in mask_list:
@@ -42,12 +51,13 @@ def build_forward_cache(
     num_key_value_heads: int = -1,
     head_dim: int = -1,
 ) -> AttentionData:
+    # TODO: 不需要每次 forward 都初始化
     request_cache = RequestsCache(num_layers, max_seq_len, num_key_value_heads, head_dim)
-    q_len_list, k_len_list, position_ids_list = request_cache.build(seq_input, cache_manager)
+    q_len_list, k_len_list, position_ids_list, conv_len_list = request_cache.build(seq_input, cache_manager)
 
     return AttentionData(
         request_cache=request_cache,
-        attn_mask=build_mlx_mask(q_len_list, k_len_list),
+        attn_mask=build_mlx_mask(q_len_list, k_len_list, conv_len_list),
         uuid_list=seq_input.uuid_list,
         position_ids=mx.concatenate(position_ids_list, axis=-1),
     )

@@ -113,13 +113,21 @@ class LLMGenerator:
             # 如果是 prefilling，则为 input_ids; 否则，为 output_ids[-1]
             # input_ids: seq_len
             if sequence_request.is_prefill:
-                # if sequence_request.history_request_id:
-                #     uuid_list[-1] = sequence_request.history_request_id
                 if self.processor is not None:
                     mm_input_list.append(process_mm_input(sequence_request, self.processor, **self.mm_config))
-                input_ids_list.append(np.array(sequence_request.input_ids))
-                # seq_len_list.append(sequence_request.q_len) # 需要搭配 history_request_id 使用
-                seq_len_list.append(len(sequence_request.input_ids))
+
+                # 已经存在的 message，需要更新使用之前的 request_id
+                if sequence_request.history_request_id is not None:
+                    uuid_list[-1] = sequence_request.history_request_id
+                    new_q_len = len(sequence_request.input_ids) - sequence_request.q_len
+                    # print("new_q_len", len(sequence_request.input_ids[-new_q_len:]))
+                    input_ids_list.append(np.array(sequence_request.input_ids[-new_q_len:]))
+                    # print("q_len", len(sequence_request.input_ids))
+                    # input_ids_list.append(np.array(sequence_request.input_ids))
+                    seq_len_list.append(len(sequence_request.input_ids))
+                else:
+                    input_ids_list.append(np.array(sequence_request.input_ids))
+                    seq_len_list.append(len(sequence_request.input_ids))
             else:
                 input_ids_list.append(np.array([sequence_request.output_ids[-1]]))
                 seq_len_list.append(1)

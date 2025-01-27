@@ -152,6 +152,7 @@ class MergedSdpaAttention(nn.Module):
             self.num_heads * self.head_dim, self.hidden_size, self.world_size, self.rank, bias=o_proj_bias
         )
 
+        # 长文本、大 batch 收益更大
         # self.max_seq_len = 1024
         # self._k_cache = zeros_func(self.max_seq_len, self.num_key_value_heads, self.head_dim)
         # self._v_cache = zeros_func(self.max_seq_len, self.num_key_value_heads, self.head_dim)

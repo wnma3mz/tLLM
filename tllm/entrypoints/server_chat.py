@@ -33,16 +33,27 @@ class OpenAIServing:
         self.engine = engine
         self.message_processor = MessageProcessor(self.engine.tok)
         self.model_name = os.path.basename(args.model_path)
+        self.response_role = "assistant"
+
+    @property
+    def max_model_len(self):
+        return 8192
 
     async def show_available_models(self):
-        model_cards = [ModelCard(id=self.model_name, max_model_len=8192, root="tllm", permission=[ModelPermission()])]
+        model_cards = [
+            ModelCard(id=self.model_name, max_model_len=self.max_model_len, root="tllm", permission=[ModelPermission()])
+        ]
         return ModelList(data=model_cards)
 
     async def create_chat_completion(self, request: ChatCompletionRequest, raw_request: Request):
         request_id = f"chat-{random_uuid()}"
         messages, mm_input_dict = await self.message_processor.parse_message(request.messages)
+        # print("messages", messages)
         input_ids = self.message_processor.preprocess(messages)
-        history_request_id, q_len = self.message_processor.fetch_request_id(input_ids)
+        history_request_id, q_len = self.message_processor.fetch_request_id(messages)
+
+        if history_request_id is not None:
+            request_id = history_request_id
 
         if request.temperature == 0.0:
             method = "greedy"
@@ -60,17 +71,26 @@ class OpenAIServing:
         result_generator = self.engine.generate_stream(sequence_data)
 
         if request.stream:
-            return self.chat_completion_stream_generator(request, raw_request, request_id, result_generator)
+            return self.chat_completion_stream_generator(request, raw_request, request_id, result_generator, messages)
         else:
-            return await self.chat_completion_full_generator(request, raw_request, request_id, result_generator)
+            return await self.chat_completion_full_generator(
+                request, raw_request, request_id, result_generator, messages
+            )
 
     async def chat_completion_stream_generator(
-        self, request: ChatCompletionRequest, raw_request: Request, request_id: str, result_generator: AsyncIterator
+        self,
+        request: ChatCompletionRequest,
+        raw_request: Request,
+        request_id: str,
+        result_generator: AsyncIterator,
+        messages,
     ) -> AsyncIterator[str]:
         created_time = int(time.time())
         n = 1
         previous_texts = [""] * n
         try:
+            response_text = ""
+            num_generated_tokens = 0
             async for res in result_generator:
                 if raw_request is not None and await raw_request.is_disconnected():
                     # Abort the request if the client disconnects.
@@ -82,6 +102,8 @@ class OpenAIServing:
 
                 delta_text = output.text
                 previous_texts[i] = output.text
+                num_prompt_tokens = len(res.prompt_token_ids)
+                num_generated_tokens += 1
 
                 # 根据 finish_reason 判断是否结束，分别处理
                 if output.finish_reason is not None:
@@ -95,21 +117,30 @@ class OpenAIServing:
                         logprobs=None,
                         finish_reason=output.finish_reason,
                     )
+                    response_text += delta_text
                 chunk = ChatCompletionStreamResponse(
                     id=request_id, model=self.model_name, created=created_time, choices=[choice_data]
                 )
                 data = chunk.model_dump_json(exclude_unset=True)
                 yield f"data: {data}\n\n"
+
+            messages.append({"role": self.response_role, "content": response_text})
+            total_tokens = num_prompt_tokens + num_generated_tokens
+            self.message_processor.update_conversations_dict(request_id, messages, total_tokens - 2)
             yield "data: [DONE]\n\n"
         except asyncio.CancelledError:
             await self.engine.abort(request_id)
             create_error_response("Client disconnected")
 
     async def chat_completion_full_generator(
-        self, request: ChatCompletionRequest, raw_request: Request, request_id: str, result_generator: AsyncIterator
+        self,
+        request: ChatCompletionRequest,
+        raw_request: Request,
+        request_id: str,
+        result_generator: AsyncIterator,
+        messages,
     ) -> ChatCompletionResponse:
         final_res = None
-        role = "assistant"
         created_time = int(time.time())
         try:
             async for res in result_generator:
@@ -124,7 +155,7 @@ class OpenAIServing:
             create_error_response("Client disconnected")
 
         output = final_res.outputs[0]
-        message = ChatMessage(role=role, content=output.text)
+        message = ChatMessage(role=self.response_role, content=output.text)
 
         choice_data = ChatCompletionResponseChoice(
             index=output.index,
@@ -136,11 +167,12 @@ class OpenAIServing:
 
         num_prompt_tokens = len(final_res.prompt_token_ids)
         num_generated_tokens = sum(len(output.token_ids) for output in final_res.outputs)
+        total_tokens = num_prompt_tokens + num_generated_tokens
 
         usage = UsageInfo(
             prompt_tokens=num_prompt_tokens,
             completion_tokens=num_generated_tokens,
-            total_tokens=num_prompt_tokens + num_generated_tokens,
+            total_tokens=total_tokens,
         )
         response = ChatCompletionResponse(
             id=request_id,
@@ -149,4 +181,7 @@ class OpenAIServing:
             choices=[choice_data],
             usage=usage,
         )
+
+        messages.append({"role": self.response_role, "content": output.text})
+        self.message_processor.update_conversations_dict(request_id, messages, total_tokens - 1)
         return response

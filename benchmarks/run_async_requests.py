@@ -26,12 +26,20 @@ async def requests_func(messages: List[Dict[str, Any]]):
 
 def llm_message():
     messages1 = [{"role": "user", "content": "Hello, how are you?"}]
-    messages2 = [{"role": "user", "content": "Hello, What's your name?"}]
-    messages3 = [
-        {"role": "system", "content": "You are a helpful AI assistant."},
-        {"role": "user", "content": "今天天气怎么样"},
+    # messages2 = [{"role": "user", "content": "Hello, What's your name?"}]
+    # messages1 = [
+    #     {"role": "system", "content": "You are a helpful AI assistant."},
+    #     {"role": "user", "content": "今天天气怎么样"},
+    # ]
+    messages2 = [
+        {"role": "user", "content": "Hello, how are you?"},
+        {
+            "role": "assistant",
+            "content": "Hello! I'm Qwen, a large language model created by Alibaba Cloud. I'm here to assist you with any questions or tasks you might have. How can I help you today?",
+        },
+        {"role": "user", "content": "今天天气怎么样？"},
     ]
-    messages_list = [messages1, messages2, messages3]
+    messages_list = [messages1, messages2, messages2]
     return messages_list
 
 
@@ -60,10 +68,10 @@ def mllm_message():
 
 
 async def main(messages_list: List[List[Dict[str, Any]]]):
-    print("异步并发请求结果")
-    s1 = time.time()
-    await asyncio.gather(*[requests_func(messages) for messages in messages_list])
-    print(f"time cost: {time.time() - s1:.4f} s")
+    # print("异步并发请求结果")
+    # s1 = time.time()
+    # await asyncio.gather(*[requests_func(messages) for messages in messages_list])
+    # print(f"time cost: {time.time() - s1:.4f} s")
 
     print("单独请求结果")
     s1 = time.time()
