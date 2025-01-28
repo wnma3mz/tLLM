@@ -18,7 +18,7 @@ def parse_args():
         choices=["AUTO", "TORCH", "VLLM", "XFormers"],
         help="Attention backend if backend is TORCH",
     )
-    parser.add_argument("--model_path", type=str, default="mlx-community/Llama-3.2-1B-Instruct-4bit")
+    parser.add_argument("--model_path", type=str, default="Qwen/Qwen2-VL-2B-Instruct")
     return parser.parse_args()
 
 
@@ -103,42 +103,11 @@ def mllm_message():
 async def llm_generate(args, messages):
     engine = init_engine(args.model_path)
     await engine.start()
-    messages = [{"role": "user", "content": "Hello, how are you?"}]
-    # messages = [
-    #     {
-    #         "role": "system",
-    #         "content": "Given the following conversation, relevant context, and a follow up question, reply with an answer to the current question the user is asking. Return only your response to the question given the above information following the users instructions as needed.",
-    #     },
-    #     {"role": "user", "content": "hello"},
-    # ]
     openai_serving_chat = OpenAIServing(engine, args)
 
-    # for _ in range(3):
     request = ChatCompletionRequest(model="test", messages=messages, max_tokens=100)
     response = await openai_serving_chat.create_chat_completion(request, None)
     print(response)
-
-    messages = [
-        {"role": "user", "content": "Hello, how are you?"},
-        {
-            "role": "assistant",
-            "content": "Hello! I'm Qwen, a large language model created by Alibaba Cloud. I'm here to assist you with any questions or tasks you might have. How can I help you today?",
-        },
-        {"role": "user", "content": "今天天气怎么样？"},
-    ]
-    # messages = [
-    #     {
-    #         "role": "system",
-    #         "content": "Given the following conversation, relevant context, and a follow up question, reply with an answer to the current question the user is asking. Return only your response to the question given the above information following the users instructions as needed.",
-    #     },
-    #     {"role": "user", "content": "hello"},
-    #     {"role": "assistant", "content": "Hello! How can I assist you today?"},
-    #     {"role": "user", "content": "今年天气怎么样"},
-    # ]
-    for _ in range(3):
-        request = ChatCompletionRequest(model="test", messages=messages, max_tokens=100)
-        response = await openai_serving_chat.create_chat_completion(request, None)
-        print(response)
 
 
 async def image_generate(args):
@@ -162,6 +131,6 @@ async def image_generate(args):
 
 if __name__ == "__main__":
     args = parse_args()
-    asyncio.run(llm_generate(args, llm_message()))
-    # asyncio.run(llm_generate(args, mllm_message()))
+    # asyncio.run(llm_generate(args, llm_message()))
+    asyncio.run(llm_generate(args, mllm_message()))
     # asyncio.run(image_generate(args))

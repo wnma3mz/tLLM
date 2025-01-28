@@ -18,7 +18,7 @@ except ImportError as e:
 if BackendEnum.MLX == BACKEND:
     from tllm.models.mlx.llama import MLXLlamaForCausalLM, MLXLlamaModel
     from tllm.models.mlx.qwen import MLXQwen2ForCausalLM, MLXQwen2Model
-    from tllm.models.mlx.qwen_vl.qwen_vl import MLXQwen2VLForConditionalGeneration
+    from tllm.models.mlx.qwen_vl import MLXQwen2VLForConditionalGeneration
 
     MODEL_REGISTER.update({"LlamaForCausalLM": (MLXLlamaForCausalLM, MLXLlamaModel)})
     MODEL_REGISTER.update({"Qwen2ForCausalLM": (MLXQwen2ForCausalLM, MLXQwen2Model)})

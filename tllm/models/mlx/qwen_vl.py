@@ -3,98 +3,12 @@ from typing import Dict, Optional
 import mlx.core as mx
 import mlx.nn as nn
 import numpy as np
-from transformers import AutoConfig, AutoProcessor
+from transformers import AutoProcessor
 
 from tllm import DTYPE
 from tllm.models.mlx.helper import quantization_func
-from tllm.models.mlx.qwen_vl.layers import (
-    PatchEmbed,
-    PatchMerger,
-    VisionMlp,
-    VisionRotaryEmbedding,
-    VisionSdpaAttention,
-)
 
-
-class Qwen2VLVisionBlock(nn.Module):
-    def __init__(self, config: AutoConfig) -> None:
-        super().__init__()
-        self.norm1 = nn.LayerNorm(config.embed_dim, eps=1e-6)
-        self.norm2 = nn.LayerNorm(config.embed_dim, eps=1e-6)
-        mlp_hidden_dim = int(config.embed_dim * config.mlp_ratio)
-
-        self.attn = VisionSdpaAttention(config.embed_dim, num_heads=config.num_heads)
-        self.mlp = VisionMlp(dim=config.embed_dim, hidden_dim=mlp_hidden_dim, hidden_act=config.hidden_act)
-
-    def __call__(self, hidden_states, cu_seqlens, rotary_pos_emb) -> mx.array:
-        hidden_states = hidden_states + self.attn(
-            self.norm1(hidden_states), cu_seqlens=cu_seqlens, rotary_pos_emb=rotary_pos_emb
-        )
-        hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
-        return hidden_states
-
-
-class Qwen2VisionModel(nn.Module):
-    def __init__(self, config) -> None:
-        super().__init__()
-        self.spatial_merge_size = config.spatial_merge_size
-
-        self.patch_embed = PatchEmbed(
-            patch_size=config.patch_size,
-            temporal_patch_size=config.temporal_patch_size,
-            in_channels=config.in_channels,
-            embed_dim=config.embed_dim,
-        )
-
-        head_dim = config.embed_dim // config.num_heads
-        self.rotary_pos_emb = VisionRotaryEmbedding(head_dim // 2)
-        self.blocks = [Qwen2VLVisionBlock(config) for _ in range(config.depth)]
-        self.merger = PatchMerger(
-            dim=config.hidden_size, context_dim=config.embed_dim, spatial_merge_size=config.spatial_merge_size
-        )
-
-    def rot_pos_emb(self, grid_thw):
-        pos_ids = []
-
-        for thw in grid_thw:
-            t, h, w = thw.tolist()
-            hpos_ids = mx.repeat(mx.expand_dims(mx.arange(h), axis=1), w, axis=1)
-            hpos_ids = hpos_ids.reshape(
-                h // self.spatial_merge_size,
-                self.spatial_merge_size,
-                w // self.spatial_merge_size,
-                self.spatial_merge_size,
-            )
-            hpos_ids = hpos_ids.transpose(0, 2, 1, 3)
-            hpos_ids = hpos_ids.flatten()
-
-            wpos_ids = mx.repeat(mx.expand_dims(mx.arange(w), axis=0), h, axis=0)
-            wpos_ids = wpos_ids.reshape(
-                h // self.spatial_merge_size,
-                self.spatial_merge_size,
-                w // self.spatial_merge_size,
-                self.spatial_merge_size,
-            )
-            wpos_ids = wpos_ids.transpose(0, 2, 1, 3)
-            wpos_ids = wpos_ids.flatten()
-            pos_ids.append(mx.repeat(mx.stack([hpos_ids, wpos_ids], axis=-1), t, axis=1))
-        pos_ids = mx.concatenate(pos_ids, axis=0)
-        max_grid_size = grid_thw[:, 1:].max()
-        rotary_pos_emb_full = self.rotary_pos_emb(max_grid_size)
-        rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
-        return rotary_pos_emb
-
-    def __call__(self, hidden_states: mx.array, grid_thw: mx.array) -> mx.array:
-        hidden_states = self.patch_embed(hidden_states)
-        rotary_pos_emb = self.rot_pos_emb(grid_thw)
-
-        repeated = mx.repeat(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0])
-        cu_seqlens = mx.cumsum(repeated)
-        cu_seqlens = mx.pad(cu_seqlens, pad_width=(1, 0)).tolist()
-        for blk in self.blocks:
-            hidden_states = blk(hidden_states.astype(DTYPE), cu_seqlens=cu_seqlens, rotary_pos_emb=rotary_pos_emb)
-        return self.merger(hidden_states)
-
+from mlx_clip.models.qwen2vision.qwen2vision_model import Qwen2VisionModel
 
 class MLXQwen2VLForConditionalGeneration(nn.Module):
     def __init__(self, config):

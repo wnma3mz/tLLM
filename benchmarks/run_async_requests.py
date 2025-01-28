@@ -90,5 +90,5 @@ async def main(messages_list: List[List[Dict[str, Any]]]):
 
 
 if __name__ == "__main__":
-    asyncio.run(main(llm_message()))
-    # asyncio.run(main(mllm_message()))
+    # asyncio.run(main(llm_message()))
+    asyncio.run(main(mllm_message()))

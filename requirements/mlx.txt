@@ -1,2 +1,3 @@
 mlx
 mlx_lm==0.19.2
+-e git+https://github.com/wnma3mz/mlx_clip.git#egg=mlx_clip

@@ -6,7 +6,7 @@
 
 1. install dependencies
 
-- for mlx (macos arm):   `pip install -e ".[mlx]"`
+- for mlx (macos arm):  `pip install -e ".[mlx]" && pip install -r requirements/mlx.txt`
 - for nvidia: `pip install -e ".[torch]"`
 
 2. run server

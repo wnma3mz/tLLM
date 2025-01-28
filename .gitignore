@@ -16,3 +16,4 @@ mpi_hosts
 run_mpirun.sh
 test.py
 test_mpi4.py
+src/mlx-clip
