@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Dict
 
 import mlx.core as mx
 import mlx.nn as nn
@@ -101,7 +101,7 @@ class MLXLlamaModel(nn.Module):
         state_dict = model.merge_weights(state_dict, is_merge)
 
         model = quantization_func(config, model, state_dict)
-        model.load_weights(list(state_dict.items()), strict=False)
+        model.load_weights(list(state_dict.items()))
 
         mx.eval(model.parameters())
         model.eval()
@@ -137,7 +137,7 @@ class MLXLlamaForCausalLM(nn.Module):
         self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @classmethod
-    def from_pretrained(cls, config, state_dict: Optional[Any], **kwargs):
+    def from_pretrained(cls, config, state_dict, **kwargs):
         model = cls(config)
 
         cls.config = config

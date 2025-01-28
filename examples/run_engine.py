@@ -131,6 +131,6 @@ async def image_generate(args):
 
 if __name__ == "__main__":
     args = parse_args()
-    # asyncio.run(llm_generate(args, llm_message()))
-    asyncio.run(llm_generate(args, mllm_message()))
+    asyncio.run(llm_generate(args, llm_message()))
+    # asyncio.run(llm_generate(args, mllm_message()))
     # asyncio.run(image_generate(args))

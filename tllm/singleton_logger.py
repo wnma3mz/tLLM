@@ -65,19 +65,19 @@ class SingletonLogger:
             logger.addHandler(file_handler)
 
     @classmethod
-    def _setup_logger(cls, name=Literal["master", "handler"]) -> logging.Logger:
-        if cls.logger is None:
+    def _setup_logger(cls, name: Literal["master", "handler"]) -> logging.Logger:
+        if cls.logger is None:  # 仅在第一次调用时创建logger
             cls.logger = logging.getLogger(name)
             cls.logger.setLevel(cls._level)
 
-            ch = logging.StreamHandler()
-            ch.setLevel(cls._level)
+            if not cls.logger.hasHandlers():  # 检查是否已经存在 handlers
+                ch = logging.StreamHandler()
+                ch.setLevel(cls._level)
+                formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+                ch.setFormatter(formatter)
+                cls.logger.addHandler(ch)
 
-            formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-            ch.setFormatter(formatter)
-
-            cls.logger.addHandler(ch)
-            cls._add_file_handler(cls.logger)
+            cls._add_file_handler(cls.logger)  # 始终添加文件handler
         return cls.logger
 
     @classmethod
