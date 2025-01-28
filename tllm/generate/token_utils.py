@@ -26,7 +26,7 @@ class TokenizerUtils:
                 messages, tokenize=False, add_generation_prompt=add_generation_prompt
             )
         assert text is not None, "Either text or messages must be provided."
-        input_ids = self.tokenizer.encode(text, add_special_tokens=True)
+        input_ids = self.tokenizer.encode(text, add_special_tokens=False)
         return TokenizerResult(input_ids=input_ids, input_str=text)
 
     def preprocess_old(self, text: str = None, messages: List[List[Dict[str, str]]] = None) -> TokenizerResult:
