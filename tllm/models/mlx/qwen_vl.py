@@ -2,13 +2,13 @@ from typing import Dict, Optional
 
 import mlx.core as mx
 import mlx.nn as nn
+from mlx_clip.models.qwen2vision.qwen2vision_model import Qwen2VisionModel
 import numpy as np
 from transformers import AutoProcessor
 
 from tllm import DTYPE
 from tllm.models.mlx.helper import quantization_func
 
-from mlx_clip.models.qwen2vision.qwen2vision_model import Qwen2VisionModel
 
 class MLXQwen2VLForConditionalGeneration(nn.Module):
     def __init__(self, config):
