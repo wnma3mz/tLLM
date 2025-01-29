@@ -19,6 +19,7 @@ def parse_args():
         help="Attention backend if backend is TORCH",
     )
     parser.add_argument("--model_path", type=str, default="Qwen/Qwen2-VL-2B-Instruct")
+    parser.add_argument("--message_type", type=str, default="llm", choices=["llm", "mllm", "image"])
     return parser.parse_args()
 
 
@@ -131,6 +132,11 @@ async def image_generate(args):
 
 if __name__ == "__main__":
     args = parse_args()
-    asyncio.run(llm_generate(args, llm_message()))
-    # asyncio.run(llm_generate(args, mllm_message()))
-    # asyncio.run(image_generate(args))
+    if args.message_type == "llm":
+        asyncio.run(llm_generate(args, llm_message()))
+    elif args.message_type == "mllm":
+        asyncio.run(llm_generate(args, mllm_message()))
+    elif args.message_type == "image":
+        asyncio.run(image_generate(args))
+    else:
+        raise ValueError(f"Unknown message type: {args.message_type}")

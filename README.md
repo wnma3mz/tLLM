@@ -11,13 +11,13 @@
 
 2. run server
 
-   2.1 (no communication)
+   2.1 (localhost)
 
    ```bash
    tllm.server --model_path mlx-community/Llama-3.2-1B-Instruct-4bit --hostname localhost --is_local --client_size 1
    ```
 
-   2.2 (with communication)
+   2.2 (multi clients)
 
    ```bash
    # first in one terminal
@@ -26,6 +26,8 @@
    # in another terminal
    tllm.client --hostname http://$YOUR_IP:8022
    ```
+
+
 3. testing
 
 ```bash
