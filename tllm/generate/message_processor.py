@@ -1,24 +1,30 @@
-from typing import Dict, List, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from PIL import Image
 from PIL.ImageFile import ImageFile
 
 from tllm.img_helper import base64_to_pil_image
 from tllm.schemas import MESSAGES, MultiModalContent, UrlItem
+from tllm.singleton_logger import SingletonLogger
 
 from .token_utils import TokenizerUtils
 
+logger = SingletonLogger.setup_master_logger()
+
 
 class MessageProcessor:
-    def __init__(self, tok: TokenizerUtils):
+    def __init__(self, tok: TokenizerUtils, process_mm_input: Optional[Callable]) -> None:
         self.tok = tok
+        self.process_mm_input = process_mm_input
+        if process_mm_input is not None:
+            logger.info("Support Multi-Modal")
         self.role_set = {"user", "system", "assistant"}
 
     async def read_image(self, image: UrlItem) -> ImageFile:
         if image.base64 is not None:
             return Image.open(base64_to_pil_image(image.base64))
         if image.url is not None:
-            print(image.url)
+            logger.info(f"Request image from {image.url}")
             raise NotImplementedError("url is not supported")
         if image.file_path is not None:
             return Image.open(image.file_path)
@@ -41,8 +47,10 @@ class MessageProcessor:
                 raise ValueError(f"role must be in {self.role_set}")
             if isinstance(msg["content"], list):
                 text, mm_input = await self.parse_mm_input(msg["content"])
-                mm_inputs.append(mm_input)
-                new_messages.append({"role": msg["role"], "content": text})
+                # input keys: image, text, video is not supported
+                multi_modal_dict = self.process_mm_input({"image": mm_input["image"], "text": text})
+                mm_inputs.append({"image": multi_modal_dict["image"]})
+                new_messages.append({"role": msg["role"], "content": multi_modal_dict["text"]})
             else:
                 new_messages.append({"role": msg["role"], "content": msg["content"]})
         # 校验所有返回的 type 相同

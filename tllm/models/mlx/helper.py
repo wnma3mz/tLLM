@@ -1,3 +1,4 @@
+from dataclasses import make_dataclass
 import itertools
 import math
 from typing import Dict, List
@@ -119,3 +120,18 @@ def truncate_hidden_states(
             q_start += q_len
         hidden_states = mx.concat(hidden_states_list, axis=0)
     return hidden_states
+
+
+def dict_to_dataclass(data: dict, name: str):
+    """将字典转换为 dataclass
+
+    Args:
+        data: 字典数据
+        name: dataclass 名称
+
+    Returns:
+        dataclass 对象
+    """
+    fields = [(key, type(value)) for key, value in data.items()]
+    DataClass = make_dataclass(name, fields)
+    return DataClass(**data)

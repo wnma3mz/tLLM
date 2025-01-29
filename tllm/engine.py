@@ -1,7 +1,7 @@
 import asyncio
 import time
 import traceback
-from typing import List, Union
+from typing import Callable, List, Optional, Union
 
 from tllm.generate import ImageGenerator, LLMGenerator
 from tllm.schemas import SequenceRequestData
@@ -24,6 +24,10 @@ class AsyncEngine:
     @property
     def tok(self):
         return self.generator.tok
+
+    @property
+    def process_mm_input(self) -> Optional[Callable]:
+        return getattr(self.generator.model, "process_mm_input", None)
 
     async def fetch_data(self):
         aborting_request_ids = set()

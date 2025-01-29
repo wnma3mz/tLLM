@@ -1,3 +1,4 @@
+from functools import partial
 from typing import Dict, Optional
 
 import numpy as np
@@ -8,6 +9,7 @@ from transformers import AutoProcessor
 from transformers.models.qwen2_vl.modeling_qwen2_vl import Qwen2VisionTransformerPretrainedModel
 
 from tllm import DEVICE, DTYPE
+from tllm.models.utils import default_process_mm_input, merge_mm_input
 
 
 class HFQwen2VisionTransformerPretrainedModel(Qwen2VisionTransformerPretrainedModel):
@@ -36,18 +38,15 @@ class HFQwen2VLForConditionalGeneration(nn.Module):
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False, device=DEVICE)
         self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+        self.merge_mm_input = merge_mm_input
+
     @classmethod
     def from_pretrained(cls, config, state_dict: Dict[str, torch.Tensor], **kwargs):
         assert kwargs.get("model_path", None) is not None
 
         model = cls(config)
-        model.processor = AutoProcessor.from_pretrained(kwargs["model_path"], trust_remote_code=True)
-        model.mm_config = {
-            "vision_start_id": config.vision_start_token_id,
-            "vision_end_id": config.vision_end_token_id,
-            "image_token_id": config.image_token_id,
-            "video_token_id": config.video_token_id,
-        }
+        processor = AutoProcessor.from_pretrained(kwargs["model_path"], trust_remote_code=True)
+        model.process_mm_input = partial(default_process_mm_input, image_processor=processor.image_processor)
 
         cls.config = config
         cls.num_layers = config.num_hidden_layers

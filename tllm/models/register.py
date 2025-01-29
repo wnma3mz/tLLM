@@ -16,6 +16,7 @@ except ImportError as e:
     pass
 
 if BackendEnum.MLX == BACKEND:
+    from tllm.models.mlx.janus_pro import MLXJanusProConditionalGeneration
     from tllm.models.mlx.llama import MLXLlamaForCausalLM, MLXLlamaModel
     from tllm.models.mlx.qwen import MLXQwen2ForCausalLM, MLXQwen2Model
     from tllm.models.mlx.qwen_vl import MLXQwen2VLForConditionalGeneration
@@ -23,6 +24,7 @@ if BackendEnum.MLX == BACKEND:
     MODEL_REGISTER.update({"LlamaForCausalLM": (MLXLlamaForCausalLM, MLXLlamaModel)})
     MODEL_REGISTER.update({"Qwen2ForCausalLM": (MLXQwen2ForCausalLM, MLXQwen2Model)})
     MODEL_REGISTER.update({"Qwen2VLForConditionalGeneration": (MLXQwen2VLForConditionalGeneration, MLXQwen2Model)})
+    MODEL_REGISTER.update({"JanusProConditionalGeneration": (MLXJanusProConditionalGeneration, MLXLlamaModel)})
 
     if importlib.util.find_spec("mflux"):
         from tllm.models.mlx.flux.flux import Flux1

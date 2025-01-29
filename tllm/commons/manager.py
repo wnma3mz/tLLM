@@ -107,6 +107,14 @@ class WeightManager:
 
     def _hf_read_master_weight(self):
         prefix_key_list = ["model.embed_tokens.", "model.norm.", "lm_head.", "visual."]
+        # For Janus-Pro
+        prefix_key_list += [
+            "vision_model.",
+            "language_model.model.embed_tokens.",
+            "language_model.model.norm.",
+            "language_model.lm_head.",
+            "aligner.",
+        ]
         state_dict = self._hf_read_weight(prefix_key_list)
 
         new_state_dict = {}
@@ -144,6 +152,8 @@ class WeightManager:
 
     def _hf_read_client_weight(self, start_idx: int, end_idx: int):
         prefix_key_list = [f"model.layers.{layer_idx}." for layer_idx in range(start_idx, end_idx)]
+        # for Janus-Pro
+        prefix_key_list += [f"language_model.model.layers.{layer_idx}." for layer_idx in range(start_idx, end_idx)]
         state_dict = self._hf_read_weight(prefix_key_list)
         return state_dict
 
@@ -181,7 +191,7 @@ def load_master_model(model_path: str) -> Any:
     MY_CausalLM_CLASS, _ = MODEL_REGISTER[weight_manager.arch]
 
     kwargs = {}
-    if weight_manager.arch == "Qwen2VLForConditionalGeneration":
+    if weight_manager.arch in ["Qwen2VLForConditionalGeneration", "JanusProConditionalGeneration"]:
         kwargs.update({"model_path": weight_manager.model_path})
     elif weight_manager.arch == "FLUX":
         kwargs.update({"quantization_level": weight_manager.config.quantization_level})

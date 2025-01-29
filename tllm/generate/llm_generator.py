@@ -1,8 +1,7 @@
 import time
-from typing import Dict, List, Optional
+from typing import Callable, List
 
 import numpy as np
-from transformers import AutoImageProcessor, AutoProcessor
 
 from tllm.generate.token_utils import TokenizerUtils
 from tllm.grpc.master_service.worker_manager import WorkerRPCManager
@@ -12,82 +11,13 @@ from tllm.schemas import MIX_TENSOR, ForwardResult, SeqInput, SequenceRequestDat
 from tllm.singleton_logger import SingletonLogger
 
 
-def merge_mm_input(mm_input_list: List[Dict[str, List[np.ndarray]]]) -> Optional[Dict[str, List[MIX_TENSOR]]]:
-    if all([x is None for x in mm_input_list]) or all([len(x) == 0 for x in mm_input_list]):
-        return None
-    pixel_values_list, image_grid_thw_list, pixel_values_videos_list, video_grid_thw_list = [], [], [], []
-    for x in mm_input_list:
-        if "image" in x:
-            pixel_values_list.append(x["image"]["pixel_values"])
-            image_grid_thw_list.append(x["image"]["image_grid_thw"])
-        if "video" in x:
-            pixel_values_videos_list.append(x["video"]["pixel_values_videos"])
-            video_grid_thw_list.append(x["video"]["video_grid_thw"])
-
-    pixel_values = np.concatenate(pixel_values_list, axis=0) if pixel_values_list else None
-    pixel_values_videos = np.concatenate(pixel_values_videos_list, axis=0) if pixel_values_videos_list else None
-    image_grid_thw = np.concatenate(image_grid_thw_list, axis=0) if image_grid_thw_list else None
-    video_grid_thw = np.concatenate(video_grid_thw_list, axis=0) if video_grid_thw_list else None
-
-    return {
-        "pixel_values": pixel_values,
-        "image_grid_thw": image_grid_thw,
-        "pixel_values_videos": pixel_values_videos,
-        "video_grid_thw": video_grid_thw,
-    }
-
-
-def process_mm_input(
-    seq_request: SequenceRequestData, processor: AutoProcessor, **kwargs
-) -> Dict[str, List[np.ndarray]]:
-    if seq_request.multi_modal_inputs is None and len(seq_request.multi_modal_inputs) == 0:
-        return {}
-    assert processor is not None
-    image_processor: AutoImageProcessor = processor.image_processor
-    images = seq_request.multi_modal_inputs.get("image", None)
-    videos = seq_request.multi_modal_inputs.get("video", None)
-
-    vision_start_id = kwargs["vision_start_id"]
-    vision_end_id = kwargs["vision_end_id"]
-
-    response_dict = {}
-    if images:
-        image_inputs = image_processor(images=images, videos=None)
-        image_grid_thw = image_inputs["image_grid_thw"]
-        merge_length = image_processor.merge_size**2
-        # 全部放到开头
-        image_token_id = kwargs["image_token_id"]
-        image_input_ids = []
-        for x in image_grid_thw:
-            repeat_times = x.prod() // merge_length
-            image_input_ids += [vision_start_id] + [image_token_id] * repeat_times + [vision_end_id]
-        seq_request.input_ids = image_input_ids + seq_request.input_ids
-        response_dict.update({"image": image_inputs})
-    if videos:
-        video_inputs = image_processor(images=None, videos=videos)
-        video_grid_thw = video_inputs["image_grid_thw"]
-        merge_length = image_processor.merge_size**2
-        # 全部放到开头
-        video_end_id = kwargs["video_end_id"]
-        image_input_ids = []
-        for x in video_grid_thw:
-            repeat_times = x.prod() // merge_length
-            image_input_ids += [vision_start_id] + [video_end_id] * repeat_times + [vision_end_id]
-        seq_request.input_ids = image_input_ids + seq_request.input_ids
-        response_dict.update({"video": video_inputs})
-    return response_dict
-
-
 class LLMGenerator:
     def __init__(self, manager: WorkerRPCManager, model) -> None:
         self.manager = manager
         self.logger = SingletonLogger.setup_master_logger()
         self.model = model
         self.tok: TokenizerUtils = model.tok
-        self.processor = getattr(model, "processor", None)
-        self.mm_config = getattr(model, "mm_config", None)
-        if self.processor is not None:
-            self.logger.info("LLMGenerator Support Multi-Modal")
+        self.merge_mm_input: Callable = getattr(model, "merge_mm_input", None)
 
     async def forward(self, inputs_embeds: MIX_TENSOR, seq_input: SeqInput) -> ForwardResult:
         s1 = time.perf_counter()
@@ -112,14 +42,15 @@ class LLMGenerator:
             uuid_list.append(sequence_request.request_id)
             # 如果是 prefilling，则为 input_ids; 否则，为 output_ids[-1]
             if sequence_request.is_prefill:
-                if self.processor is not None:
-                    mm_input_list.append(process_mm_input(sequence_request, self.processor, **self.mm_config))
+                if sequence_request.multi_modal_inputs is not None:
+                    mm_input_list.append(sequence_request.multi_modal_inputs)
 
                 input_ids_list.append(np.array(sequence_request.input_ids))
             else:
                 input_ids_list.append(np.array([sequence_request.output_ids[-1]]))
 
-        mm_input = merge_mm_input(mm_input_list)
+        mm_input = self.merge_mm_input(mm_input_list) if self.merge_mm_input is not None else None
+
         input_ids = np.concatenate(input_ids_list, axis=-1)
         # [seq_len1 + seq_len2 + ...] -> [seq_len1 + seq_len2 + ..., hidden_size]
         if mm_input is None:

@@ -29,7 +29,6 @@ class TokenizerUtils:
         input_ids = self.tokenizer.encode(text, add_special_tokens=False)
         return TokenizerResult(input_ids=input_ids, input_str=text)
 
-
     def decode(
         self, token_ids: List[int], cache_token_ids: List[Optional[List[int]]]
     ) -> Tuple[List[str], List[Optional[List[int]]]]:

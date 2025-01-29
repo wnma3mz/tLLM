@@ -10,6 +10,7 @@ from tllm import DTYPE
 from tllm.commons.cache import CacheManager, RequestsCache
 from tllm.models.mlx.helper import (
     build_forward_cache,
+    dict_to_dataclass,
     get_last_hidden_states,
     quantization_func,
     truncate_hidden_states,
@@ -39,10 +40,15 @@ class DynamicNTKScalingRoPE:
 class MLXLlamaModel(nn.Module):
     def __init__(self, config: AutoConfig, is_merge: bool = True):
         super().__init__()
-
         comm = config.comm
         del config.comm
-        args = ModelArgs.from_dict(config.to_dict())
+
+        if config.architectures[0] in ["JanusProConditionalGeneration"]:
+            config_dict = config.language_config
+        else:
+            config_dict = config.to_dict()
+
+        args = ModelArgs.from_dict(config_dict)
 
         args.comm = comm
         self.world_size = args.comm.world_size
@@ -98,6 +104,7 @@ class MLXLlamaModel(nn.Module):
         is_merge = True
 
         model = cls(config, is_merge)
+        state_dict = model.sanitize(state_dict)
         state_dict = model.merge_weights(state_dict, is_merge)
 
         model = quantization_func(config, model, state_dict)
@@ -106,6 +113,14 @@ class MLXLlamaModel(nn.Module):
         mx.eval(model.parameters())
         model.eval()
         return model
+
+    @staticmethod
+    def sanitize(weights):
+        sanitized_weights = {}
+        for key, value in weights.items():
+            sanitized_weights[key.split("language_model.", 1)[-1]] = value
+
+        return sanitized_weights
 
     def merge_weights(self, state_dict: Dict[str, mx.array], is_merge: bool = True) -> Dict[str, mx.array]:
         if not is_merge:

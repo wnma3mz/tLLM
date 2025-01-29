@@ -1,3 +1,4 @@
+from functools import partial
 from typing import Dict, Optional
 
 import mlx.core as mx
@@ -8,6 +9,7 @@ from transformers import AutoProcessor
 
 from tllm import DTYPE
 from tllm.models.mlx.helper import quantization_func
+from tllm.models.utils import default_process_mm_input, merge_mm_input
 
 
 class MLXQwen2VLForConditionalGeneration(nn.Module):
@@ -19,18 +21,15 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+        self.merge_mm_input = merge_mm_input
+
     @classmethod
     def from_pretrained(cls, config, state_dict: Dict[str, mx.array], **kwargs):
         assert kwargs.get("model_path", None) is not None
 
         model = cls(config)
-        model.processor = AutoProcessor.from_pretrained(kwargs["model_path"], trust_remote_code=True)
-        model.mm_config = {
-            "vision_start_id": config.vision_start_token_id,
-            "vision_end_id": config.vision_end_token_id,
-            "image_token_id": config.image_token_id,
-            "video_token_id": config.video_token_id,
-        }
+        processor = AutoProcessor.from_pretrained(kwargs["model_path"], trust_remote_code=True)
+        model.process_mm_input = partial(default_process_mm_input, image_processor=processor.image_processor)
 
         cls.config = config
         cls.num_layers = config.num_hidden_layers
@@ -56,6 +55,7 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
         if pixel_values is not None:
             pixel_values = mx.array(pixel_values).astype(DTYPE)
             image_embeds = self.visual(pixel_values, grid_thw=mx.array(image_grid_thw))
+            # image_embeds: token_nums x hidden_size
             n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
             n_image_features = image_embeds.shape[0]
             if n_image_tokens != n_image_features:

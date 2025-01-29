@@ -31,7 +31,7 @@ def create_error_response(message: str) -> ChatCompletionResponse:
 class OpenAIServing:
     def __init__(self, engine: AsyncEngine, args):
         self.engine = engine
-        self.message_processor = MessageProcessor(self.engine.tok)
+        self.message_processor = MessageProcessor(self.engine.tok, self.engine.process_mm_input)
         self.model_name = os.path.basename(args.model_path)
         self.response_role = "assistant"
 
