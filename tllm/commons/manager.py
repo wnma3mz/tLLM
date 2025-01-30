@@ -1,6 +1,5 @@
 import os
-import time
-from typing import Any, List
+from typing import List
 
 from transformers import AutoConfig
 
@@ -158,7 +157,7 @@ class WeightManager:
         return state_dict
 
 
-def load_client_model(start_idx: int, end_idx: int, comm: BaseCommunicator, model_path: str) -> Any:
+def load_client_model(start_idx: int, end_idx: int, comm: BaseCommunicator, model_path: str):
     weight_manager = WeightManager(model_path)
     config = weight_manager.config
 
@@ -182,7 +181,7 @@ def load_client_model(start_idx: int, end_idx: int, comm: BaseCommunicator, mode
     return model
 
 
-def load_master_model(model_path: str) -> Any:
+def load_master_model(model_path: str):
     weight_manager = WeightManager(model_path)
     state_dict = weight_manager.read_master_weight()
     if weight_manager.arch not in MODEL_REGISTER:
@@ -191,9 +190,8 @@ def load_master_model(model_path: str) -> Any:
     MY_CausalLM_CLASS, _ = MODEL_REGISTER[weight_manager.arch]
 
     kwargs = {}
-    if weight_manager.arch in ["Qwen2VLForConditionalGeneration", "JanusProConditionalGeneration"]:
-        kwargs.update({"model_path": weight_manager.model_path})
-    elif weight_manager.arch == "FLUX":
+    kwargs.update({"model_path": weight_manager.model_path})
+    if weight_manager.arch == "FLUX":
         kwargs.update({"quantization_level": weight_manager.config.quantization_level})
 
     model = MY_CausalLM_CLASS.from_pretrained(weight_manager.config, state_dict, **kwargs)

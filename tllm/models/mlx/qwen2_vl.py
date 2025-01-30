@@ -3,7 +3,8 @@ from typing import Dict, Optional
 
 import mlx.core as mx
 import mlx.nn as nn
-from mlx_clip.models.qwen2vision.qwen2vision_model import Qwen2VisionModel
+from mlx_clip.models.qwen2_5vision.qwen2_5vision_model import Qwen2_5VisionConfig, Qwen2_5VisionModel
+from mlx_clip.models.qwen2vision.qwen2vision_model import Qwen2VisionConfig, Qwen2VisionModel
 import numpy as np
 from transformers import AutoProcessor
 
@@ -12,11 +13,51 @@ from tllm.models.mlx.helper import quantization_func
 from tllm.models.utils import default_process_mm_input, merge_mm_input
 
 
+def build_config(config, model_type: str):
+    if model_type == "qwen2_5_vl":
+        return Qwen2_5VisionConfig(
+            depth=config.depth,
+            embed_dim=config.out_hidden_size,
+            num_heads=config.num_heads,
+            in_channels=config.in_channels,  # in_chans
+            hidden_size=config.hidden_size,
+            patch_size=config.patch_size,
+            spatial_merge_size=config.spatial_merge_size,
+            spatial_patch_size=config.spatial_patch_size,
+            temporal_patch_size=config.temporal_patch_size,
+            window_size=config.window_size,
+            intermediate_size=getattr(config, "intermediate_size", None),
+        )
+    elif model_type == "qwen2_vl":
+        return Qwen2VisionConfig(
+            depth=config.depth,
+            embed_dim=config.embed_dim,
+            num_heads=config.num_heads,
+            in_channels=config.in_channels,  # in_chans
+            hidden_size=config.hidden_size,
+            patch_size=config.patch_size,
+            spatial_merge_size=config.spatial_merge_size,
+            spatial_patch_size=config.spatial_patch_size,
+            temporal_patch_size=config.temporal_patch_size,
+            mlp_ratio=config.mlp_ratio,
+            hidden_act=config.hidden_act,
+        )
+    else:
+        raise ValueError(f"Unsupported model type: {model_type}")
+
+
 class MLXQwen2VLForConditionalGeneration(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.vocab_size = config.vocab_size
-        self.visual = Qwen2VisionModel(config.vision_config)
+
+        vision_config = build_config(config.vision_config, config.model_type)
+        if config.model_type == "qwen2_5_vl":
+            self.visual = Qwen2_5VisionModel(vision_config)
+        elif config.model_type == "qwen2_vl":
+            self.visual = Qwen2VisionModel(vision_config)
+        else:
+            raise ValueError(f"Unsupported model type: {config.model_type}")
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
