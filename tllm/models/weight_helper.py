@@ -118,10 +118,9 @@ def tensor_parallel_state_dict(state_dict, world_size, rank):
     return processed_dict
 
 
-def tie_embedding_weights(state_dict: Dict[str, MIX_TENSOR]) -> Dict[str, MIX_TENSOR]:
-    has_key_list = list(state_dict.keys())
-    if "lm_head.weight" not in state_dict:
-        for key in has_key_list:
-            if key.startswith("embed_tokens."):
-                state_dict[key.replace("embed_tokens.", "lm_head.")] = state_dict[key]
+def tie_word_embeddings_func(config, state_dict):
+    if getattr(config, "tie_word_embeddings", False):
+        key_list = list(filter(lambda x: "embed_tokens" in x, state_dict.keys()))
+        for key in key_list:
+            state_dict[key.replace("embed_tokens", "lm_head")] = state_dict[key]
     return state_dict

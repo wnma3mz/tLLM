@@ -11,6 +11,7 @@ from transformers import AutoProcessor
 from tllm import DTYPE
 from tllm.models.mlx.helper import quantization_func
 from tllm.models.utils import default_process_mm_input, merge_mm_input
+from tllm.models.weight_helper import tie_word_embeddings_func
 
 
 def build_config(config, model_type: str):
@@ -75,12 +76,27 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
         cls.config = config
         cls.num_layers = config.num_hidden_layers
 
+        state_dict = tie_word_embeddings_func(config, state_dict)
+        state_dict = model.sanitize(state_dict)
         model = quantization_func(config, model, state_dict)
         model.load_weights(list(state_dict.items()))  # , strict=False
 
         mx.eval(model.parameters())
         model.eval()
         return model
+
+    @staticmethod
+    def sanitize(weights):
+        sanitized_weights = {}
+        for k, v in weights.items():
+            if k.startswith("language_model."):
+                k = k.replace("language_model.model.", "")
+                k = k.replace("language_model.", "")
+            if k.startswith("vision_tower."):
+                k = k.replace("vision_tower.", "visual.")
+
+            sanitized_weights[k] = v
+        return sanitized_weights
 
     def get_input_embeddings(
         self,

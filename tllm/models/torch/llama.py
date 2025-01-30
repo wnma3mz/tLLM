@@ -10,7 +10,7 @@ from tllm.commons.attn import ATTN_TYPE
 from tllm.commons.cache import CacheManager
 from tllm.models.torch.helper import build_forward_cache, get_last_hidden_states
 from tllm.models.torch.layers import Decoder
-from tllm.models.weight_helper import default_merge_attn, default_merge_mlp
+from tllm.models.weight_helper import default_merge_attn, default_merge_mlp, tie_word_embeddings_func
 from tllm.schemas import SeqInput
 
 
@@ -138,6 +138,7 @@ class HFLlamaForCausalLM(nn.Module):
         cls.config = config
         cls.num_layers = config.num_hidden_layers
 
+        state_dict = tie_word_embeddings_func(state_dict)
         model.load_state_dict(state_dict)
         model.to(DTYPE).to(DEVICE)
         model.eval()

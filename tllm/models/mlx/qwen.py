@@ -15,7 +15,7 @@ from tllm.models.mlx.helper import (
     truncate_hidden_states,
 )
 from tllm.models.mlx.layers import Decoder
-from tllm.models.weight_helper import default_merge_attn, default_merge_mlp
+from tllm.models.weight_helper import default_merge_attn, default_merge_mlp, tie_word_embeddings_func
 from tllm.schemas import SeqInput
 
 
@@ -73,12 +73,24 @@ class MLXQwen2Model(nn.Module):
         model = cls(config, is_merge)
         state_dict = model.merge_weights(state_dict, is_merge)
 
+        state_dict = tie_word_embeddings_func(config, state_dict)
+        state_dict = model.sanitize(state_dict)
         model = quantization_func(config, model, state_dict)
         model.load_weights(list(state_dict.items()))  # strict=False
 
         mx.eval(model.parameters())
         model.eval()
         return model
+
+    @staticmethod
+    def sanitize(weights):
+        sanitized_weights = {}
+        for k, v in weights.items():
+            if k.startswith("language_model."):
+                k = k.replace("language_model.", "")
+
+            sanitized_weights[k] = v
+        return sanitized_weights
 
     def merge_weights(self, state_dict: Dict[str, mx.array], is_merge: bool = True) -> Dict[str, mx.array]:
         if not is_merge:

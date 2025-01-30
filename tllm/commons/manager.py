@@ -7,7 +7,7 @@ from tllm import BACKEND, BackendEnum
 from tllm.commons.tp_communicator import BaseCommunicator
 from tllm.models.file_helper import find_weight_file, get_model_path
 from tllm.models.register import MODEL_REGISTER
-from tllm.models.weight_helper import load_gguf_weight, read_from_safetensors, tie_embedding_weights
+from tllm.models.weight_helper import load_gguf_weight, read_from_safetensors
 
 
 class WeightManager:
@@ -91,7 +91,7 @@ class WeightManager:
             if flag:
                 continue
             new_state_dict[k.split("model.")[-1]] = v
-        state_dict = tie_embedding_weights(new_state_dict)
+        state_dict = new_state_dict
         if "norm.eps" not in state_dict:
             state_dict["norm.eps"] = self.config.rms_norm_eps
         return state_dict
@@ -105,7 +105,7 @@ class WeightManager:
         return state_dict
 
     def _hf_read_master_weight(self):
-        prefix_key_list = ["model.embed_tokens.", "model.norm.", "lm_head.", "visual."]
+        prefix_key_list = ["model.embed_tokens.", "model.norm.", "lm_head.", "visual.", "vision_tower."]
         # For Janus-Pro
         prefix_key_list += [
             "vision_model.",
@@ -129,8 +129,7 @@ class WeightManager:
             else:
                 new_state_dict[k] = v
 
-        state_dict = tie_embedding_weights(new_state_dict)
-        return state_dict
+        return new_state_dict
 
     def _gguf_read_client_weight(self, start_idx: int, end_idx: int):
         if self.state_dict is None:

@@ -10,13 +10,17 @@ from tllm import DTYPE
 from tllm.commons.cache import CacheManager, RequestsCache
 from tllm.models.mlx.helper import (
     build_forward_cache,
-    dict_to_dataclass,
     get_last_hidden_states,
     quantization_func,
     truncate_hidden_states,
 )
 from tllm.models.mlx.layers import Decoder
-from tllm.models.weight_helper import default_merge_attn, default_merge_mlp, tensor_parallel_state_dict
+from tllm.models.weight_helper import (
+    default_merge_attn,
+    default_merge_mlp,
+    tensor_parallel_state_dict,
+    tie_word_embeddings_func,
+)
 from tllm.schemas import SeqInput
 
 
@@ -104,6 +108,7 @@ class MLXLlamaModel(nn.Module):
         is_merge = True
 
         model = cls(config, is_merge)
+        state_dict = tie_word_embeddings_func(config, state_dict)
         state_dict = model.sanitize(state_dict)
         state_dict = model.merge_weights(state_dict, is_merge)
 

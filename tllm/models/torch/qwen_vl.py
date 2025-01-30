@@ -10,6 +10,7 @@ from transformers.models.qwen2_vl.modeling_qwen2_vl import Qwen2VisionTransforme
 
 from tllm import DEVICE, DTYPE
 from tllm.models.utils import default_process_mm_input, merge_mm_input
+from tllm.models.weight_helper import tie_word_embeddings_func
 
 
 class HFQwen2VisionTransformerPretrainedModel(Qwen2VisionTransformerPretrainedModel):
@@ -51,6 +52,7 @@ class HFQwen2VLForConditionalGeneration(nn.Module):
         cls.config = config
         cls.num_layers = config.num_hidden_layers
 
+        state_dict = tie_word_embeddings_func(state_dict)
         model.load_state_dict(state_dict)
         model.to(DTYPE).to(DEVICE)
         model.eval()
