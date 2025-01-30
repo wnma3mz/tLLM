@@ -93,8 +93,10 @@ def mllm_message():
         {
             "role": "user",
             "content": [
-                {"type": "text", "text": "What is shown in this image?"},
-                {"type": "image_url", "image_url": {"file_path": "asserts/image-1.png"}},
+                # {"type": "text", "text": "What is shown in this image?"},
+                # {"type": "image_url", "image_url": {"file_path": "asserts/image-1.png"}},
+                {"type": "text", "text": "Convert the formula into latex code."},
+                {"type": "image_url", "image_url": {"file_path": "asserts/equation.png"}},
             ],
         }
     ]

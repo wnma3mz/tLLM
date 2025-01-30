@@ -48,6 +48,7 @@ class MessageProcessor:
             if isinstance(msg["content"], list):
                 text, mm_input = await self.parse_mm_input(msg["content"])
                 # input keys: image, text, video is not supported
+                # TODO: optimize it
                 multi_modal_dict = self.process_mm_input({"image": mm_input["image"], "text": text})
                 mm_inputs.append({"image": multi_modal_dict["image"]})
                 new_messages.append({"role": msg["role"], "content": multi_modal_dict["text"]})

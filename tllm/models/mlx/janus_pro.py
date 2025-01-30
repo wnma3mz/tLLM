@@ -11,14 +11,14 @@ from tllm.models.mlx.helper import dict_to_dataclass, quantization_func
 from tllm.models.processor import VLMImageProcessor
 
 
-def replace_vision_model_func(k: str, prefix_key: str):
+def replace_vision_model_func(k: str, prefix_key: str) -> Optional[str]:
     k = k.split("vision_model.", 1)[-1]
     if f"{prefix_key}blocks." in k:
         k = k.replace(f"{prefix_key}blocks.", f"{prefix_key}encoder.layers.")
     if f"{prefix_key}patch_embed.proj." in k:
         k = k.replace(f"{prefix_key}patch_embed.proj.", f"{prefix_key}embeddings.patch_embedding.")
-    # if "norm." in k:
-    #     k = k.replace("norm.", "post_layernorm.")
+
+    # do not load attn_pool
     if "attn_pool." in k:
         k = k.replace("attn_pool.", "head.")
 
@@ -66,7 +66,7 @@ def process_mm_input(multi_modal_inputs: Dict[str, Union[List, str]], image_proc
 
         image_inputs = image_processor(images=images, videos=None)
         # 全部放到开头
-        image_input_text = "<image_placeholder>" * repeat_times
+        image_input_text = "<begin_of_image>" + "<image_placeholder>" * repeat_times + "<end_of_image>\n"
         multi_modal_dict["text"] = image_input_text * len(images) + multi_modal_dict["text"]
         multi_modal_dict.update({"image": image_inputs})
 
@@ -136,6 +136,9 @@ class MLXJanusProConditionalGeneration(nn.Module):
         for k, v in weights.items():
             if k.startswith("vision_model."):
                 k = replace_vision_model_func(k, prefix_key="vision_tower.")
+                # Skip attn_pool
+                if k.startswith("vision_tower.head."):
+                    continue
             if k.startswith("language_model."):
                 k = k.replace("language_model.model.", "")
                 k = k.replace("language_model.", "")
