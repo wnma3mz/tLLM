@@ -20,7 +20,16 @@ else:
 if os.environ.get("TLLM_BACKEND", None):
     BACKEND = BackendEnum[os.environ["TLLM_BACKEND"]]
 
-if BACKEND == BackendEnum.TORCH:
+if BACKEND == BackendEnum.MLX:
+    import mlx.core as mx
+    import numpy as np
+
+    DTYPE = mx.bfloat16  # in mlx, float16 is slower than bfloat16
+    CONVERT_DTYPE = mx.float16
+    DES_DTYPE = np.float16
+    DEVICE = None
+    from tllm.models.mlx import *
+elif BACKEND == BackendEnum.TORCH:
     import torch
 
     DTYPE = torch.float16
@@ -31,14 +40,8 @@ if BACKEND == BackendEnum.TORCH:
         DTYPE = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
     else:
         DEVICE = "cpu"
-elif BACKEND == BackendEnum.MLX:
-    import mlx.core as mx
-    import numpy as np
 
-    DTYPE = mx.bfloat16  # in mlx, float16 is slower than bfloat16
-    CONVERT_DTYPE = mx.float16
-    DES_DTYPE = np.float16
-    DEVICE = None
+    from tllm.models.torch import *
 else:
     raise ValueError("Invalid backend")
 

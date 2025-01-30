@@ -116,7 +116,7 @@ class MLXJanusProConditionalGeneration(nn.Module):
         model = cls(config)
         image_processor = VLMImageProcessor.from_pretrained(kwargs["model_path"], trust_remote_code=True)
         model.process_mm_input = partial(process_mm_input, image_processor=image_processor)
-        cls.image_token_id = 100581
+        cls.image_token_id = config.image_token_id
 
         cls.config = config
         cls.num_layers = config.num_hidden_layers
