@@ -15,7 +15,7 @@ from tllm.entrypoints.image_server.image_protocol import Text2ImageRequest, Text
 from tllm.entrypoints.image_server.server_image import ImageServing
 from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionResponse
 from tllm.entrypoints.server_chat import OpenAIServing
-from tllm.entrypoints.utils import GRPCProcess, parse_master_args, serve_http, update_master_args
+from tllm.entrypoints.utils import GRPCProcess, is_local, parse_master_args, serve_http, update_master_args
 from tllm.entrypoints.websocket_manager import WebsocketManager
 from tllm.generate import ImageGenerator, LLMGenerator
 from tllm.grpc.master_service.worker_manager import WorkerRPCManager
@@ -151,7 +151,7 @@ async def update_model_url():
             for clients in host_list
         ]
         worker_rpc_manager.update_url(host_list)
-        master_url = args.hostname if args.is_local else f"{args.hostname}:{args.grpc_port}"
+        master_url = args.hostname if is_local(args.hostname) else f"{args.hostname}:{args.grpc_port}"
         await worker_rpc_manager.send_config(master_url, host_list)
         # 后台持续进行健康检查，如果有节点挂掉，需要重新分配
         await worker_rpc_manager.start_health_check()
@@ -225,7 +225,7 @@ async def run_server(args) -> None:
 
     uvicorn_kwargs = {"host": ["::", "0.0.0.0"], "port": args.http_port, "timeout_graceful_shutdown": 5}
 
-    if args.is_local:
+    if is_local(args.hostname):
         if os.path.isfile(MASTER_SOCKET_PATH):
             os.remove(MASTER_SOCKET_PATH)
         if os.path.isfile(CLIENT_SOCKET_PATH):

@@ -14,7 +14,7 @@
    2.1 (localhost)
 
    ```bash
-   tllm.server --model_path mlx-community/Llama-3.2-1B-Instruct-4bit --hostname localhost --is_local --client_size 1
+   tllm.server --model_path mlx-community/Llama-3.2-1B-Instruct-4bit
    ```
 
    2.2 (multi clients)
@@ -26,7 +26,6 @@
    # in another terminal
    tllm.client --hostname http://$YOUR_IP:8022
    ```
-
 
 3. testing
 

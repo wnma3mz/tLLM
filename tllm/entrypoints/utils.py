@@ -13,6 +13,10 @@ from tllm.entrypoints.helper import get_free_port, get_ips
 from tllm.singleton_logger import SingletonLogger
 
 
+def is_local(hostname: str) -> bool:
+    return hostname == "localhost"
+
+
 def parse_master_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -21,7 +25,7 @@ def parse_master_args():
         required=True,
         help="Specify the path of the model file or huggingface repo. Like mlx-community/Llama-3.2-1B-Instruct-bf16",
     )
-    parser.add_argument("--hostname", type=str, help="The address of the client connection.")
+    parser.add_argument("--hostname", type=str, default="localhost", help="The address of the client connection.")
     parser.add_argument(
         "--grpc_port",
         type=int,
@@ -43,13 +47,8 @@ def parse_master_args():
     parser.add_argument(
         "--client_size",
         type=int,
-        default=None,
+        default=1,
         help="The number of clients. If this parameter is not provided, the program will try to parse and automatically calculate the number from the model path.",
-    )
-    parser.add_argument(
-        "--is_local",
-        action="store_true",
-        help="A boolean flag. If this parameter is specified in the command line, indicates that the model runs locally only",
     )
     parser.add_argument(
         "--is_debug",
