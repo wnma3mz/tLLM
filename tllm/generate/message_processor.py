@@ -16,7 +16,7 @@ class MessageProcessor:
     def __init__(self, tok: TokenizerUtils, process_mm_input: Optional[Callable]) -> None:
         self.tok = tok
         self.process_mm_input = process_mm_input
-        if process_mm_input is not None:
+        if self.process_mm_input is not None:
             logger.info("Support Multi-Modal")
         self.role_set = {"user", "system", "assistant"}
 
@@ -47,6 +47,8 @@ class MessageProcessor:
             if msg["role"] not in self.role_set:
                 raise ValueError(f"role must be in {self.role_set}")
             if isinstance(msg["content"], list):
+                if self.process_mm_input is None:
+                    raise ValueError("Multi-Modal is not supported")
                 text, mm_input = await self.parse_mm_input(msg["content"])
                 # input keys: image, text, video is not supported
                 # TODO: optimize it
