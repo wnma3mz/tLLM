@@ -1,42 +1,22 @@
+from pathlib import Path
+
 from setuptools import find_packages, setup
 
 # 基础依赖
-install_requires = [
-    "aiohttp",
-    "fastapi",
-    "numpy",
-    "requests",
-    "tabulate",
-    "tqdm",
-    "typing_extensions",
-    "uvicorn",
-    "websockets",
-    "pillow",
-    "huggingface_hub",
-    "gradio",
-    "psutil",
-    "grpcio==1.68.1",
-    "lz4==4.3.3",
-    "protobuf==5.28.3",
-    "pydantic==2.9.2",
-    "transformers==4.46.0",
-]
+root_dir = Path(__file__).parent
+with open(root_dir / "requirements" / "base.txt") as fid:
+    install_requires = [l.strip() for l in fid.readlines()]
 
 # 平台特定依赖
-mlx_requires = ["mlx", "mlx_lm==0.19.2"]
+with open(root_dir / "requirements" / "mlx.txt") as fid:
+    mlx_requires = [l.strip() for l in fid.readlines() if not l.startswith("-e")]
 
-tinygrad_requires = [
-    "tinygrad",
-]
-
-torch_requires = [
-    "vllm",
-]
+with open(root_dir / "requirements" / "torch.txt") as fid:
+    torch_requires = [l.strip() for l in fid.readlines()]
 
 # 可选功能依赖
 extras_require = {
     "mlx": mlx_requires,
-    # 'tinygrad': tinygrad_requires,
     "torch": torch_requires,
     "all": mlx_requires + torch_requires,  # 全部安装（可能在某些平台上无法使用）
     "dev": [

@@ -3,8 +3,8 @@ from typing import Dict, Optional
 
 import mlx.core as mx
 import mlx.nn as nn
-from mlx_clip.models.qwen2_5vision.qwen2_5vision_model import Qwen2_5VisionConfig, Qwen2_5VisionModel
-from mlx_clip.models.qwen2vision.qwen2vision_model import Qwen2VisionConfig, Qwen2VisionModel
+from mlx_vlm.models.qwen2_5_vl.vision import VisionConfig as Qwen2_5VisionConfig, VisionModel as Qwen2_5VisionModel
+from mlx_vlm.models.qwen2_vl.vision import VisionConfig as Qwen2VisionConfig, VisionModel as Qwen2VisionModel
 import numpy as np
 from transformers import AutoProcessor
 
@@ -41,7 +41,6 @@ def build_config(config, model_type: str):
             spatial_patch_size=config.spatial_patch_size,
             temporal_patch_size=config.temporal_patch_size,
             mlp_ratio=config.mlp_ratio,
-            hidden_act=config.hidden_act,
         )
     else:
         raise ValueError(f"Unsupported model type: {model_type}")

@@ -142,7 +142,10 @@ class MergedAttention(nn.Module):
         self.layer_idx = layer_idx
         self.offset = offset
 
-        self.rope = initialize_rope(args)
+        self.rope = initialize_rope(
+            self.head_dim, args.rope_theta, args.rope_traditional, args.rope_scaling, args.max_position_embeddings
+        )
+
         # self.max_seq_len = 1024
         # self._k_cache = zeros_func(self.max_seq_len, self.n_kv_heads, self.head_dim)
         # self._v_cache = zeros_func(self.max_seq_len, self.n_kv_heads, self.head_dim)

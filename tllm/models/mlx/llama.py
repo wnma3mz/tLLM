@@ -108,7 +108,6 @@ class MLXLlamaModel(nn.Module):
         is_merge = True
 
         model = cls(config, is_merge)
-        state_dict = tie_word_embeddings_func(config, state_dict)
         state_dict = model.sanitize(state_dict)
         state_dict = model.merge_weights(state_dict, is_merge)
 
@@ -162,6 +161,7 @@ class MLXLlamaForCausalLM(nn.Module):
 
         cls.config = config
         cls.num_layers = config.num_hidden_layers
+        state_dict = tie_word_embeddings_func(config, state_dict)
 
         model = quantization_func(config, model, state_dict)
         model.load_weights(list(state_dict.items()))

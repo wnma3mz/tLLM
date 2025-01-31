@@ -73,7 +73,6 @@ class MLXQwen2Model(nn.Module):
         model = cls(config, is_merge)
         state_dict = model.merge_weights(state_dict, is_merge)
 
-        state_dict = tie_word_embeddings_func(config, state_dict)
         state_dict = model.sanitize(state_dict)
         model = quantization_func(config, model, state_dict)
         model.load_weights(list(state_dict.items()))  # strict=False
@@ -125,6 +124,7 @@ class MLXQwen2ForCausalLM(nn.Module):
         cls.config = config
         cls.num_layers = config.num_hidden_layers
 
+        state_dict = tie_word_embeddings_func(config, state_dict)
         model = quantization_func(config, model, state_dict)
         model.load_weights(list(state_dict.items()))  # , strict=False
 
