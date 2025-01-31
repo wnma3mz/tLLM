@@ -1,4 +1,5 @@
 import asyncio
+import json
 import random
 import time
 from typing import Any, Dict, List
@@ -24,41 +25,6 @@ async def requests_func(messages: List[Dict[str, Any]]):
                 print(f"Error: {response.status}")
 
 
-def llm_message():
-    messages1 = [{"role": "user", "content": "Hello, how are you?"}]
-    messages2 = [{"role": "user", "content": "Hello, What's your name?"}]
-    messages3 = [
-        {"role": "system", "content": "You are a helpful AI assistant."},
-        {"role": "user", "content": "今天天气怎么样"},
-    ]
-    messages_list = [messages1, messages2, messages3]
-    return messages_list
-
-
-def mllm_message():
-    messages1 = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "这张图片里面有什么？"},
-                {"type": "image_url", "image_url": {"file_path": "asserts/flux_gen_image.png"}},
-            ],
-        }
-    ]
-    # 图片太大，内存不够，TTFT 过慢
-    messages2 = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "What is shown in this image?"},
-                {"type": "image_url", "image_url": {"file_path": "asserts/image-1.png"}},
-            ],
-        }
-    ]
-    messages_list = [messages1, messages1]
-    return messages_list
-
-
 async def main(messages_list: List[List[Dict[str, Any]]]):
     print("异步并发请求结果")
     s1 = time.time()
@@ -73,6 +39,14 @@ async def main(messages_list: List[List[Dict[str, Any]]]):
     print(f"time cost: {time.time() - s1:.4f} s")
 
 
+def load_message():
+    with open("asserts/messages.json", "r") as f:
+        messages_dict = json.load(f)
+    return messages_dict
+
+
 if __name__ == "__main__":
-    asyncio.run(main(llm_message()))
-    # asyncio.run(main(mllm_message()))
+    messages_dict = load_message()
+
+    asyncio.run(main(messages_dict["llm"]))
+    # asyncio.run(main(messages_dict["mllm"]))

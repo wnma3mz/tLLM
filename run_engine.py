@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import json
 import math
 import os
 import time
@@ -83,26 +84,6 @@ def init_image_engine(model_path: str) -> AsyncEngine:
     return engine
 
 
-def llm_message():
-    messages = [{"role": "user", "content": "Hello, how are you?"}]
-    return messages
-
-
-def mllm_message():
-    messages = [
-        {
-            "role": "user",
-            "content": [
-                # {"type": "text", "text": "What is shown in this image?"},
-                # {"type": "image_url", "image_url": {"file_path": "asserts/image-1.png"}},
-                {"type": "text", "text": "Convert the formula into latex code."},
-                {"type": "image_url", "image_url": {"file_path": "asserts/equation.png"}},
-            ],
-        }
-    ]
-    return messages
-
-
 async def llm_generate(args, messages):
     engine = init_engine(args.model_path)
     await engine.start()
@@ -132,12 +113,19 @@ async def image_generate(args):
     img.save("tt.png")
 
 
+def load_message():
+    with open("asserts/messages.json", "r") as f:
+        messages_dict = json.load(f)
+    return messages_dict
+
+
 if __name__ == "__main__":
     args = parse_args()
+    messages_dict = load_message()
     if args.message_type == "llm":
-        asyncio.run(llm_generate(args, llm_message()))
+        asyncio.run(llm_generate(args, messages_dict["llm"][0]))
     elif args.message_type == "mllm":
-        asyncio.run(llm_generate(args, mllm_message()))
+        asyncio.run(llm_generate(args, messages_dict["mllm"][0]))
     elif args.message_type == "image":
         asyncio.run(image_generate(args))
     else:

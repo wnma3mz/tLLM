@@ -1,0 +1,79 @@
+{
+    "llm": [
+        [
+            {
+                "role": "user",
+                "content": "Hello, how are you?"
+            }
+        ],
+        [
+            {
+                "role": "user",
+                "content": "Hello, What's your name?"
+            }
+        ],
+        [
+            {
+                "role": "system",
+                "content": "You are a helpful AI assistant."
+            },
+            {
+                "role": "user",
+                "content": "今天天气怎么样"
+            }
+        ]
+    ],
+    "mllm": [
+        [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Convert the formula into latex code."
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "file_path": "asserts/equation.png"
+                        }
+                    }
+                ]
+            }
+        ],
+        [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "这张图片里面有什么？"
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "file_path": "asserts/flux_gen_image.png"
+                        }
+                    }
+                ]
+            }
+        ],
+        [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "What is shown in this image?"
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "file_path": "asserts/image-1.png"
+                        }
+                    }
+                ]
+            }
+        ]
+    ]
+}
