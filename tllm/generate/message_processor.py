@@ -24,8 +24,9 @@ class MessageProcessor:
         if image.base64 is not None:
             return Image.open(base64_to_pil_image(image.base64))
         if image.url is not None:
-            logger.info(f"Request image from {image.url}")
-            raise NotImplementedError("url is not supported")
+            if image.url.startswith("http"):
+                raise NotImplementedError("url is not supported")
+            return Image.open(base64_to_pil_image(image.url.split("data:image/png;base64,")[-1]))
         if image.file_path is not None:
             return Image.open(image.file_path)
         raise ValueError("image must have url or file_path or base64")

@@ -18,7 +18,7 @@ def build_config(config, model_type: str):
     if model_type == "qwen2_5_vl":
         return Qwen2_5VisionConfig(
             depth=config.depth,
-            embed_dim=config.out_hidden_size,
+            out_hidden_size=config.out_hidden_size,
             num_heads=config.num_heads,
             in_channels=config.in_channels,  # in_chans
             hidden_size=config.hidden_size,
