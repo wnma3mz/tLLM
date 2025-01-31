@@ -36,7 +36,7 @@ class MasterServer(schemas_pb2_grpc.RPCServiceServicer):
         self, request: schemas_pb2.ForwardRequest, context: grpc.ServicerContext
     ) -> schemas_pb2.ForwardResponse:
         """处理从最后一个节点返回的结果"""
-        self.logger.info("master handler request")
+        self.logger.debug("master handler request")
         request_id = "-".join(x for x in list(request.uuid_list))
 
         try:
