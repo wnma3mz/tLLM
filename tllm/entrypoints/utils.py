@@ -137,7 +137,7 @@ class GRPCProcess:
             return
         self.process = Process(target=self.run_server)
         self.process.start()
-        self.logger.info(f"Started gRPC process (PID: {self.process.pid})")
+        # self.logger.info(f"Worker gRPC process (PID: {self.process.pid})")
 
     def shutdown(self):
         """关闭 gRPC 服务器进程"""
@@ -148,7 +148,7 @@ class GRPCProcess:
                 self.process.join(timeout=5)
                 if self.process.is_alive():
                     self.process.kill()
-            self.logger.info("gRPC process stopped")
+            self.logger.info("Worker gRPC process stopped")
 
 
 async def serve_http(app: FastAPI, grpc_process, engine, master_server, **uvicorn_kwargs: Dict):

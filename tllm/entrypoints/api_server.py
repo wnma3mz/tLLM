@@ -151,7 +151,7 @@ async def update_model_url():
             for clients in host_list
         ]
         worker_rpc_manager.update_url(host_list)
-        master_url = args.hostname if is_local(args.hostname) else f"{args.hostname}:{args.grpc_port}"
+        master_url = args.hostname if args.is_local else f"{args.hostname}:{args.grpc_port}"
         await worker_rpc_manager.send_config(master_url, host_list)
         # 后台持续进行健康检查，如果有节点挂掉，需要重新分配
         await worker_rpc_manager.start_health_check()
@@ -185,7 +185,7 @@ async def init_model_func(
 
 async def init_app(engine: AsyncEngine, args):
     global app, openai_serving_chat, image_serving
-    logger.info("args: %s", args)
+    logger.info("Master Args: %s", args)
     if args.is_image:
         image_serving = ImageServing(engine, args)
     else:
@@ -225,7 +225,8 @@ async def run_server(args) -> None:
 
     uvicorn_kwargs = {"host": ["::", "0.0.0.0"], "port": args.http_port, "timeout_graceful_shutdown": 5}
 
-    if is_local(args.hostname):
+    args.is_local = is_local(args.hostname)
+    if args.is_local:
         if os.path.isfile(MASTER_SOCKET_PATH):
             os.remove(MASTER_SOCKET_PATH)
         if os.path.isfile(CLIENT_SOCKET_PATH):

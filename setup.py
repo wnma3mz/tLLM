@@ -9,7 +9,7 @@ with open(root_dir / "requirements" / "base.txt") as fid:
 
 # 平台特定依赖
 with open(root_dir / "requirements" / "mlx.txt") as fid:
-    mlx_requires = [l.strip() for l in fid.readlines() if not l.startswith("-e")]
+    mlx_requires = [l.strip() for l in fid.readlines()]
 
 with open(root_dir / "requirements" / "torch.txt") as fid:
     torch_requires = [l.strip() for l in fid.readlines()]
