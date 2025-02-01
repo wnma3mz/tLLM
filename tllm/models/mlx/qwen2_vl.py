@@ -78,7 +78,7 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
         state_dict = tie_word_embeddings_func(config, state_dict)
         state_dict = model.sanitize(state_dict)
         model = quantization_func(config, model, state_dict)
-        model.load_weights(list(state_dict.items()))  # , strict=False
+        model.load_weights(list(state_dict.items()))
 
         mx.eval(model.parameters())
         model.eval()
@@ -88,11 +88,22 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
     def sanitize(weights):
         sanitized_weights = {}
         for k, v in weights.items():
-            if k.startswith("language_model."):
+            if k.startswith("language_model.model.layers"):
+                continue
+            if k.startswith("model.layers"):
+                continue
+            if k.startswith("language_model.model."):
                 k = k.replace("language_model.model.", "")
-                k = k.replace("language_model.", "")
+
+            if k.startswith("model."):
+                k = k.replace("model.", "")
             if k.startswith("vision_tower."):
                 k = k.replace("vision_tower.", "visual.")
+
+            if k == "visual.patch_embed.proj.weight":
+                # [out_ch, in_ch, n, h, w] -> [out_ch, n, h, w, in_ch]
+                if v.shape[3] == v.shape[4]:
+                    v = v.transpose(0, 2, 3, 4, 1)
 
             sanitized_weights[k] = v
         return sanitized_weights

@@ -73,7 +73,7 @@ class MLXQwen2Model(nn.Module):
         model = cls(config, is_merge)
         state_dict = model.merge_weights(state_dict, is_merge)
 
-        state_dict = model.sanitize(state_dict)
+        state_dict = model.sanitize(state_dict, config.decoder_start_layer_idx, config.decoder_end_layer_idx)
         model = quantization_func(config, model, state_dict)
         model.load_weights(list(state_dict.items()))  # strict=False
 
@@ -82,11 +82,17 @@ class MLXQwen2Model(nn.Module):
         return model
 
     @staticmethod
-    def sanitize(weights):
+    def sanitize(weights, start_idx: int, end_idx: int):
         sanitized_weights = {}
         for k, v in weights.items():
             if k.startswith("language_model."):
                 k = k.replace("language_model.", "")
+            if not k.startswith("model."):
+                continue
+            if "embed_tokens" in k or "model.norm" in k:
+                continue
+            if int(k.split("model.layers.", 1)[-1].split(".")[0]) not in range(start_idx, end_idx):
+                continue
 
             sanitized_weights[k] = v
         return sanitized_weights
@@ -125,12 +131,23 @@ class MLXQwen2ForCausalLM(nn.Module):
         cls.num_layers = config.num_hidden_layers
 
         state_dict = tie_word_embeddings_func(config, state_dict)
+        state_dict = model.sanitize(state_dict)
+
         model = quantization_func(config, model, state_dict)
         model.load_weights(list(state_dict.items()))  # , strict=False
 
         mx.eval(model.parameters())
         model.eval()
         return model
+
+    @staticmethod
+    def sanitize(weights):
+        sanitized_weights = {}
+        for k, v in weights.items():
+            if k.startswith("model.layers."):
+                continue
+            sanitized_weights[k.split("model.")[-1]] = v
+        return sanitized_weights
 
     def get_input_embeddings(self, x: np.ndarray) -> mx.array:
         return self.embed_tokens(mx.array(x))

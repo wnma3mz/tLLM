@@ -18,8 +18,8 @@ except ImportError as e:
 if BackendEnum.MLX == BACKEND:
     from tllm.models.mlx.janus_pro import MLXJanusProConditionalGeneration
     from tllm.models.mlx.llama import MLXLlamaForCausalLM, MLXLlamaModel
+    from tllm.models.mlx.qwen2 import MLXQwen2ForCausalLM, MLXQwen2Model
     from tllm.models.mlx.qwen2_vl import MLXQwen2VLForConditionalGeneration
-    from tllm.models.mlx.qwen import MLXQwen2ForCausalLM, MLXQwen2Model
 
     MODEL_REGISTER.update({"LlamaForCausalLM": (MLXLlamaForCausalLM, MLXLlamaModel)})
     MODEL_REGISTER.update({"Qwen2ForCausalLM": (MLXQwen2ForCausalLM, MLXQwen2Model)})
@@ -38,8 +38,8 @@ if BackendEnum.MLX == BACKEND:
     sampling_func = greedy_decode
 elif BackendEnum.TORCH == BACKEND:
     from tllm.models.torch.llama import HFLlamaForCausalLM, HFLlamaModel
-    from tllm.models.torch.qwen import HFQwen2ForCausalLM, HFQwen2Model
-    from tllm.models.torch.qwen_vl import HFQwen2VLForConditionalGeneration
+    from tllm.models.torch.qwen2 import HFQwen2ForCausalLM, HFQwen2Model
+    from tllm.models.torch.qwen2_vl import HFQwen2VLForConditionalGeneration
 
     MODEL_REGISTER.update({"LlamaForCausalLM": (HFLlamaForCausalLM, HFLlamaModel)})
     MODEL_REGISTER.update({"Qwen2ForCausalLM": (HFQwen2ForCausalLM, HFQwen2Model)})

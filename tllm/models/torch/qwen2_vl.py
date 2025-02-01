@@ -52,11 +52,31 @@ class HFQwen2VLForConditionalGeneration(nn.Module):
         cls.config = config
         cls.num_layers = config.num_hidden_layers
 
-        state_dict = tie_word_embeddings_func(state_dict)
+        state_dict = tie_word_embeddings_func(config, state_dict)
+        state_dict = model.sanitize(state_dict)
         model.load_state_dict(state_dict)
         model.to(DTYPE).to(DEVICE)
         model.eval()
         return model
+
+    @staticmethod
+    def sanitize(weights):
+        sanitized_weights = {}
+        for k, v in weights.items():
+            if k.startswith("language_model.model.layers"):
+                continue
+            if k.startswith("model.layers"):
+                continue
+            if k.startswith("language_model.model."):
+                k = k.replace("language_model.model.", "")
+
+            if k.startswith("model."):
+                k = k.replace("model.", "")
+            if k.startswith("vision_tower."):
+                k = k.replace("vision_tower.", "visual.")
+
+            sanitized_weights[k] = v
+        return sanitized_weights
 
     @torch.inference_mode()
     def get_input_embeddings(

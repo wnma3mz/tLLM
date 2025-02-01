@@ -1,11 +1,10 @@
+import glob
 import os
-from typing import List
 
 from transformers import AutoConfig
 
-from tllm import BACKEND, BackendEnum
 from tllm.commons.tp_communicator import BaseCommunicator
-from tllm.models.file_helper import find_weight_file, get_model_path
+from tllm.models.file_helper import get_model_path
 from tllm.models.register import MODEL_REGISTER
 from tllm.models.weight_helper import load_gguf_weight, read_from_safetensors
 
@@ -39,8 +38,8 @@ class WeightManager:
                 self.read_master_weight = self._gguf_read_master_weight
                 self.read_client_weight = self._gguf_read_client_weight
             else:
-                self.read_master_weight = self._hf_read_master_weight
-                self.read_client_weight = self._hf_read_client_weight
+                self.read_master_weight = self._hf_read_weight
+                self.read_client_weight = self._hf_read_weight
             self.tok, self.arch, self.config = self._post_init()
 
     def _read_flux_master_weight(self):
@@ -96,43 +95,14 @@ class WeightManager:
             state_dict["norm.eps"] = self.config.rms_norm_eps
         return state_dict
 
-    def _hf_read_weight(self, prefix_key_list: List[str]):
-        file_key_dict = find_weight_file(self.model_path, prefix_key_list)
+    def _hf_read_weight(self):
+        sf_file_list = glob.glob(os.path.join(self.model_path, "*.safetensors"))
         state_dict = {}
-        for file, key_list in file_key_dict.items():
-            weight_path = os.path.join(self.model_path, file)
-            state_dict.update(read_from_safetensors(weight_path, key_list if len(key_list) > 0 else prefix_key_list))
+        for sf_file in sf_file_list:
+            state_dict.update(read_from_safetensors(sf_file))
         return state_dict
 
-    def _hf_read_master_weight(self):
-        prefix_key_list = ["model.embed_tokens.", "model.norm.", "lm_head.", "visual.", "vision_tower."]
-        # For Janus-Pro
-        prefix_key_list += [
-            "vision_model.",
-            "language_model.model.embed_tokens.",
-            "language_model.model.norm.",
-            "language_model.lm_head.",
-            "aligner.",
-            "gen_",
-        ]
-        state_dict = self._hf_read_weight(prefix_key_list)
-
-        new_state_dict = {}
-        for k, v in state_dict.items():
-            # for qwen-vl
-            if BACKEND == BackendEnum.MLX and k == "visual.patch_embed.proj.weight":
-                # [out_ch, in_ch, n, h, w] -> [out_ch, n, h, w, in_ch]
-                v = v.transpose(0, 2, 3, 4, 1)
-
-            # model.layers for multi modal encoder
-            if k.startswith("model.") and not k.startswith("model.layers."):
-                new_state_dict[k.split("model.")[-1]] = v
-            else:
-                new_state_dict[k] = v
-
-        return new_state_dict
-
-    def _gguf_read_client_weight(self, start_idx: int, end_idx: int):
+    def _gguf_read_client_weight(self):
         if self.state_dict is None:
             raise ValueError("state_dict is None")
         new_state_dict = {}
@@ -149,13 +119,6 @@ class WeightManager:
             new_state_dict[k] = v
         return new_state_dict
 
-    def _hf_read_client_weight(self, start_idx: int, end_idx: int):
-        prefix_key_list = [f"model.layers.{layer_idx}." for layer_idx in range(start_idx, end_idx)]
-        # for Janus-Pro
-        prefix_key_list += [f"language_model.model.layers.{layer_idx}." for layer_idx in range(start_idx, end_idx)]
-        state_dict = self._hf_read_weight(prefix_key_list)
-        return state_dict
-
 
 def load_client_model(start_idx: int, end_idx: int, comm: BaseCommunicator, model_path: str):
     weight_manager = WeightManager(model_path)
@@ -163,7 +126,7 @@ def load_client_model(start_idx: int, end_idx: int, comm: BaseCommunicator, mode
 
     end_idx = min(end_idx, config.num_hidden_layers)
 
-    state_dict = weight_manager.read_client_weight(start_idx, end_idx)
+    state_dict = weight_manager.read_client_weight()
     if weight_manager.arch not in MODEL_REGISTER:
         raise ValueError(f"Model {weight_manager.arch} not supported")
 

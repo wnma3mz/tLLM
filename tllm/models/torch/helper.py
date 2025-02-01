@@ -1,7 +1,7 @@
 import itertools
 from typing import Dict, List
 
-from safetensors import safe_open
+from safetensors.torch import load_file as safe_load
 import torch
 
 from tllm.commons.attn import ATTN_TYPE
@@ -45,19 +45,8 @@ def build_mask(q_len_list: List[int], k_len_list: List[int]) -> "torch.Tensor":
     return combined_mask
 
 
-def read_from_safetensors(file_path: str, key_list: List[str] = None) -> Dict[str, "torch.Tensor"]:
-    tensors = {}
-    if key_list:
-        with safe_open(file_path, framework="pt", device="cpu") as f:
-            for key in f.keys():
-                for prefix_key in key_list:
-                    if key.startswith(prefix_key):
-                        tensors[key] = f.get_tensor(key)
-    else:
-        with safe_open(file_path, framework="pt", device="cpu") as f:
-            for key in f.keys():
-                tensors[key] = f.get_tensor(key)
-    return tensors
+def read_from_safetensors(file_path: str) -> Dict[str, torch.Tensor]:
+    return safe_load(file_path, device="cpu")
 
 
 if ATTN_TYPE == "xformers":
@@ -91,4 +80,5 @@ def build_forward_cache(
         attn_mask=attn_mask,
         uuid_list=seq_input.uuid_list,
         position_ids=torch.cat(position_ids_list, dim=-1),
+        q_len_list=q_len_list,
     )

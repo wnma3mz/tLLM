@@ -11,14 +11,15 @@ from tllm import DTYPE
 from tllm.models.mlx.helper import dict_to_dataclass, quantization_func
 from tllm.models.mlx.vq_model import ModelArgs, VQModel, vision_head
 from tllm.models.processor import VLMImageProcessor
+from tllm.models.weight_helper import common_sanitize
 
 
-def replace_vision_model_func(k: str, prefix_key: str) -> Optional[str]:
-    k = k.split("vision_model.", 1)[-1]
-    if f"{prefix_key}blocks." in k:
-        k = k.replace(f"{prefix_key}blocks.", f"{prefix_key}encoder.layers.")
-    if f"{prefix_key}patch_embed.proj." in k:
-        k = k.replace(f"{prefix_key}patch_embed.proj.", f"{prefix_key}embeddings.patch_embedding.")
+def replace_vision_model_func(k: str) -> Optional[str]:
+    # k = k.split("vision_model.", 1)[-1]
+    if "vision_tower.blocks." in k:
+        k = k.replace("vision_tower.blocks.", "vision_tower.encoder.layers.")
+    if "vision_tower.patch_embed.proj." in k:
+        k = k.replace("vision_tower.patch_embed.proj.", "vision_tower.embeddings.patch_embedding.")
 
     # do not load attn_pool
     if "attn_pool." in k:
@@ -97,17 +98,29 @@ class MlpProjector(nn.Module):
         return x
 
 
+class MLXJanusProLM(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+
+class MLXJanusProVLM(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.vision_tower = SiglipVisionModel(config)
+
+
 class MLXJanusProConditionalGeneration(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.vision_tower = SiglipVisionModel(config.vision_config)
+        self.vision_model = MLXJanusProVLM(config.vision_config)
         self.aligner = MlpProjector(config.aligner_config["params"])
 
         language_config = dict_to_dataclass(config.language_config, "LanguageConfig")
         self.vocab_size = language_config.vocab_size
-        self.embed_tokens = nn.Embedding(language_config.vocab_size, language_config.hidden_size)
+        self.model = MLXJanusProLM(language_config)
         self.lm_head = nn.Linear(language_config.hidden_size, language_config.vocab_size, bias=False)
-        self.norm = nn.RMSNorm(language_config.hidden_size, eps=language_config.rms_norm_eps)
 
         self.gen_vision_model = VQModel(ModelArgs(encoder_ch_mult=[1, 1, 2, 2, 4], decoder_ch_mult=[1, 1, 2, 2, 4]))
         self.gen_aligner = MlpProjector(config.gen_aligner_config["params"])
@@ -152,11 +165,11 @@ class MLXJanusProConditionalGeneration(nn.Module):
     def sanitize(weights):
         sanitized_weights = {}
         # Ugly compatibility janus
-        for k, v in weights.items():
+        for k, v in common_sanitize(weights).items():
             if k.startswith("vision_model."):
-                k = replace_vision_model_func(k, prefix_key="vision_tower.")
+                k = replace_vision_model_func(k)
                 # Skip attn_pool
-                if k.startswith("vision_tower.head."):
+                if k.startswith("vision_model.vision_tower.head."):
                     continue
             if k.startswith("language_model."):
                 k = k.replace("language_model.model.", "")
@@ -192,7 +205,7 @@ class MLXJanusProConditionalGeneration(nn.Module):
         pixel_values: Optional[np.ndarray] = None,
     ) -> mx.array:
         # TODO: Multi-Request Maybe Has Problem
-        inputs_embeds = self.embed_tokens(mx.array(input_ids))
+        inputs_embeds = self.model.embed_tokens(mx.array(input_ids))
 
         if pixel_values is not None:
             # for mlx framework need to transpose
@@ -200,7 +213,7 @@ class MLXJanusProConditionalGeneration(nn.Module):
             pixel_values = pixel_values.transpose(0, 2, 3, 1)
 
             pixel_values = mx.array(pixel_values).astype(DTYPE)
-            image_embeds = self.aligner(self.vision_tower(pixel_values))
+            image_embeds = self.aligner(self.vision_model.vision_tower(pixel_values))
             # image_embeds: token_nums x hidden_size
             image_embeds = image_embeds[0]  # TODO: fix this
 
@@ -218,11 +231,11 @@ class MLXJanusProConditionalGeneration(nn.Module):
         return inputs_embeds
 
     def get_logits(self, hidden_states: mx.array) -> mx.array:
-        logits = self.lm_head(self.norm(hidden_states))
+        logits = self.lm_head(self.model.norm(hidden_states))
         return logits
 
     def get_gen_head(self, hidden_states: mx.array, temperature: float = 1.0, cfg_weight: float = 5.0) -> mx.array:
-        logits = self.gen_head(self.norm(hidden_states))
+        logits = self.gen_head(self.model.norm(hidden_states))
         logit_cond = logits[0::2, :]
         logit_uncond = logits[1::2, :]
 

@@ -62,11 +62,28 @@ class HFQwen2Model(nn.Module):
     def from_pretrained(cls, config, state_dict: Dict[str, torch.Tensor], is_merge: bool = True, **kwargs):
         model = cls(config, is_merge)
         state_dict = model.merge_weights(state_dict, is_merge)
+        state_dict = model.sanitize(state_dict, config.decoder_start_layer_idx, config.decoder_end_layer_idx)
         model.load_state_dict(state_dict)
 
         model.to(DTYPE).to(DEVICE)
         model.eval()
         return model
+
+    @staticmethod
+    def sanitize(weights, start_idx: int, end_idx: int):
+        sanitized_weights = {}
+        for k, v in weights.items():
+            if k.startswith("language_model."):
+                k = k.replace("language_model.", "")
+            if not k.startswith("model."):
+                continue
+            if "embed_tokens" in k or "model.norm" in k:
+                continue
+            if int(k.split("model.layers.", 1)[-1].split(".")[0]) not in range(start_idx, end_idx):
+                continue
+
+            sanitized_weights[k] = v
+        return sanitized_weights
 
     def merge_weights(self, state_dict: Dict[str, torch.Tensor], is_merge: bool) -> Dict[str, torch.Tensor]:
         if not is_merge:
@@ -144,11 +161,21 @@ class HFQwen2ForCausalLM(nn.Module):
         cls.config = config
         cls.num_layers = config.num_hidden_layers
 
-        state_dict = tie_word_embeddings_func(state_dict)
+        state_dict = tie_word_embeddings_func(config, state_dict)
+        state_dict = model.sanitize(state_dict)
         model.load_state_dict(state_dict)
         model.to(DTYPE).to(DEVICE)
         model.eval()
         return model
+
+    @staticmethod
+    def sanitize(weights):
+        sanitized_weights = {}
+        for k, v in weights.items():
+            if k.startswith("model.layers."):
+                continue
+            sanitized_weights[k.split("model.")[-1]] = v
+        return sanitized_weights
 
     @torch.inference_mode()
     def get_input_embeddings(self, x: np.ndarray) -> torch.Tensor:

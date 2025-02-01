@@ -5,10 +5,10 @@ import torch.nn as nn
 from transformers import AutoConfig
 from transformers.activations import ACT2FN
 from transformers.models.llama.modeling_llama import (
+    LlamaAttention,
     LlamaConfig,
     LlamaMLP,
     LlamaRMSNorm,
-    LlamaSdpaAttention,
     apply_rotary_pos_emb,
 )
 
@@ -197,7 +197,7 @@ class MergedSdpaAttention(nn.Module):
         return attn_output, None
 
 
-class PlainLlamaSdpaAttention(LlamaSdpaAttention):
+class PlainLlamaSdpaAttention(LlamaAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,

@@ -78,14 +78,8 @@ def quantization_func(config, model, state_dict):
     return model
 
 
-def read_from_safetensors(file_path: str, key_list: List[str]) -> Dict[str, mx.array]:
-    tensors = {}
-    weights = mx.load(file_path)
-    for key in weights.keys():
-        for prefix_key in key_list:
-            if key.startswith(prefix_key):
-                tensors[key] = weights[key]
-    return tensors
+def read_from_safetensors(file_path: str) -> Dict[str, mx.array]:
+    return mx.load(file_path)
 
 
 def get_last_hidden_states(

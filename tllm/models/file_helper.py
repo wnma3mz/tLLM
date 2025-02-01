@@ -1,27 +1,9 @@
-from collections import defaultdict
-import json
 import os
 from pathlib import Path
 from typing import List, Optional, Tuple
 
 from huggingface_hub import constants, snapshot_download
 from huggingface_hub.file_download import repo_folder_name
-
-
-def find_weight_file(model_path: str, prefix_key_list: List[str]) -> dict:
-    index_path = os.path.join(model_path, "model.safetensors.index.json")
-    file_key_dict = defaultdict(list)
-    if os.path.isfile(index_path):
-        with open(index_path, "r") as f:
-            index = json.load(f)
-        for key, file_ in index["weight_map"].items():
-            for prefix_key in prefix_key_list:
-                if key.startswith(prefix_key):
-                    # file_set.add(file_)
-                    file_key_dict[file_].append(key)
-    else:
-        file_key_dict["model.safetensors"] = []
-    return file_key_dict
 
 
 def get_hf_cache_model_path(repo_id: str, revision: Optional[str] = None) -> Path:

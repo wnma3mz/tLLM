@@ -20,6 +20,15 @@ elif BACKEND == BackendEnum.TORCH:
     load_gguf_weight = lambda x: None, None, None
 
 
+def common_sanitize(weights):
+    sanitized_weights = {}
+    for k, v in weights.items():
+        if k.startswith("model.layers."):
+            continue
+        sanitized_weights[k] = v
+    return sanitized_weights
+
+
 def pop_weight_func(
     prefix_key_list: List[str], weights: Dict[str, MIX_TENSOR], num_layers: int, start_idx: int, end_idx: int
 ) -> Dict[str, MIX_TENSOR]:
