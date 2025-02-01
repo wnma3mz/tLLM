@@ -48,7 +48,7 @@ class OpenAIServing:
     async def create_chat_completion(self, request: ChatCompletionRequest, raw_request: Request):
         request_id = f"chat-{random_uuid()}"
         messages, mm_input_dict = await self.message_processor.parse_message(request.messages)
-        input_ids = self.message_processor.preprocess(messages)
+        input_ids = self.message_processor.preprocess(messages, request.add_generation_prompt)
 
         if request.temperature == 0.0:
             method = "greedy"
@@ -60,6 +60,7 @@ class OpenAIServing:
             sampling_params=request.to_sampling_params(self.engine.tok.tokenizer),
             input_ids=input_ids,
             multi_modal_inputs=mm_input_dict,
+            is_gen_image=request.is_gen_image,
         )
         result_generator = self.engine.generate_stream(sequence_data)
 

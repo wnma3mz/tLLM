@@ -1,3 +1,4 @@
+import base64
 from functools import partial
 from typing import Dict, List, Optional, Union
 
@@ -116,6 +117,14 @@ class MLXJanusProConditionalGeneration(nn.Module):
         )
 
         self.merge_mm_input = merge_mm_input
+        self.img_size = 384
+        self.patch_size = 16
+        self.codebook_len = 8
+        self.patch_img_size = self.img_size // self.patch_size
+
+    @property
+    def image_token_len(self):
+        return self.patch_img_size * self.patch_img_size
 
     @classmethod
     def from_pretrained(cls, config, state_dict: Dict[str, mx.array], **kwargs):
@@ -124,14 +133,16 @@ class MLXJanusProConditionalGeneration(nn.Module):
         model = cls(config)
         image_processor = VLMImageProcessor.from_pretrained(kwargs["model_path"], trust_remote_code=True)
         model.process_mm_input = partial(process_mm_input, image_processor=image_processor)
-        cls.image_token_id = config.image_token_id
+        cls.image_token_id = config.image_token_id  # <image_placeholder>
+        cls.pad_token_id = config.pad_token_id  #  <｜▁pad▁｜>
+        cls.begin_image_token_id = config.begin_image_token_id  #  "<begin_of_image>"
 
         cls.config = config
         cls.num_layers = config.num_hidden_layers
         state_dict = model.sanitize(state_dict)
 
         model = quantization_func(config, model, state_dict)
-        model.load_weights(list(state_dict.items()))  # , strict=False
+        model.load_weights(list(state_dict.items()))
 
         mx.eval(model.parameters())
         model.eval()
@@ -155,6 +166,10 @@ class MLXJanusProConditionalGeneration(nn.Module):
                 if "weight" in k and len(v.shape) == 4:
                     # [out_ch, in_ch, h, w] -> [out_ch, h, w, in_ch]
                     v = v.transpose(0, 2, 3, 1)
+                if "encoder" in k:
+                    continue
+                if ".quant_conv" in k:
+                    continue
 
             if "codebook_used" in k:
                 continue
@@ -205,3 +220,28 @@ class MLXJanusProConditionalGeneration(nn.Module):
     def get_logits(self, hidden_states: mx.array) -> mx.array:
         logits = self.lm_head(self.norm(hidden_states))
         return logits
+
+    def get_gen_head(self, hidden_states: mx.array, temperature: float = 1.0, cfg_weight: float = 5.0) -> mx.array:
+        logits = self.gen_head(self.norm(hidden_states))
+        logit_cond = logits[0::2, :]
+        logit_uncond = logits[1::2, :]
+
+        logits = logit_uncond + cfg_weight * (logit_cond - logit_uncond)
+        probs = mx.softmax(logits / temperature, axis=-1)
+        return probs
+
+    def get_gen_img_embeds(self, input_ids: np.ndarray) -> mx.array:
+        return self.gen_aligner(self.gen_embed(mx.array(input_ids)))
+
+    def decode_image(self, input_ids: mx.array) -> str:
+        parallel_size = 1
+        # only one image
+        dec = self.gen_vision_model.decode_code(
+            mx.array(input_ids),
+            shape=[parallel_size, self.codebook_len, self.patch_img_size, self.patch_img_size],
+            channel_first=True,
+        )[0]
+        dec = dec.astype(mx.float32)
+        mlx_dec = mx.clip((dec + 1) / 2 * 255, 0, 255)
+        np_dec = np.array(mlx_dec, dtype=np.uint8)
+        return base64.b64encode(np_dec.tobytes()).decode("utf-8")

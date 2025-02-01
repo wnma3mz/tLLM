@@ -159,6 +159,11 @@ class ChatCompletionRequest(OpenAIBaseModel):
             "default)."
         ),
     )
+
+    is_gen_image: bool = Field(
+        default=False,
+        description=("If true, the assistant will return an image base64 string. It must be supported by the model."),
+    )
     # doc: end-chat-completion-extra-params
 
     def to_sampling_params(

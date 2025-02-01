@@ -187,6 +187,7 @@ class SequenceRequestData:
     timeout: int = 100000  # 请求的总超时时间
     is_stop: bool = False
     is_prefill: bool = True
+    is_gen_image: bool = False  # 是否为生图模式
 
     condition: asyncio.Condition = field(default_factory=asyncio.Condition)
 

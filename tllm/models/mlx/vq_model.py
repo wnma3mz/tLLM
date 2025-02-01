@@ -1,7 +1,7 @@
 # coding: utf-8
 # Modify from https://github.com/deepseek-ai/Janus/blob/main/janus/models/vq_model.py
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List
 
 import mlx.core as mx
 import mlx.nn as nn
@@ -434,11 +434,11 @@ class VQModel(nn.Module):
     def __init__(self, config: ModelArgs):
         super().__init__()
         self.config = config
-        self.encoder = Encoder(
-            ch_mult=config.encoder_ch_mult,
-            z_channels=config.z_channels,
-            dropout=config.dropout_p,
-        )
+        # self.encoder = Encoder(
+        #     ch_mult=config.encoder_ch_mult,
+        #     z_channels=config.z_channels,
+        #     dropout=config.dropout_p,
+        # )
         self.decoder = Decoder(
             ch_mult=config.decoder_ch_mult,
             z_channels=config.z_channels,
@@ -453,7 +453,7 @@ class VQModel(nn.Module):
             config.codebook_l2_norm,
             config.codebook_show_usage,
         )
-        self.quant_conv = nn.Conv2d(config.z_channels, config.codebook_embed_dim, 1)
+        # self.quant_conv = nn.Conv2d(config.z_channels, config.codebook_embed_dim, 1)
         self.post_quant_conv = nn.Conv2d(config.codebook_embed_dim, config.z_channels, 1)
 
     def encode(self, x):
@@ -502,7 +502,7 @@ class vision_head(nn.Module):
         self.vision_activation = nn.GELU()
         self.vision_head = nn.Linear(params["image_token_embed"], params["image_token_size"])
 
-    def forward(self, x):
+    def __call__(self, x):
         x = self.output_mlp_projector(x)
         x = self.vision_activation(x)
         x = self.vision_head(x)
@@ -525,22 +525,16 @@ def sanitize(weights):
 
 
 if __name__ == "__main__":
-    # kwargs = {
-    #   "image_token_size": 16384,
-    #   "n_embed": 8
-    # }
-    kwargs = {}
-    fname = "/Users/lujianghu/Documents/mlx_clip/Janus-Pro-1B-4bit/model.safetensors"
+    fname = ...
     state_dict = mx.load(fname)
     new_state_dict = {}
     for k, v in state_dict.items():
         if k.startswith("gen_vision_model."):
             new_state_dict[k] = v
     state_dict = new_state_dict
-    vq_model = VQModel(ModelArgs(encoder_ch_mult=[1, 1, 2, 2, 4], decoder_ch_mult=[1, 1, 2, 2, 4], **kwargs))
+    vq_model = VQModel(ModelArgs(encoder_ch_mult=[1, 1, 2, 2, 4], decoder_ch_mult=[1, 1, 2, 2, 4]))
     vq_model.load_weights(list(sanitize(state_dict).items()))
 
-    # <image_0> -> 100004
     image_token_num_per_image = 576
     generated_tokens = [[10] * image_token_num_per_image]
     parallel_size = 1

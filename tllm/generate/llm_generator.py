@@ -1,3 +1,4 @@
+import copy
 import time
 from typing import Callable, List
 
@@ -37,6 +38,8 @@ class LLMGenerator:
                     input_ids: List[int]
 
         """
+        is_gen_image = any(x.is_gen_image for x in request_list)  # In Experiment
+
         uuid_list, input_ids_list, mm_input_list = [], [], []
         for sequence_request in request_list:
             uuid_list.append(sequence_request.request_id)
@@ -46,28 +49,50 @@ class LLMGenerator:
                     mm_input_list.append(sequence_request.multi_modal_inputs)
 
                 input_ids_list.append(np.array(sequence_request.input_ids))
+
+                if sequence_request.is_gen_image:
+                    compare_input_ids = copy.deepcopy(input_ids_list[-1])
+                    uuid_list.append(sequence_request.request_id + "-bak")  # 每个 request 对应两个句子
+                    compare_input_ids[1:-1] = self.model.pad_token_id
+                    input_ids_list.append(compare_input_ids)
             else:
                 input_ids_list.append(np.array([sequence_request.output_ids[-1]]))
+                if sequence_request.is_gen_image:
+                    uuid_list.append(sequence_request.request_id + "-bak")  # 每个 request 对应两个句子
+                    input_ids_list.append(np.array([sequence_request.output_ids[-1]]))
 
         mm_input = self.merge_mm_input(mm_input_list) if self.merge_mm_input is not None else None
 
         input_ids = np.concatenate(input_ids_list, axis=-1)
         # [seq_len1 + seq_len2 + ...] -> [seq_len1 + seq_len2 + ..., hidden_size]
-        if mm_input is None:
-            input_embeds = self.model.get_input_embeddings(input_ids)
-        else:
+
+        if mm_input is not None:
             input_embeds = self.model.get_input_embeddings(input_ids, **mm_input)
+        else:
+            if not is_gen_image:
+                input_embeds = self.model.get_input_embeddings(input_ids)
+            else:
+                if request_list[0].is_prefill:
+                    input_embeds = self.model.get_input_embeddings(input_ids)
+                else:
+                    # 在生成图片时，生成第二个 token 后
+                    input_embeds = self.model.get_gen_img_embeds(input_ids)
 
         seq_input = SeqInput(uuid_list=uuid_list, input_ids_list=input_ids_list)
         s0 = time.perf_counter()
         forward_result = await self.forward(input_embeds, seq_input)
         self.logger.debug(f"decoder cost time: {time.perf_counter() - s0:.4f}s")
         s1 = time.perf_counter()
-        seq_logits: List[MIX_TENSOR] = self.model.get_logits(forward_result.hidden_states)
+        if is_gen_image:
+            seq_logits: List[MIX_TENSOR] = self.model.get_gen_head(forward_result.hidden_states)
+        else:
+            seq_logits: List[MIX_TENSOR] = self.model.get_logits(forward_result.hidden_states)
+
         self.logger.debug(f"logits cost time: {time.perf_counter() - s1:.4f}s")
         assert seq_logits.shape[0] == len(request_list)
 
         s1 = time.perf_counter()
+
         # TODO: batch decode by group
         # TODO: sequence_request.sampling_params
         seq_generate_ids: List[int] = sampling_func(seq_logits)
@@ -89,11 +114,18 @@ class LLMGenerator:
                 max_tokens=sequence_request.sampling_params.max_tokens,
             )
             if end.is_end:
+                # len(sequence_request.output_ids) == 576
+                if sequence_request.is_gen_image:
+                    generate_text = self.model.decode_image(sequence_request.output_ids)
+                    sequence_request.generate_text = generate_text
+                    sequence_request.output_text = generate_text
+
                 sequence_request.finish_reason_list = [end.finish_reason]
                 sequence_request.is_stop = True
             else:
+                # eos时，不添加 end text
                 sequence_request.generate_text = generate_text
-                sequence_request.output_text += generate_text  # 不添加 end text
+                sequence_request.output_text += generate_text
 
             if sequence_request.is_prefill:
                 sequence_request.ttft_cost_time = time.perf_counter() - s0
