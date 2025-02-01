@@ -113,6 +113,7 @@ class WeightManager:
             "language_model.model.norm.",
             "language_model.lm_head.",
             "aligner.",
+            "gen_",
         ]
         state_dict = self._hf_read_weight(prefix_key_list)
 

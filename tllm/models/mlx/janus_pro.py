@@ -8,6 +8,7 @@ import numpy as np
 
 from tllm import DTYPE
 from tllm.models.mlx.helper import dict_to_dataclass, quantization_func
+from tllm.models.mlx.vq_model import ModelArgs, VQModel, vision_head
 from tllm.models.processor import VLMImageProcessor
 
 
@@ -107,6 +108,13 @@ class MLXJanusProConditionalGeneration(nn.Module):
         self.lm_head = nn.Linear(language_config.hidden_size, language_config.vocab_size, bias=False)
         self.norm = nn.RMSNorm(language_config.hidden_size, eps=language_config.rms_norm_eps)
 
+        self.gen_vision_model = VQModel(ModelArgs(encoder_ch_mult=[1, 1, 2, 2, 4], decoder_ch_mult=[1, 1, 2, 2, 4]))
+        self.gen_aligner = MlpProjector(config.gen_aligner_config["params"])
+        self.gen_head = vision_head(config.gen_head_config["params"])
+        self.gen_embed = nn.Embedding(
+            config.gen_vision_config["params"]["image_token_size"], config.gen_vision_config["params"]["n_embed"]
+        )
+
         self.merge_mm_input = merge_mm_input
 
     @classmethod
@@ -142,6 +150,14 @@ class MLXJanusProConditionalGeneration(nn.Module):
             if k.startswith("language_model."):
                 k = k.replace("language_model.model.", "")
                 k = k.replace("language_model.", "")
+
+            if k.startswith("gen_vision_model."):
+                if "weight" in k and len(v.shape) == 4:
+                    # [out_ch, in_ch, h, w] -> [out_ch, h, w, in_ch]
+                    v = v.transpose(0, 2, 3, 1)
+
+            if "codebook_used" in k:
+                continue
 
             if "position_ids" in k:
                 # Remove unused position_ids
