@@ -1,10 +1,10 @@
-## together-LLM
+## Together-LLM
 
 [English](README_EN.md) | [中文](README.md) 
 
 Cross-Machine Inference LLM Framework
 
-### Begin quickly!
+### Quick Start
 
 1. Install dependencies
 
@@ -16,10 +16,10 @@ This machine is running: `python3 ./run_engine.py --model_path mlx-community/Lla
 2. Start HTTP service
 
 - Single machine: `tllm.server --model_path mlx-community/Llama-3.2-1B-Instruct-4bit`
-- 
-- Multiple machines:
-- Start a server for a service: `tllm.server --model_path mlx-community/Llama-3.2-1B-Instruct-4bit --hostname $YOUR_IP`
-- In another terminal, start the client `tllm.client --hostname http://$YOUR_IP:8022`
+
+- Multi-machine:
+  - Start a server in a terminal: `tllm.server --model_path mlx-community/Llama-3.2-1B-Instruct-4bit --hostname $YOUR_IP`
+  - Start a client on another terminal `tllm.client --hostname http://$YOUR_IP:8022`
 
 3. Test HTTP service
 
@@ -29,17 +29,43 @@ This machine is running: `python3 ./run_engine.py --model_path mlx-community/Lla
 
 - Llama
 - Qwen
-- Janus Pro: Only supports MacOS platform
+- Janus Pro: Currently only supports MacOS platform
   - Text to Text: `PYTHONPATH="./" python3 run_janus_pro.py --model_path wnma3mz/Janus-Pro-1B-4bit --message_type llm`
   - Image to Text: `PYTHONPATH="./" python3 run_janus_pro.py --model_path wnma3mz/Janus-Pro-1B-4bit --message_type mllm`
   - Text to Image: `PYTHONPATH="./" python3 run_janus_pro.py --model_path wnma3mz/Janus-Pro-1B-4bit --message_type image`
-- On MacOS, you need to install `pip install mlx-vlm==0.1.12`.
-- Flux is currently only supported on MacOS. To use Flux, you will need to install `pip install mflux=0.4.1`.
+- Qwen-VL: On MacOS platform, additional installation is required: `pip install mlx-vlm==0.1.12`.
+- flux: Currently only supports MacOS platform, requires additional installation `pip install mflux=0.4.1`.
 
 ### Advanced
 
-For multi-machine deployment, the default ports are used for running. If special requirements are needed, the configuration file `examples/config.json` can be modified.
+For multi-machine deployment, the default part of the port will be used for running. If there are special requirements, you can modify it through the configuration file `examples/config.json`.
 
+```json
+{
+    "server": {
+        "grpc_port": 25001,
+        "http_port": 8022,
+        "hostname": "mac-mini"
+    },
+    "client": [
+        {
+            "grpc_port": 25002,
+            "hostname": "m3pro"
+        },
+        {
+            "grpc_port": 25003,
+            "hostname": "m3"
+        }
+    ]
+}
+```
+
+- The number of clients will determine the number of model splits.
+- `server.grpc_port`: server's grpc port, used for each client to send status data and the last client to send the computed result
+- `server.http_port`: server's http port, API interface as well as WebSocket service
+- `server.hostname`: server's hostname, can be replaced with IP, such as 192.168.1.10, make sure client can access
+- `client.grpc_port`: client's grpc port
+- `client.hostname`: client's hostname, ensure server and other client can access
 
 ### Features
 
@@ -77,11 +103,11 @@ Q: Why Local is slower than Server+Client?
 
 A:
 
-- Local 只有一个进程，启动了 HTTP Serve， Engine 和 Model 都在一个进程中
-- Server+Client 是两个进程，Server 中包含了 HTTP Serve 和 Engine，以及 Embedding 和 LM HEAD；Client 中只有 Model
+- Local only has one process, which starts the HTTP Server, Engine and Model are all in one process.
+- Server+Client are two processes, Server contains HTTP Serve and Engine, as well as Embedding and LM HEAD; Client contains only Model
 
-但不清楚，为什么 `mlx-community/Meta-Llama-3.1-8B-Instruct-4bit` 这个不大一样，暂时归因到内存压力上。
+But unclear, why `mlx-community/Meta-Llama-3.1-8B-Instruct-4bit` is not much different, temporarily attributed to memory pressure.
 
-Q: Mac Mini M4 (16G) + M3 Pro (18G) 这一列速度为什么慢？
+Q: Why is the performance of Mac Mini M4 (16G) + M3 Pro (18G) slow?
 
 A: In an ideal scenario, it would be equivalent to a Mac Mini M4 (16G) (Server+Client), but due to the need for communication, the communication overhead accounts for a significant portion of the total cost. The main issue is that each token generation requires a certain amount of time, even within a local network.

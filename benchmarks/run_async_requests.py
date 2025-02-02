@@ -26,10 +26,10 @@ async def requests_func(messages: List[Dict[str, Any]]):
 
 
 async def main(messages_list: List[List[Dict[str, Any]]]):
-    # print("异步并发请求结果")
-    # s1 = time.time()
-    # await asyncio.gather(*[requests_func(messages) for messages in messages_list])
-    # print(f"time cost: {time.time() - s1:.4f} s")
+    print("异步并发请求结果")
+    s1 = time.time()
+    await asyncio.gather(*[requests_func(messages) for messages in messages_list])
+    print(f"time cost: {time.time() - s1:.4f} s")
 
     print("单独请求结果")
     s1 = time.time()
@@ -40,7 +40,7 @@ async def main(messages_list: List[List[Dict[str, Any]]]):
 
 
 def load_message():
-    with open("asserts/debug_messages.json", "r") as f:
+    with open("asserts/messages.json", "r") as f:
         messages_dict = json.load(f)
     return messages_dict
 
