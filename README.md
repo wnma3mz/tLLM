@@ -6,7 +6,7 @@
 
 1. install dependencies
 
-- for mlx (macos arm):  `pip install -U -e ".[mlx]" && pip install -e git+https://github.com/wnma3mz/mlx_clip.git#egg=mlx_clip`
+- for mlx (macos arm):  `pip install -U -e ".[mlx]"`
 - for nvidia: `pip install -e ".[torch]"`
 
 2. run server
@@ -32,6 +32,11 @@
 ```bash
 python3 benchmarks/run_async_requests.py
 ```
+
+### More Model
+
+- qwen-vl: `pip install mlx-vlm==0.1.12`
+- flux: `pip install mflux=0.4.1`
 
 ### More Details
 

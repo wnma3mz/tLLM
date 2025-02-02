@@ -120,7 +120,6 @@ def load_message():
 
 
 if __name__ == "__main__":
-    args = parse_args()
     messages_dict = load_message()
     if args.message_type == "llm":
         asyncio.run(llm_generate(args, messages_dict["llm"][0]))

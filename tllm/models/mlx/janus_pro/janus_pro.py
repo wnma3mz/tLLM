@@ -4,26 +4,21 @@ from typing import Dict, List, Optional, Union
 
 import mlx.core as mx
 import mlx.nn as nn
-from mlx_clip.models.siglip.siglip_model import SiglipVisionModel
 import numpy as np
 
 from tllm import DTYPE
 from tllm.models.mlx.helper import dict_to_dataclass, quantization_func
-from tllm.models.mlx.vq_model import ModelArgs, VQModel, vision_head
+from tllm.models.mlx.janus_pro.siglip_model import SiglipVisionModel
+from tllm.models.mlx.janus_pro.vq_model import ModelArgs, VQModel, vision_head
 from tllm.models.processor import VLMImageProcessor
 from tllm.models.weight_helper import common_sanitize
 
 
 def replace_vision_model_func(k: str) -> Optional[str]:
-    # k = k.split("vision_model.", 1)[-1]
     if "vision_tower.blocks." in k:
         k = k.replace("vision_tower.blocks.", "vision_tower.encoder.layers.")
     if "vision_tower.patch_embed.proj." in k:
         k = k.replace("vision_tower.patch_embed.proj.", "vision_tower.embeddings.patch_embedding.")
-
-    # do not load attn_pool
-    if "attn_pool." in k:
-        k = k.replace("attn_pool.", "head.")
 
     if ".norm2." in k:
         k = k.replace(".norm2.", ".layer_norm2.")
@@ -169,7 +164,7 @@ class MLXJanusProConditionalGeneration(nn.Module):
             if k.startswith("vision_model."):
                 k = replace_vision_model_func(k)
                 # Skip attn_pool
-                if k.startswith("vision_model.vision_tower.head."):
+                if k.startswith("vision_model.vision_tower.attn_pool."):
                     continue
             if k.startswith("language_model."):
                 k = k.replace("language_model.model.", "")
@@ -179,6 +174,7 @@ class MLXJanusProConditionalGeneration(nn.Module):
                 if "weight" in k and len(v.shape) == 4:
                     # [out_ch, in_ch, h, w] -> [out_ch, h, w, in_ch]
                     v = v.transpose(0, 2, 3, 1)
+                # Skip encoder
                 if "encoder" in k:
                     continue
                 if ".quant_conv" in k:

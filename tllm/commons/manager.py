@@ -5,7 +5,7 @@ from transformers import AutoConfig
 
 from tllm.commons.tp_communicator import BaseCommunicator
 from tllm.models.file_helper import get_model_path
-from tllm.models.register import MODEL_REGISTER
+from tllm.models.register import DEP_MODEL_REGISTER, MODEL_REGISTER
 from tllm.models.weight_helper import load_gguf_weight, read_from_safetensors
 
 
@@ -148,7 +148,11 @@ def load_master_model(model_path: str):
     weight_manager = WeightManager(model_path)
     state_dict = weight_manager.read_master_weight()
     if weight_manager.arch not in MODEL_REGISTER:
-        raise ValueError(f"Model {weight_manager.arch} not supported")
+        arch = weight_manager.arch
+        if weight_manager.arch in DEP_MODEL_REGISTER:
+            raise ValueError(f"Model {arch} now is support, please execute `pip install {DEP_MODEL_REGISTER[arch]}`")
+        else:
+            raise ValueError(f"Model {arch} not supported")
 
     MY_CausalLM_CLASS, _ = MODEL_REGISTER[weight_manager.arch]
 
