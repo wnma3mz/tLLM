@@ -188,6 +188,7 @@ class SequenceRequestData:
     is_stop: bool = False
     is_prefill: bool = True
     is_gen_image: bool = False  # 是否为生图模式
+    is_normal_process: bool = True  # 是否处于正常处理状态
 
     condition: asyncio.Condition = field(default_factory=asyncio.Condition)
 
@@ -202,6 +203,9 @@ class SequenceRequestData:
         return f"request_id={self.request_id}; output_ids={self.output_ids}"
 
     def to_request_output(self) -> RequestOutput:
+        if not self.is_normal_process:
+            self.is_stop = True
+            return None
         if not self.is_stop:
             return RequestOutput(
                 self.request_id,

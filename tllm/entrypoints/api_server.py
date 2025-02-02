@@ -57,6 +57,7 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
         raise ValueError("OpenAIServing instance is not initialized")
     if raw_request.headers.get("authorization") == "Bearer anythingllm":
         request.max_tokens = openai_serving_chat.max_model_len
+    logger.debug(f"request: {request.model_dump()}")
     try:
         generator = await openai_serving_chat.create_chat_completion(request, raw_request)
         if request.stream:
@@ -64,23 +65,11 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
         else:
             assert isinstance(generator, ChatCompletionResponse)
             return JSONResponse(content=generator.model_dump())
+    except HTTPException as e:
+        return JSONResponse(content={"error": str(e)}, status_code=e.status_code)
     except Exception as e:
-        logger.error(f"Error processing request: {str(e)}")
-        return JSONResponse(content={"error": str(e)}, status_code=499)
-
-
-@app.post("/v1/completions")
-async def create_completion(request: ChatCompletionRequest, raw_request: Request) -> ChatCompletionResponse:
-    if not ws_manager.has_full_model:
-        raise ValueError("No available Full Node to process the request")
-    if openai_serving_chat is None:
-        raise ValueError("OpenAIServing instance is not initialized")
-    generator = await openai_serving_chat.create_chat_completion(request, raw_request)
-    if request.stream:
-        return StreamingResponse(content=generator, media_type="text/event-stream")
-    else:
-        assert isinstance(generator, ChatCompletionResponse)
-        return JSONResponse(content=generator.model_dump())
+        logger.error(f"Unknown Exception: {str(e)}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
 @app.post("/v1/create_image")

@@ -28,6 +28,10 @@ def create_error_response(message: str) -> ChatCompletionResponse:
     raise HTTPException(status_code=499, detail=message)
 
 
+def create_server_error_response(message: str) -> ChatCompletionResponse:
+    raise HTTPException(status_code=500, detail=message)
+
+
 class OpenAIServing:
     def __init__(self, engine: AsyncEngine, args):
         self.engine = engine
@@ -86,6 +90,9 @@ class OpenAIServing:
                     await self.engine.abort(request_id)
                     create_error_response("Client disconnected")
                 res: RequestOutput
+                if res is None:
+                    create_server_error_response("Server Engine Error")
+
                 output = res.outputs[0]
                 i = output.index
 
@@ -112,7 +119,7 @@ class OpenAIServing:
             yield "data: [DONE]\n\n"
         except asyncio.CancelledError:
             await self.engine.abort(request_id)
-            create_error_response("Client disconnected")
+            create_server_error_response("Server Engine Error")
 
     async def chat_completion_full_generator(
         self,
@@ -130,10 +137,12 @@ class OpenAIServing:
                     await self.engine.abort(request_id)
                     create_error_response("Client disconnected")
                 await asyncio.sleep(0.01)
+                if res is None:
+                    create_server_error_response("Server Engine Error")
                 final_res: RequestOutput = res
         except asyncio.CancelledError:
             await self.engine.abort(request_id)
-            create_error_response("Client disconnected")
+            create_server_error_response("Server Engine Error")
 
         output = final_res.outputs[0]
         message = ChatMessage(role=self.response_role, content=output.text)

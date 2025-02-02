@@ -13,11 +13,11 @@ class AsyncEngine:
         self.generator = generator
         self.prefill_queue: asyncio.Queue = asyncio.Queue()
         self.decoding_queue: asyncio.Queue = asyncio.Queue()
+        self.abort_queue: asyncio.Queue = asyncio.Queue()
         self.processing_task = None
         self.limit_size: int = limit_size  # 每次最多处理 5 个请求，prefill + decode
         self.sleep_time: float = sleep_time
         self.logger = SingletonLogger.setup_master_logger()
-        self.abort_queue: asyncio.Queue = asyncio.Queue()
         self.queue_not_empty: asyncio.Event = asyncio.Event()
         self._loop = None
 
@@ -70,7 +70,7 @@ class AsyncEngine:
                 try:
                     await self.queue_not_empty.wait()
                 except Exception as e:
-                    self.logger.debug("exception: " + str(e))
+                    self.logger.debug(f"exception: {str(e)}")
                     await asyncio.sleep(0.01)
                 continue
             try:
@@ -79,18 +79,12 @@ class AsyncEngine:
                 for request_data in request_data_list:
                     if not request_data.is_stop:
                         self.decoding_queue.put_nowait(request_data)
-                    async with request_data.condition:
-                        request_data.condition.notify()
 
-                # await asyncio.sleep(self.sleep_time)
             except asyncio.CancelledError:
                 # LLM Generate Error or Server Cancel Engine
-                self.logger.error("CancelledError")
                 for request_data in request_data_list:
-                    request_data.is_stop = True
-                    request_data.finish_reason_list = ["Server Error"]
-                    async with request_data.condition:
-                        request_data.condition.notify()
+                    request_data.is_normal_process = False
+                self.logger.error("CancelledError")
                 traceback.print_exc()
             except Exception as e:
                 self.logger.error(f"Error input_ids: {'\n'.join(x.input_ids for x in request_data_list)}")
@@ -100,9 +94,12 @@ class AsyncEngine:
                 self.logger.error(f"BaseException Error processing prefill_queue data: {str(e)}")
                 traceback.print_exc()
             finally:
+                for request_data in request_data_list:
+                    async with request_data.condition:
+                        request_data.condition.notify()
                 if self.prefill_queue.empty():
                     self.queue_not_empty.clear()
-                await asyncio.sleep(0)
+                await asyncio.sleep(self.sleep_time)
 
     async def generate_stream(self, request_data: SequenceRequestData):
         self.prefill_queue.put_nowait(request_data)
@@ -114,39 +111,15 @@ class AsyncEngine:
                     await asyncio.wait_for(request_data.condition.wait(), request_data.timeout)
                     # 流式返回数据的内容
                     yield request_data.to_request_output()
-                try:
-                    if hasattr(request_data, "ttft_cost_time"):
-                        self.logger.info(
-                            f"[request_id] {request_data.request_id}] ttft: {request_data.ttft_cost_time:.4f} s"
-                        )
-                        self.logger.info(
-                            f"[request_id] {request_data.request_id}] tpot: {(len(request_data.output_ids) - 1) / (time.perf_counter() - request_data.decode_start_ts):.4f} token/s"
-                        )
-                except:
-                    pass
-                yield request_data.to_request_output()  # Need it?
-        except asyncio.CancelledError:
-            self.logger.debug(f"CancelledError: {request_data.request_id}")
-            raise asyncio.CancelledError("CancelledError")
-        except asyncio.TimeoutError:
-            self.logger.debug(f"Processing timed out: {request_data.request_id}")
-            raise asyncio.CancelledError("TimeoutError")
-        except Exception as e:
-            traceback.print_exc()
-            raise asyncio.CancelledError("UnknownException")
-        except BaseException as e:
-            traceback.print_exc()
-            raise asyncio.CancelledError("UnknownBaseException")
-
-    async def generate(self, request_data: SequenceRequestData):
-        self.prefill_queue.put_nowait(request_data)
-        self.queue_not_empty.set()
-
-        try:
-            async with request_data.condition:
-                while not request_data.is_stop:
-                    await asyncio.wait_for(request_data.condition.wait(), request_data.timeout)
-            return request_data.to_request_output()  # 返回最终的数据对象
+                if getattr(request_data, "ttft_cost_time", None) is not None:
+                    self.logger.info(
+                        f"[request_id] {request_data.request_id}] ttft: {request_data.ttft_cost_time:.4f} s"
+                    )
+                    self.logger.info(
+                        f"[request_id] {request_data.request_id}] tpot: {(len(request_data.output_ids) - 1) / (time.perf_counter() - request_data.decode_start_ts):.4f} token/s"
+                    )
+                # Need it?
+                yield request_data.to_request_output()
         except asyncio.CancelledError:
             self.logger.debug(f"CancelledError: {request_data.request_id}")
             raise asyncio.CancelledError("CancelledError")
