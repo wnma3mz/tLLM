@@ -84,8 +84,16 @@ class AsyncEngine:
 
                 # await asyncio.sleep(self.sleep_time)
             except asyncio.CancelledError:
-                self.logger.debug("CancelledError")
+                # LLM Generate Error or Server Cancel Engine
+                self.logger.error("CancelledError")
+                for request_data in request_data_list:
+                    request_data.is_stop = True
+                    request_data.finish_reason_list = ["Server Error"]
+                    async with request_data.condition:
+                        request_data.condition.notify()
+                traceback.print_exc()
             except Exception as e:
+                self.logger.error(f"Error input_ids: {'\n'.join(x.input_ids for x in request_data_list)}")
                 self.logger.error(f"Error processing prefill_queue data: {str(e)}")
                 traceback.print_exc()
             except BaseException as e:

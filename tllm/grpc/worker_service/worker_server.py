@@ -75,6 +75,11 @@ class WorkerServer(schemas_pb2_grpc.RPCServiceServicer):
                 pass
 
     async def forward_func(self, request: schemas_pb2.ForwardRequest):
+        # 如果收到为空，则直接返回
+        if request.hidden_states.data == b"":
+            if self.comm.is_rank0():
+                await self.master_rpc_manager.rpc_func(request, None, -1)
+            return
         s1 = time.perf_counter()
 
         convertor = Convertor()
@@ -85,7 +90,13 @@ class WorkerServer(schemas_pb2_grpc.RPCServiceServicer):
         self.comm.debug_rank0(f"deserialize_tensor cost time: {time.perf_counter() - s1:.4f}")
 
         s1 = time.perf_counter()
-        output_hidden_states = self.model(hidden_states, seq_input)
+        try:
+            output_hidden_states = self.model(hidden_states, seq_input)
+        except ValueError as e:
+            self.logger.error(f"forward_func ValueError by {str(e)}")
+            if self.comm.is_rank0():
+                await self.master_rpc_manager.rpc_func(request, None, -1)
+            return
         cost_time = time.perf_counter() - s1
         self.comm.debug_rank0(f"forward cost time: {cost_time:.4f}")
 

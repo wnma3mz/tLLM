@@ -116,9 +116,9 @@ class RequestsCache:
                 # 命中了之前的 kv cache，使用历史 cache
                 if hit_uuid is not None and cache_manager.get(hit_uuid) is not None:
                     hid_decoder_cache: DecoderCache = copy.deepcopy(cache_manager.get(hit_uuid))
-                    # 相同请求时，避免过超过 cache 长度
+                    # 相同输入时，避免过超过 cache 长度
                     if q_len <= hit_cache_len:
-                        hit_cache_len = q_len - 1
+                        hit_cache_len = q_len - 2
 
                     hid_decoder_cache.truncate(hit_cache_len)
                     hid_decoder_cache.set_q_len(q_len - hit_cache_len)

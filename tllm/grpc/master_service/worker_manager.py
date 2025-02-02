@@ -10,6 +10,9 @@ from tllm.commons.convert import Convertor
 from tllm.grpc.master_service.pending_requests import PendingRequests
 from tllm.grpc.proto import schemas_pb2, schemas_pb2_grpc
 from tllm.schemas import MIX_TENSOR, SeqInput
+from tllm.singleton_logger import SingletonLogger
+
+logger = SingletonLogger.setup_master_logger()
 
 
 async def rpc_image_forward(
@@ -107,6 +110,11 @@ class WorkerRPCManager:
         try:
             output = await asyncio.wait_for(forward_future, timeout=PP_TIMEOUT)
         except asyncio.CancelledError:
+            logger.error("Client Timeout Error")
+            raise asyncio.CancelledError
+
+        if output.data == b"":
+            logger.error("Client Forward Error")
             raise asyncio.CancelledError
 
         return convertor.deserialize(output), await asyncio.wait_for(status_future, timeout=PP_TIMEOUT)
