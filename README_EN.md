@@ -2,71 +2,44 @@
 
 [English](README_EN.md) | [中文](README.md) 
 
-跨机推理 LLM 框架
+Cross-Machine Inference LLM Framework
 
-### 快速开始
+### Begin quickly!
 
-1. 安装依赖
+1. Install dependencies
 
-- 在 MacOS （Apple silicon）:  `pip install -U -e ".[mlx]"`
-- 其他平台（NVIDIA）: `pip install -e ".[torch]"`
+- On macOS (Apple silicon): `pip install -U -e ".[mlx]"`
+- Other platforms (NVIDIA): `pip install -e ".[torch]"`
 
-本机运行：`PYTHONPATH="./" python3 ./run_engine.py --model_path mlx-community/Llama-3.2-1B-Instruct-4bit`
+This machine is running: `python3 ./run_engine.py --model_path mlx-community/Llama-3.2-1B-Instruct-4bit`
 
-2. 启动 HTTP 服务
+2. Start HTTP service
 
-- 单机: `tllm.server --model_path mlx-community/Llama-3.2-1B-Instruct-4bit`
+- Single machine: `tllm.server --model_path mlx-community/Llama-3.2-1B-Instruct-4bit`
+- 
+- Multiple machines:
+- Start a server for a service: `tllm.server --model_path mlx-community/Llama-3.2-1B-Instruct-4bit --hostname $YOUR_IP`
+- In another terminal, start the client `tllm.client --hostname http://$YOUR_IP:8022`
 
-- 多机:
-  - 在一个终端启动服务端: `tllm.server --model_path mlx-community/Llama-3.2-1B-Instruct-4bit --hostname $YOUR_IP`
-  - 在另一个终端启动客户端 `tllm.client --hostname http://$YOUR_IP:8022`
-
-3. 测试 HTTP 服务
+3. Test HTTP service
 
 - `python3 benchmarks/run_async_requests.py`
 
-### 支持模型
+### Support model
 
-- llama
-- qwen
-- janus_pro: 暂只支持 MacOS 平台
+- Llama
+- Qwen
+- Janus Pro: Only supports MacOS platform
   - Text to Text: `PYTHONPATH="./" python3 run_janus_pro.py --model_path wnma3mz/Janus-Pro-1B-4bit --message_type llm`
   - Image to Text: `PYTHONPATH="./" python3 run_janus_pro.py --model_path wnma3mz/Janus-Pro-1B-4bit --message_type mllm`
   - Text to Image: `PYTHONPATH="./" python3 run_janus_pro.py --model_path wnma3mz/Janus-Pro-1B-4bit --message_type image`
-- qwen-vl: 在 MacOS 平台需要额外安装 `pip install mlx-vlm==0.1.12`
-- flux: 暂只支持 MacOS 平台，需要额外安装 `pip install mflux=0.4.1`
+- On MacOS, you need to install `pip install mlx-vlm==0.1.12`.
+- Flux is currently only supported on MacOS. To use Flux, you will need to install `pip install mflux=0.4.1`.
 
+### Advanced
 
-### 进阶功能
+For multi-machine deployment, the default ports are used for running. If special requirements are needed, the configuration file `examples/config.json` can be modified.
 
-对于多机部署，会使用默认的部分端口进行运行。如果有特殊需求，可以通过配置文件 `examples/config.json` 进行修改。
-
-```json
-{
-    "server": {
-        "grpc_port": 25001,
-        "http_port": 8022,
-        "hostname": "mac-mini"
-    },
-    "client": [
-        {
-            "grpc_port": 25002,
-            "hostname": "m3pro"
-        },
-        {
-            "grpc_port": 25003,
-            "hostname": "m3"
-        }
-    ]
-}
-```
-
-- 客户端的数量会决定模型拆分的数量
-- `server.grpc_port`: server 的 grpc 端口，用于每个 client 发送状态数据以及最后一个 client 发送计算后的结果
-- `server.http_port`: server 的 http 端口，API 接口 以及 WebSocket 服务
-- `server.hostname`: server 的 hostname，可以用 ip 代替，如 192.168.1.10，需要确保 client 能够访问
-- `client.grpc_port`: client 的 grpc 端口
-- `client.hostname`: client 的 hostname，需要确保 server 和 其他 client 能够访问
 
 ### Features
 
@@ -111,4 +84,4 @@ A:
 
 Q: Mac Mini M4 (16G) + M3 Pro (18G) 这一列速度为什么慢？
 
-A：理想情况下会等于 Mac Mini M4 (16G) (Server+Client)，但由于需要进行通信，通信开销占了主要部分，其中主要是延迟问题导致每个 token 生成都需要花费一定时间，哪怕在局域网内。
+A: In an ideal scenario, it would be equivalent to a Mac Mini M4 (16G) (Server+Client), but due to the need for communication, the communication overhead accounts for a significant portion of the total cost. The main issue is that each token generation requires a certain amount of time, even within a local network.
