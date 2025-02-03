@@ -94,6 +94,8 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
                 continue
             if k.startswith("language_model.model."):
                 k = k.replace("language_model.model.", "")
+            if k.startswith("language_model."):
+                k = k.replace("language_model.", "")
 
             if k.startswith("model."):
                 k = k.replace("model.", "")
