@@ -6,12 +6,12 @@ import torch.nn as nn
 from transformers.models.qwen2.modeling_qwen2 import Qwen2RMSNorm, Qwen2RotaryEmbedding
 
 from tllm import DEVICE, DTYPE
-from tllm.commons.attn import ATTN_TYPE
-from tllm.commons.cache import CacheManager
-from tllm.models.torch.helper import build_forward_cache, get_last_hidden_states
+from tllm.models.torch.helper import TorchCacheManager
 from tllm.models.torch.llama import Decoder
 from tllm.models.weight_helper import default_merge_attn, default_merge_mlp, tie_word_embeddings_func
 from tllm.schemas import SeqInput
+
+cache_manager = TorchCacheManager()
 
 
 class HFQwen2RotaryEmbedding(Qwen2RotaryEmbedding):
@@ -43,7 +43,6 @@ class HFQwen2Model(nn.Module):
         super().__init__()
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        self.cache_manager = CacheManager()
 
         # for qwen
         config.attention_bias = True
@@ -54,9 +53,14 @@ class HFQwen2Model(nn.Module):
         self.num_decoder_layers = config.decoder_end_layer_idx - config.decoder_start_layer_idx
         self.rotary_emb = HFQwen2RotaryEmbedding(config=config)
 
-        self.max_seq_len = getattr(self.model.layers[-1].self_attn, "max_seq_len", -1)
-        self.num_key_value_heads = self.model.layers[-1].self_attn.num_key_value_heads
-        self.head_dim = self.model.layers[-1].self_attn.head_dim
+        max_seq_len = getattr(self.model.layers[-1].self_attn, "max_seq_len", -1)
+        num_key_value_heads = self.model.layers[-1].self_attn.num_key_value_heads
+        head_dim = self.model.layers[-1].self_attn.head_dim
+        cache_manager.init_request_cache(self.num_decoder_layers, max_seq_len, num_key_value_heads, head_dim)
+
+        is_start_pp = self.config.decoder_start_layer_idx == 0
+        is_end_pp = self.config.decoder_end_layer_idx == self.config.num_hidden_layers
+        cache_manager.post_init(is_start_pp, is_end_pp)
 
     @classmethod
     def from_pretrained(cls, config, state_dict: Dict[str, torch.Tensor], is_merge: bool = True, **kwargs):
@@ -114,36 +118,21 @@ class HFQwen2Model(nn.Module):
 
         @return: seq_len x hidden_size
         """
-        attention_data = build_forward_cache(
-            seq_input,
-            self.cache_manager,
-            self.num_decoder_layers,
-            self.max_seq_len,
-            self.num_key_value_heads,
-            self.head_dim,
+        hidden_states = cache_manager.build_forward_cache(hidden_states, seq_input)
+
+        position_embeddings = self.rotary_emb(
+            hidden_states, cache_manager.attn_data.position_ids.to(hidden_states.device)
         )
-        hidden_states = hidden_states.to(DTYPE).to(DEVICE)
-        position_embeddings = self.rotary_emb(hidden_states, attention_data.position_ids.to(DEVICE))
-        if ATTN_TYPE == "flash_attention":
-            attention_data.attn_mask = {
-                k: v.to(DEVICE) if isinstance(v, torch.Tensor) else v for k, v in attention_data.attn_mask.items()
-            }
-        else:
-            attention_data.attn_mask = attention_data.attn_mask.to(DEVICE)
 
         hidden_states = self.model(
-            hidden_states, position_embeddings=position_embeddings, attention_data=attention_data
+            hidden_states, position_embeddings=position_embeddings, attention_data=cache_manager.attn_data
         )
 
-        if self.config.decoder_end_layer_idx == self.config.num_hidden_layers:
-            split_len_list = attention_data.q_len_list
-            hidden_states = get_last_hidden_states(hidden_states, split_len_list)
+        # TODO 异步更新 cache
+        cache_manager.update_cache(seq_input)
 
-        for uuid in seq_input.uuid_list:
-            self.cache_manager.set(uuid, attention_data.get_decoder_cache(uuid))
-            self.cache_manager.check_alive()
-
-        return hidden_states
+        output = cache_manager.get_last_hidden_states(hidden_states)
+        return output
 
 
 class HFQwen2ForCausalLM(nn.Module):

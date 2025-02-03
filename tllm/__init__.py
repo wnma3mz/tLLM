@@ -30,6 +30,7 @@ if BACKEND == BackendEnum.MLX:
     DEVICE = None
     from tllm.models.mlx import *
 elif BACKEND == BackendEnum.TORCH:
+    ENABLE_PREFILL_CACHE = False
     import torch
 
     DTYPE = torch.float16

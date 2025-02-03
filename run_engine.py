@@ -28,8 +28,8 @@ args = parse_args()
 os.environ["TLLM_BACKEND"] = args.backend
 os.environ["TLLM_ATTN_BACKEND"] = args.attn_backend
 
-from tllm.commons.manager import load_client_model, load_master_model
 from tllm.commons.tp_communicator import Communicator
+from tllm.commons.weight_manager import load_client_model, load_master_model
 from tllm.engine import AsyncEngine
 from tllm.entrypoints.image_server.image_protocol import Text2ImageRequest
 from tllm.entrypoints.image_server.server_image import ImageServing

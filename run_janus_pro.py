@@ -9,8 +9,8 @@ from typing import List, Tuple
 from PIL import Image
 import numpy as np
 
-from tllm.commons.manager import load_client_model, load_master_model
 from tllm.commons.tp_communicator import Communicator
+from tllm.commons.weight_manager import load_client_model, load_master_model
 from tllm.engine import AsyncEngine
 from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionResponse
 from tllm.entrypoints.server_chat import OpenAIServing

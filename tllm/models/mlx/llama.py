@@ -7,13 +7,7 @@ import numpy as np
 from transformers import AutoConfig
 
 from tllm import DTYPE
-from tllm.commons.cache import CacheManager, RequestsCache
-from tllm.models.mlx.helper import (
-    build_forward_cache,
-    get_last_hidden_states,
-    quantization_func,
-    truncate_hidden_states,
-)
+from tllm.models.mlx.helper import MLXCacheManager, quantization_func
 from tllm.models.mlx.layers import Decoder
 from tllm.models.weight_helper import (
     default_merge_attn,
@@ -22,6 +16,8 @@ from tllm.models.weight_helper import (
     tie_word_embeddings_func,
 )
 from tllm.schemas import SeqInput
+
+cache_manager = MLXCacheManager()
 
 
 def get_inv_freq_mx(dim, base):
@@ -59,7 +55,6 @@ class MLXLlamaModel(nn.Module):
         self.rank = args.comm.rank
 
         self.vocab_size = args.vocab_size
-        self.cache_manager = CacheManager()
         self.config = config
         self.model = Decoder(args, config.decoder_start_layer_idx, config.decoder_end_layer_idx, is_merge)
         self.num_layers = config.decoder_end_layer_idx - config.decoder_start_layer_idx
@@ -72,35 +67,29 @@ class MLXLlamaModel(nn.Module):
         #     rope_type="default",
         #     rope_scaling=1.0,
         # )
-        self.max_seq_len = getattr(self.model.layers[-1].self_attn, "max_seq_len", -1)
-        self.n_kv_heads = self.model.layers[-1].self_attn.n_kv_heads
-        self.head_dim = self.model.layers[-1].self_attn.head_dim
-        self.request_cache = RequestsCache(self.num_layers, self.max_seq_len, self.n_kv_heads, self.head_dim)
 
-        self.is_start_pp = self.config.decoder_start_layer_idx == 0
-        self.is_end_pp = self.config.decoder_end_layer_idx == self.config.num_hidden_layers
+        max_seq_len = getattr(self.model.layers[-1].self_attn, "max_seq_len", -1)
+        n_kv_heads = self.model.layers[-1].self_attn.n_kv_heads
+        head_dim = self.model.layers[-1].self_attn.head_dim
+        cache_manager.init_request_cache(self.num_layers, max_seq_len, n_kv_heads, head_dim)
+
+        is_start_pp = self.config.decoder_start_layer_idx == 0
+        is_end_pp = self.config.decoder_end_layer_idx == self.config.num_hidden_layers
+        cache_manager.post_init(is_start_pp, is_end_pp)
 
     def __call__(self, hidden_states: mx.array, seq_input: SeqInput) -> mx.array:
-        attention_data = build_forward_cache(seq_input, self.cache_manager, self.request_cache)
-        hit_cache_flag = any(x != -1 for x in attention_data.hit_cache_len_list)
-        hidden_states = truncate_hidden_states(hit_cache_flag, self.is_start_pp, attention_data, hidden_states)
+        hidden_states = cache_manager.build_forward_cache(hidden_states, seq_input)
 
         # cos, sin = self.rotary_emb(attention_data.position_ids)
         # attention_data.cos, attention_data.sin = mx.expand_dims(cos, axis=1), mx.expand_dims(sin, axis=1)
-        if hidden_states.dtype == mx.float16:  # float16 is much slower than bfloat16
-            hidden_states = hidden_states.astype(mx.bfloat16)
-        mask = attention_data.attn_mask
+        mask = cache_manager.attn_data.attn_mask
         mask = mask if mask is None else mask.astype(hidden_states.dtype)
-        output = self.model(hidden_states, mask=mask, cache=attention_data)
+        output = self.model(hidden_states, mask=mask, cache=cache_manager.attn_data)
 
-        # TODO 异步保存 cache
-        for uuid in seq_input.uuid_list:
-            self.cache_manager.set(uuid, attention_data.get_decoder_cache(uuid))
-            self.cache_manager.check_alive()
-        self.request_cache.clear()
-        self.request_cache.insert_cache(seq_input)
+        # TODO 异步更新 cache
+        cache_manager.update_cache(seq_input)
 
-        output = get_last_hidden_states(hit_cache_flag, self.is_end_pp, attention_data, output)
+        output = cache_manager.get_last_hidden_states(output)
         return output
 
     @classmethod

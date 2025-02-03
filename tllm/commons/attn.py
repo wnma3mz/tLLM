@@ -17,6 +17,8 @@ if BACKEND == BackendEnum.TORCH:
 
     if os.environ.get("TLLM_ATTN_BACKEND", None):
         ATTN_BACKEND = AttnBackendEnum[os.environ["TLLM_ATTN_BACKEND"]]
+    else:
+        ATTN_BACKEND = AttnBackendEnum.TORCH
 
     if ATTN_BACKEND in [AttnBackendEnum.AUTO, AttnBackendEnum.VLLM] and importlib.util.find_spec("vllm"):
         from vllm.vllm_flash_attn import flash_attn_varlen_func

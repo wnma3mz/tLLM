@@ -1,7 +1,8 @@
 # coding: utf-8
 import copy
+from dataclasses import dataclass
 import time
-from typing import Dict, List, Optional
+from typing import Dict, Generic, List, Optional, TypeVar
 
 from tllm import BACKEND, DEVICE, DTYPE, ENABLE_PREFILL_CACHE, BackendEnum
 from tllm.commons.radix_tree import RadixTree
@@ -21,6 +22,48 @@ else:
     zeros_func = lambda x0, x1, x2: torch.zeros(size=(x0, x1, x2), dtype=DTYPE, device=DEVICE)
     array_func = lambda x: torch.tensor([x], dtype=torch.long)
     arange_func = lambda x: torch.arange(0, x, dtype=torch.long)
+
+
+T = TypeVar("T")
+
+
+@dataclass
+class CacheEntry(Generic[T]):
+    value: T
+    timestamp: float
+
+
+class Cache(Generic[T]):
+    def __init__(self, max_alive_time: int = 60):
+        self._cache: Dict[str, CacheEntry[T]] = {}
+        self.max_alive_time = max_alive_time
+
+    def get(self, key: str) -> Optional[T]:
+        if not self.contains(key):
+            return None
+        entry = self._cache[key]
+        entry.timestamp = time.time()  # 更新访问时间
+        return entry.value
+
+    def set(self, key: str, value: T) -> None:
+        self._cache[key] = CacheEntry(value=value, timestamp=time.time())
+
+    def contains(self, key: str) -> bool:
+        return key in self._cache
+
+    def delete(self, key: str) -> None:
+        self._cache.pop(key, None)
+
+    def clear(self) -> None:
+        self._cache.clear()
+
+    def check_alive(self) -> None:
+        current_time = time.time()
+        expired_keys = [
+            key for key, entry in self._cache.items() if current_time - entry.timestamp > self.max_alive_time
+        ]
+        for key in expired_keys:
+            self.delete(key)
 
 
 class KVCache:
@@ -91,7 +134,7 @@ class RequestsCache:
             else decoder_cache
         )
 
-    def build(self, seq_input: SeqInput, cache_manager: "CacheManager"):
+    def build(self, seq_input: SeqInput, cache: Cache):
         q_len_list, k_len_list = [], []
         position_ids_list = []
         hit_cache_len_list = []
@@ -100,8 +143,8 @@ class RequestsCache:
             hit_cache_len = -1
             q_len = len(input_ids)
             # decoding 阶段
-            if uuid in cache_manager.cache_dict:
-                decoder_cache: DecoderCache = cache_manager.get(uuid)
+            if cache.contains(uuid):
+                decoder_cache: DecoderCache = cache.get(uuid)
                 decoder_cache.set_q_len(q_len)
                 cache_seq_len = decoder_cache[0].kv_len
                 position_ids = array_func(cache_seq_len)
@@ -114,8 +157,8 @@ class RequestsCache:
                     # 不启用 prefix cache
                     hit_uuid, hit_cache_len = None, -1
                 # 命中了之前的 kv cache，使用历史 cache
-                if hit_uuid is not None and cache_manager.get(hit_uuid) is not None:
-                    hid_decoder_cache: DecoderCache = copy.deepcopy(cache_manager.get(hit_uuid))
+                if hit_uuid is not None and cache.get(uuid) is not None:
+                    hid_decoder_cache: DecoderCache = copy.deepcopy(cache.get(uuid))
                     # 相同输入时，避免过超过 cache 长度
                     if q_len <= hit_cache_len:
                         hit_cache_len = q_len - 2
@@ -259,50 +302,14 @@ class AttentionData:
         request_cache: RequestsCache,
         attn_mask: MIX_TENSOR,
         position_ids=None,
-        hit_cache_len_list=None,
-        q_len_list=None,
     ) -> None:
         self.uuid_list = uuid_list
         self.request_cache = request_cache
         self.attn_mask = attn_mask
         self.position_ids = position_ids  # 只在 torch 下有意义
-        self.hit_cache_len_list = hit_cache_len_list  # 用于 PP=0 截断 hidden_states
-        self.q_len_list = q_len_list
 
     def get_decoder_cache(self, uuid: str) -> DecoderCache:
         return self.request_cache.get_decoder_cache(uuid)
 
     def get_kv_len(self, uuid: str) -> int:
         return self.request_cache.get_kv_len(uuid)
-
-
-class CacheManager:
-    # 管理每个节点的所有层 kv_cache
-    # max_alive_time: 超过多久没有访问就删除，单位秒
-    def __init__(self, max_alive_time=60):
-        self.max_alive_time = max_alive_time
-        self.cache_dict = {}
-
-    def get(self, key) -> Optional[DecoderCache]:
-        if self.is_contain(key):
-            return self.cache_dict.get(key)["cache"]
-        return None
-
-    def set(self, key, value: DecoderCache) -> None:
-        self.cache_dict[key] = {"cache": value, "ts": time.time()}
-
-    def is_contain(self, key) -> bool:
-        return key in self.cache_dict
-
-    def delete(self, key):
-        self.cache_dict.pop(key)
-
-    def clear(self):
-        self.cache_dict.clear()
-
-    def check_alive(self):
-        now = time.time()
-        key_list = list(self.cache_dict.keys())
-        for key in key_list:
-            if now - self.cache_dict[key]["ts"] > self.max_alive_time:
-                self.cache_dict.pop(key)

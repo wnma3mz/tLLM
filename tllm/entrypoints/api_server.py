@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 
 from tllm import CLIENT_SOCKET_PATH, MASTER_SOCKET_PATH
-from tllm.commons.manager import load_master_model
+from tllm.commons.weight_manager import load_master_model
 from tllm.engine import AsyncEngine
 from tllm.entrypoints.image_server.image_protocol import Text2ImageRequest, Text2ImageResponse
 from tllm.entrypoints.image_server.server_image import ImageServing

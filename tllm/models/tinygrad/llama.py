@@ -9,7 +9,8 @@ from tinygrad import Device, Tensor, TinyJit, dtypes, nn
 from tinygrad.helpers import getenv
 from tinygrad.nn.state import load_state_dict, safe_load, torch_load
 
-from tllm.commons.cache import AttentionData, CacheManager, RequestsCache
+from tllm.commons.cache import AttentionData, RequestsCache
+from tllm.commons.cache_manager import CacheManager
 from tllm.schemas import SeqInput
 
 # Edited from https://github.com/tinygrad/tinygrad/blob/master/extra/models/llama.py
@@ -211,11 +212,13 @@ class TransformerBlock:
         return (h + self.mlp(self.post_attention_layernorm(h))).contiguous()
 
 
+cache_manager = CacheManager()
+
+
 class TinyGradLlamaModel:
     def __init__(self, config, is_merge: bool = True, jit: bool = True):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        self.cache_manager = CacheManager()
         self.config = config
         self.model = Decoder(config, config.decoder_start_layer_idx, config.decoder_end_layer_idx, is_merge)
         self.num_decoder_layers = config.decoder_end_layer_idx - config.decoder_start_layer_idx
@@ -277,28 +280,19 @@ class TinyGradLlamaModel:
         @return: bs x seq_len x hidden_size
         """
         # Not support multi requests
-        attention_data = build_forward_cache(seq_input, self.cache_manager, self.num_decoder_layers)
-
-        if attention_data.attn_mask is not None:
-            attention_data.attn_mask = attention_data.attn_mask.cast(hidden_states.dtype).to(hidden_states.device)
-        q_len_list, k_len_list = attention_data.position_ids
+        hidden_states = cache_manager.build_forward_cache(hidden_states, seq_input)
 
         freqs_cis = []
-        for q_len, k_len in zip(q_len_list, k_len_list):
+        for q_len, k_len in zip(cache_manager.attn_data.q_len_list, cache_manager.attn_data.k_len_list):
             tmp_freqs_cis = self.freqs_cis.cast(hidden_states.dtype).realize()
             tmp_freqs_cis = tmp_freqs_cis.shrink(((k_len - q_len, k_len), None, None, None))
             freqs_cis.append(tmp_freqs_cis)
 
-        hidden_states = self.model(hidden_states, freqs_cis=freqs_cis, attention_data=attention_data)
+        hidden_states = self.model(hidden_states, freqs_cis=freqs_cis, attention_data=cache_manager.attn_data)
 
-        if self.config.decoder_end_layer_idx == self.config.num_hidden_layers:
-            split_len_list = attention_data.q_len_list
-            hidden_states = get_last_hidden_states(hidden_states, split_len_list)
+        cache_manager.update_cache(seq_input)
 
-        for uuid in seq_input.uuid_list:
-            self.cache_manager.set(uuid, attention_data.get_decoder_cache(uuid))
-            self.cache_manager.check_alive()
-
+        output = cache_manager.get_last_hidden_states(output)
         return hidden_states
 
     def __call__(self, hidden_states, seq_input):

@@ -8,8 +8,8 @@ import grpc
 
 from tllm import CLIENT_SOCKET_PATH, GRPC_OPTIONS
 from tllm.commons.convert import Convertor
-from tllm.commons.manager import load_client_model
 from tllm.commons.tp_communicator import BaseCommunicator, Communicator
+from tllm.commons.weight_manager import load_client_model
 from tllm.entrypoints.utils import parse_handler_args, update_handler_args
 from tllm.grpc.proto import schemas_pb2, schemas_pb2_grpc
 from tllm.grpc.worker_service.http_client import HTTPClient

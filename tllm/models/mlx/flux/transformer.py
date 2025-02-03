@@ -11,7 +11,9 @@ from mflux.models.transformer.time_text_embed import TimeTextEmbed
 from mlx import nn
 import mlx.core as mx
 
-from tllm.commons.cache import CacheManager
+from tllm.commons.cache import Cache
+
+cache = Cache()
 
 
 def prepare_latent_image_ids(height: int, width: int) -> mx.array:
@@ -74,7 +76,6 @@ class FLUXModel(nn.Module):
         super().__init__()
         self.num_hidden_layers = 38
         self.transformer = SingleTransformer(0, self.num_hidden_layers, self.num_hidden_layers)
-        self.cache_manager = CacheManager()
 
     @classmethod
     def from_pretrained(cls, config, state_dict, **kwargs):
@@ -115,12 +116,12 @@ class FLUXModel(nn.Module):
     ) -> mx.array:
 
         request_id = request_id_list[0]
-        if self.cache_manager.is_contain(request_id):
-            image_rotary_emb = self.cache_dict.get(request_id)
+        if cache.contains(request_id):
+            image_rotary_emb = cache.get(request_id)
         else:
             image_rotary_emb = self.get_image_rotary_emb(height, width, seq_len)
-            self.cache_dict.set(request_id, image_rotary_emb)
-            self.cache_dict.check_alive()
+            cache.set(request_id, image_rotary_emb)
+            cache.check_alive()
 
         hidden_states = self.transformer(hidden_states, text_embeddings, image_rotary_emb, seq_len)
         mx.eval(hidden_states)

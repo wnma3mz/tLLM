@@ -4,8 +4,10 @@ from typing import Dict, List
 from safetensors.torch import load_file as safe_load
 import torch
 
+from tllm import DEVICE, DTYPE
 from tllm.commons.attn import ATTN_TYPE
-from tllm.commons.cache import AttentionData, CacheManager, RequestsCache
+from tllm.commons.cache import AttentionData
+from tllm.commons.cache_manager import CacheManager
 from tllm.schemas import SeqInput
 
 
@@ -14,13 +16,7 @@ def greedy_decode(logits: "torch.Tensor") -> List[int]:
     return torch.argmax(logits, dim=-1).tolist()
 
 
-def get_last_hidden_states(hidden_states: torch.Tensor, seq_len_list: List[int]) -> torch.Tensor:
-    # 只取最后一个 token 的 hidden_states
-    seq_hidden_states = torch.split(hidden_states, [seq_len for seq_len in seq_len_list], dim=0)
-    return torch.cat([x[-1:, :] for x in seq_hidden_states], dim=0)
-
-
-def build_mask(q_len_list: List[int], k_len_list: List[int]) -> "torch.Tensor":
+def build_mask(q_len_list: List[int], k_len_list: List[int]) -> torch.Tensor:
     """
     构造多个请求的 casual mask
     @param
@@ -53,32 +49,53 @@ if ATTN_TYPE == "xformers":
     from xformers.ops import fmha
 
 
-def build_forward_cache(
-    seq_input: SeqInput,
-    cache_manager: CacheManager,
-    num_layers: int,
-    max_seq_len: int = -1,
-    num_key_value_heads: int = -1,
-    head_dim: int = -1,
-) -> AttentionData:
-    request_cache = RequestsCache(num_layers, max_seq_len, num_key_value_heads, head_dim)
-    q_len_list, k_len_list, position_ids_list, _ = request_cache.build(seq_input, cache_manager)
+class TorchCacheManager(CacheManager):
+    def build_forward_cache(self, hidden_states: torch.Tensor, seq_input: SeqInput) -> torch.Tensor:
+        # request_cache = RequestsCache(num_layers, max_seq_len, num_key_value_heads, head_dim)
+        q_len_list, k_len_list, position_ids_list, _ = self.request_cache.build(seq_input, self.cache)
 
-    if ATTN_TYPE == "flash_attention":
-        attn_mask = {
-            "cu_seqlens_q": torch.tensor([0] + list(itertools.accumulate(q_len_list)), dtype=torch.int32),
-            "cu_seqlens_k": torch.tensor([0] + list(itertools.accumulate(k_len_list)), dtype=torch.int32),
-            "max_seqlen_q": max(q_len_list),
-            "max_seqlen_k": max(k_len_list),
-        }
-    # elif ATTN_TYPE == "xformers":
-    #     attn_mask = fmha.BlockDiagonalMask.from_seqlens(q_seqlen=q_len_list, kv_seqlen=k_len_list)
-    else:
-        attn_mask = build_mask(q_len_list, k_len_list)
-    return AttentionData(
-        request_cache=request_cache,
-        attn_mask=attn_mask,
-        uuid_list=seq_input.uuid_list,
-        position_ids=torch.cat(position_ids_list, dim=-1),
-        q_len_list=q_len_list,
-    )
+        self.hit_cache_flag = None
+
+        if ATTN_TYPE == "flash_attention":
+            attn_mask = {
+                "cu_seqlens_q": torch.tensor([0] + list(itertools.accumulate(q_len_list)), dtype=torch.int32),
+                "cu_seqlens_k": torch.tensor([0] + list(itertools.accumulate(k_len_list)), dtype=torch.int32),
+                "max_seqlen_q": max(q_len_list),
+                "max_seqlen_k": max(k_len_list),
+            }
+        # elif ATTN_TYPE == "xformers":
+        #     attn_mask = fmha.BlockDiagonalMask.from_seqlens(q_seqlen=q_len_list, kv_seqlen=k_len_list)
+        else:
+            attn_mask = build_mask(q_len_list, k_len_list)
+
+        self.q_len_list = q_len_list
+        self.hit_cache_len_list = None
+
+        if ATTN_TYPE == "flash_attention":
+            attn_mask = {k: v.to(DEVICE) if isinstance(v, torch.Tensor) else v for k, v in attn_mask.items()}
+        else:
+            attn_mask = attn_mask.to(DEVICE)
+
+        self.attn_data = AttentionData(
+            request_cache=self.request_cache,
+            attn_mask=attn_mask,
+            uuid_list=seq_input.uuid_list,
+            position_ids=torch.cat(position_ids_list, dim=-1),
+        )
+
+        hidden_states = hidden_states.to(DTYPE).to(DEVICE)
+        return hidden_states
+
+    def get_last_hidden_states(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        split_len_list = self.q_len_list
+        # if self.hit_cache_flag:
+        #     q_start = 0
+        #     for i, (q_len, hit_cache_len) in enumerate(zip(self.q_len_list, self.hit_cache_len_list)):
+        #         if hit_cache_len != -1:
+        #             split_len_list[i] = q_len - hit_cache_len
+        #         q_start += q_len
+        if self.is_end_pp:
+            # 只取最后一个 token 的 hidden_states
+            seq_hidden_states = torch.split(hidden_states, [seq_len for seq_len in split_len_list], dim=0)
+            hidden_states = torch.cat([x[-1:, :] for x in seq_hidden_states], dim=0)
+        return hidden_states
