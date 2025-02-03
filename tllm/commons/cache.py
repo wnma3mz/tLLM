@@ -127,6 +127,7 @@ class RequestsCache:
                     k_len_list.append(q_len)
                 # 未命中任何 kv cache，新建 cache
                 else:
+                    hit_cache_len = -1
                     decoder_cache = None
                     position_ids = arange_func(q_len)
                     k_len_list.append(q_len)
