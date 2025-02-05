@@ -72,8 +72,9 @@ class MLXCacheManager(CacheManager):
             request_cache=self.request_cache,
             attn_mask=build_mlx_mask(q_len_list, k_len_list, hit_cache_len_list),
             uuid_list=seq_input.uuid_list,
-            position_ids=mx.concatenate(position_ids_list, axis=-1),
         )
+
+        self.position_ids = mx.concatenate(position_ids_list, axis=-1)
 
         return hidden_states
 

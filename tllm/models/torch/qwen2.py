@@ -49,7 +49,7 @@ class HFQwen2Model(nn.Module):
         config.o_proj_bias = False
 
         self.config = config
-        self.model = Decoder(config, config.decoder_start_layer_idx, config.decoder_end_layer_idx, is_merge)
+        self.model = Decoder(config, config.decoder_start_layer_idx, config.decoder_end_layer_idx)
         self.num_decoder_layers = config.decoder_end_layer_idx - config.decoder_start_layer_idx
         self.rotary_emb = HFQwen2RotaryEmbedding(config=config)
 
@@ -120,9 +120,7 @@ class HFQwen2Model(nn.Module):
         """
         hidden_states = cache_manager.build_forward_cache(hidden_states, seq_input)
 
-        position_embeddings = self.rotary_emb(
-            hidden_states, cache_manager.attn_data.position_ids.to(hidden_states.device)
-        )
+        position_embeddings = self.rotary_emb(hidden_states, cache_manager.position_ids)
 
         hidden_states = self.model(
             hidden_states, position_embeddings=position_embeddings, attention_data=cache_manager.attn_data

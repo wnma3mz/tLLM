@@ -197,59 +197,15 @@ class MergedSdpaAttention(nn.Module):
         return attn_output, None
 
 
-class PlainLlamaSdpaAttention(LlamaAttention):
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
-        attention_data: AttentionData,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        # [seq_len, hidden_size]
-        q_len, _ = hidden_states.size()
-
-        query_states, key_states, value_states = (
-            self.q_proj(hidden_states),
-            self.k_proj(hidden_states),
-            self.v_proj(hidden_states),
-        )
-
-        query_states = query_states.view(q_len, -1, self.head_dim).transpose(0, 1)
-        key_states = key_states.view(q_len, -1, self.head_dim).transpose(0, 1)
-        value_states = value_states.view(q_len, -1, self.head_dim).transpose(0, 1)
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(
-            query_states, key_states, cos, sin, attention_data.position_ids, unsqueeze_dim=0
-        )
-        request_cache: RequestsCache = attention_data.request_cache
-        key_states, value_states = request_cache.update(
-            key_states, value_states, attention_data.uuid_list, self.layer_idx - self.config.offset
-        )
-
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
-
-        attn_output = self_attn_func(query_states, key_states, value_states, attn_mask=attention_data.attn_mask)
-
-        attn_output = attn_output.reshape(q_len, -1)
-
-        return self.o_proj(attn_output), None
-
-
 class DecoderLayer(nn.Module):
-    def __init__(self, config: Union[LlamaConfig, AutoConfig], layer_idx: int, is_merge: bool) -> None:
+    def __init__(self, config: Union[LlamaConfig, AutoConfig], layer_idx: int) -> None:
         super().__init__()
         self.hidden_size = config.hidden_size
         self.config = config
         self.layer_idx = layer_idx
 
-        if is_merge:
-            self.mlp = MergedMLP(config)
-            self.self_attn = MergedSdpaAttention(config=config, layer_idx=layer_idx)
-        else:
-            self.mlp = LlamaMLP(config)
-            # TODO: support bias
-            self.self_attn = PlainLlamaSdpaAttention(config=config, layer_idx=layer_idx)
+        self.mlp = MergedMLP(config)
+        self.self_attn = MergedSdpaAttention(config=config, layer_idx=layer_idx)
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)  # same as Qwen2RMSNorm
         self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -288,12 +244,12 @@ class EmptyLayer(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, config, start_layer_idx: int, end_layer_idx: int, is_merge: bool):
+    def __init__(self, config, start_layer_idx: int, end_layer_idx: int):
         super().__init__()
         config.offset = start_layer_idx
         self.layers = nn.ModuleList(
             [EmptyLayer()] * start_layer_idx
-            + [DecoderLayer(config, layer_idx, is_merge) for layer_idx in range(start_layer_idx, end_layer_idx)]
+            + [DecoderLayer(config, layer_idx) for layer_idx in range(start_layer_idx, end_layer_idx)]
         )
 
     def forward(

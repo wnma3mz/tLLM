@@ -296,17 +296,10 @@ class RequestsCache:
 
 
 class AttentionData:
-    def __init__(
-        self,
-        uuid_list: List[str],
-        request_cache: RequestsCache,
-        attn_mask: MIX_TENSOR,
-        position_ids=None,
-    ) -> None:
+    def __init__(self, uuid_list: List[str], request_cache: RequestsCache, attn_mask: MIX_TENSOR) -> None:
         self.uuid_list = uuid_list
         self.request_cache = request_cache
         self.attn_mask = attn_mask
-        self.position_ids = position_ids  # 只在 torch 下有意义
 
     def get_decoder_cache(self, uuid: str) -> DecoderCache:
         return self.request_cache.get_decoder_cache(uuid)

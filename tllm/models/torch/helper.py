@@ -80,8 +80,8 @@ class TorchCacheManager(CacheManager):
             request_cache=self.request_cache,
             attn_mask=attn_mask,
             uuid_list=seq_input.uuid_list,
-            position_ids=torch.cat(position_ids_list, dim=-1),
         )
+        self.position_ids = torch.cat(position_ids_list, dim=-1, device=DEVICE)
 
         hidden_states = hidden_states.to(DTYPE).to(DEVICE)
         return hidden_states
