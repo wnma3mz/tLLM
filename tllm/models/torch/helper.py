@@ -51,8 +51,7 @@ if ATTN_TYPE == "xformers":
 
 class TorchCacheManager(CacheManager):
     def build_forward_cache(self, hidden_states: torch.Tensor, seq_input: SeqInput) -> torch.Tensor:
-        # request_cache = RequestsCache(num_layers, max_seq_len, num_key_value_heads, head_dim)
-        q_len_list, k_len_list, position_ids_list, _ = self.request_cache.build(seq_input, self.cache)
+        q_len_list, k_len_list, position_ids_list, _ = self.build_cache(seq_input, self.cache)
 
         self.hit_cache_flag = None
 

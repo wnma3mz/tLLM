@@ -47,7 +47,7 @@ def build_mlx_mask(q_len_list: List[int], k_len_list: List[int], hit_cache_len_l
 
 class MLXCacheManager(CacheManager):
     def build_forward_cache(self, hidden_states: mx.array, seq_input: SeqInput) -> mx.array:
-        q_len_list, k_len_list, position_ids_list, hit_cache_len_list = self.request_cache.build(seq_input, self.cache)
+        q_len_list, k_len_list, position_ids_list, hit_cache_len_list = self.build_cache(seq_input, self.cache)
 
         self.hit_cache_flag = any(x != -1 for x in hit_cache_len_list)
 

@@ -134,53 +134,6 @@ class RequestsCache:
             else decoder_cache
         )
 
-    def build(self, seq_input: SeqInput, cache: Cache):
-        q_len_list, k_len_list = [], []
-        position_ids_list = []
-        hit_cache_len_list = []
-
-        for uuid, input_ids in zip(seq_input.uuid_list, seq_input.input_ids_list):
-            hit_cache_len = -1
-            q_len = len(input_ids)
-            # decoding 阶段
-            if cache.contains(uuid):
-                decoder_cache: DecoderCache = cache.get(uuid)
-                decoder_cache.set_q_len(q_len)
-                cache_seq_len = decoder_cache[0].kv_len
-                position_ids = array_func(cache_seq_len)
-                k_len_list.append(cache_seq_len + q_len)
-            # prefilling 阶段
-            else:
-                if ENABLE_PREFILL_CACHE:
-                    hit_uuid, hit_cache_len = self.radix_tree.longest_common_prefix(input_ids)
-                else:
-                    # 不启用 prefix cache
-                    hit_uuid, hit_cache_len = None, -1
-                # 命中了之前的 kv cache，使用历史 cache
-                if hit_uuid is not None and cache.get(uuid) is not None:
-                    hid_decoder_cache: DecoderCache = copy.deepcopy(cache.get(uuid))
-                    # 相同输入时，避免过超过 cache 长度
-                    if q_len <= hit_cache_len:
-                        hit_cache_len = q_len - 2
-
-                    hid_decoder_cache.truncate(hit_cache_len)
-                    hid_decoder_cache.set_q_len(q_len - hit_cache_len)
-                    decoder_cache = hid_decoder_cache
-                    position_ids = arange_func(q_len)
-                    k_len_list.append(q_len)
-                # 未命中任何 kv cache，新建 cache
-                else:
-                    hit_cache_len = -1
-                    decoder_cache = None
-                    position_ids = arange_func(q_len)
-                    k_len_list.append(q_len)
-            q_len_list.append(q_len)
-            position_ids_list.append(position_ids)
-            hit_cache_len_list.append(hit_cache_len)
-
-            self.add(uuid, q_len, decoder_cache)
-        return q_len_list, k_len_list, position_ids_list, hit_cache_len_list
-
     def get_decoder_cache(self, uuid: str) -> DecoderCache:
         return self.cache_dict[uuid]
 
