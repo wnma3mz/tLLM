@@ -295,14 +295,8 @@ class RequestsCache:
         return key_lst[0].cat(*key_lst[1:], dim=0), value_lst[0].cat(*value_lst[1:], dim=0)
 
 
+@dataclass
 class AttentionData:
-    def __init__(self, uuid_list: List[str], request_cache: RequestsCache, attn_mask: MIX_TENSOR) -> None:
-        self.uuid_list = uuid_list
-        self.request_cache = request_cache
-        self.attn_mask = attn_mask
-
-    def get_decoder_cache(self, uuid: str) -> DecoderCache:
-        return self.request_cache.get_decoder_cache(uuid)
-
-    def get_kv_len(self, uuid: str) -> int:
-        return self.request_cache.get_kv_len(uuid)
+    uuid_list: List[str]
+    request_cache: RequestsCache
+    attn_mask: MIX_TENSOR

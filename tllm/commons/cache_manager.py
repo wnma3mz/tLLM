@@ -19,7 +19,7 @@ class CacheManager:
 
     def update_cache(self, seq_input):
         for uuid in seq_input.uuid_list:
-            self.cache.set(uuid, self.attn_data.get_decoder_cache(uuid))
+            self.cache.set(uuid, self.attn_data.request_cache.get_decoder_cache(uuid))
             self.cache.check_alive()
 
         if self.request_cache is not None:
