@@ -46,10 +46,7 @@ class MLXQwen2Model(nn.Module):
 
     def __call__(self, hidden_states: mx.array, seq_input: SeqInput) -> mx.array:
         hidden_states = cache_manager.build_forward_cache(hidden_states, seq_input)
-
-        mask = cache_manager.attn_data.attn_mask
-        mask = mask if mask is None else mask.astype(hidden_states.dtype)
-        output = self.model(hidden_states, mask=mask, cache=cache_manager.attn_data)
+        output = self.model(hidden_states, cache=cache_manager.attn_data)
 
         # TODO 异步更新 cache
         cache_manager.update_cache(seq_input)
