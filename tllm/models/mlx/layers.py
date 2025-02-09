@@ -3,9 +3,9 @@ from typing import List
 
 import mlx.core as mx
 import mlx.nn as nn
-from mlx_lm.models.llama import MLP, Attention, ModelArgs, TransformerBlock, initialize_rope
+from mlx_lm.models.llama import ModelArgs, TransformerBlock, initialize_rope
 
-from tllm.commons.cache import AttentionData, RequestsCache, cat_func, zeros_func
+from tllm.commons.cache import AttentionData, RequestsCache, cat_func
 
 
 class BaseParallelLayer(nn.Module):
@@ -146,9 +146,6 @@ class MergedAttention(nn.Module):
             self.head_dim, args.rope_theta, args.rope_traditional, args.rope_scaling, args.max_position_embeddings
         )
 
-        # self.max_seq_len = 1024
-        # self._k_cache = zeros_func(self.max_seq_len, self.n_kv_heads, self.head_dim)
-        # self._v_cache = zeros_func(self.max_seq_len, self.n_kv_heads, self.head_dim)
         self.max_seq_len = -1
         self._k_cache, self._v_cache = None, None
 
@@ -162,12 +159,7 @@ class MergedAttention(nn.Module):
             start = end
         return cat_func(x_list)
 
-    def __call__(
-        self,
-        x: mx.array,
-        mask: mx.array,
-        cache: AttentionData,
-    ) -> mx.array:
+    def __call__(self, x: mx.array, cache: AttentionData) -> mx.array:
         L, _ = x.shape
         queries, keys, values = self.qkv_proj(x)
         # Prepare the queries, keys and values for the attention computation
@@ -186,61 +178,11 @@ class MergedAttention(nn.Module):
             keys, values, cache.uuid_list, self.layer_idx - self.offset, self._k_cache, self._v_cache
         )
 
-        output = sdap(queries, keys, values, scale=self.scale, mask=mask)
+        output = sdap(queries, keys, values, scale=self.scale, mask=cache.attn_mask)
         output = output.reshape(L, -1)
 
         attn_output = self.o_proj(output)
         return self.comm.all_reduce(attn_output)
-
-
-class PlainAttention(Attention):
-    def __init__(self, args, layer_idx: int, offset: int):
-        super().__init__(args)
-        o_proj_bias = getattr(args, "o_proj_bias", False)
-        self.o_proj = nn.Linear(self.n_heads * self.head_dim, args.hidden_size, bias=o_proj_bias)
-        self.layer_idx = layer_idx
-        self.offset = offset
-
-    def _rope(self, xs: mx.array, request_cache: RequestsCache, uuid_list: List[str]) -> List[mx.array]:
-        offset_list = request_cache.get_offset_list(uuid_list, self.layer_idx - self.offset)
-        x_list = []
-        start = 0
-        for uuid, offset in zip(uuid_list, offset_list):
-            end = start + request_cache.get_q_len(uuid)
-            x_list.append(self.rope(xs[start:end].transpose(1, 0, 2), offset).transpose(1, 0, 2))
-            start = end
-        return cat_func(x_list)
-
-    def __call__(
-        self,
-        x: mx.array,
-        mask: mx.array,
-        cache: AttentionData,
-    ) -> mx.array:
-        L, D = x.shape
-        queries, keys, values = self.q_proj(x), self.k_proj(x), self.v_proj(x)
-
-        # Prepare the queries, keys and values for the attention computation
-        queries = queries.reshape(L, self.n_heads, -1)
-        keys = keys.reshape(L, self.n_kv_heads, -1)
-        values = values.reshape(L, self.n_kv_heads, -1)
-
-        # must has cache, and split by uuid
-        request_cache: RequestsCache = cache.request_cache
-        queries = self._rope(queries, request_cache, cache.uuid_list)
-        keys = self._rope(keys, request_cache, cache.uuid_list)
-        keys, values = request_cache.update(keys, values, cache.uuid_list, self.layer_idx - self.offset)
-
-        output = mx.fast.scaled_dot_product_attention(
-            mx.expand_dims(queries.transpose(1, 0, 2), axis=0),
-            mx.expand_dims(keys.transpose(1, 0, 2), axis=0),
-            mx.expand_dims(values.transpose(1, 0, 2), axis=0),
-            scale=self.scale,
-            mask=mask,
-        )[0]
-        output = output.transpose(1, 0, 2).reshape(L, -1)
-
-        return self.o_proj(output)
 
 
 class MergedMLP(nn.Module):
@@ -269,19 +211,15 @@ class MLXTransformerBlock(TransformerBlock):
         super(TransformerBlock).__init__()
         self.num_attention_heads = args.num_attention_heads
         self.hidden_size = args.hidden_size
-        if is_merge:
-            self.self_attn = MergedAttention(args, layer_idx, offset)
-            self.mlp = MergedMLP(args)
-        else:
-            self.self_attn = PlainAttention(args, layer_idx, offset)
-            self.mlp = MLP(args)
+        self.self_attn = MergedAttention(args, layer_idx, offset)
+        self.mlp = MergedMLP(args)
         self.input_layernorm = nn.RMSNorm(args.hidden_size, eps=args.rms_norm_eps)
         self.post_attention_layernorm = nn.RMSNorm(args.hidden_size, eps=args.rms_norm_eps)
         self.args = args
         self.layer_idx = layer_idx
 
-    def __call__(self, x: mx.array, mask, cache) -> mx.array:
-        r = self.self_attn(self.input_layernorm(x), mask, cache)
+    def __call__(self, x: mx.array, cache) -> mx.array:
+        r = self.self_attn(self.input_layernorm(x), cache)
         h = x + r
         # no skip some begin token, and skip middle block, https://arxiv.org/abs/2404.03865
         # if 24 <= self.layer_idx <= 28 and x.shape[0] == 1:
@@ -291,7 +229,7 @@ class MLXTransformerBlock(TransformerBlock):
         return out
 
 
-def empty_func(h, mask, cache):
+def empty_func(h, cache):
     # TODO
     return h
 
@@ -306,7 +244,7 @@ class Decoder(nn.Module):
             for layer_idx in range(start_layer_idx, end_layer_idx)
         ]
 
-    def __call__(self, h: mx.array, mask, cache: AttentionData) -> mx.array:
-        for layer in self.layers:
-            h = layer(h, mask, cache=cache)
+    def __call__(self, h: mx.array, cache: AttentionData) -> mx.array:
+        for i, layer in enumerate(self.layers):
+            h = layer(h, cache=cache)
         return h

@@ -30,16 +30,7 @@ class LLMGenerator:
             calc_cost_time=sum(calc_cost_time_list),
         )
 
-    async def generate(self, request_list: List[SequenceRequestData]):
-        """
-        @params:
-            request_list: List[SequenceRequestData]
-                Params:
-                    input_ids: List[int]
-
-        """
-        is_gen_image = any(x.is_gen_image for x in request_list)  # In Experiment
-
+    async def process_input(self, request_list: List[SequenceRequestData]):
         uuid_list, input_ids_list, mm_input_list = [], [], []
         for sequence_request in request_list:
             uuid_list.append(sequence_request.request_id)
@@ -52,47 +43,24 @@ class LLMGenerator:
 
                 if sequence_request.is_gen_image:
                     compare_input_ids = copy.deepcopy(input_ids_list[-1])
-                    uuid_list.append(sequence_request.request_id + "-bak")  # 每个 request 对应两个句子
+                    uuid_list.append(sequence_request.request_id + "-bak")  # For Janus-Pro, 每个 request 对应两个句子
                     compare_input_ids[1:-1] = self.model.pad_token_id
                     input_ids_list.append(compare_input_ids)
             else:
                 input_ids_list.append(np.array([sequence_request.output_ids[-1]]))
                 if sequence_request.is_gen_image:
-                    uuid_list.append(sequence_request.request_id + "-bak")  # 每个 request 对应两个句子
+                    uuid_list.append(sequence_request.request_id + "-bak")
                     input_ids_list.append(np.array([sequence_request.output_ids[-1]]))
 
         mm_input = self.merge_mm_input(mm_input_list) if self.merge_mm_input is not None else None
 
-        input_ids = np.concatenate(input_ids_list, axis=-1)
         # [seq_len1 + seq_len2 + ...] -> [seq_len1 + seq_len2 + ..., hidden_size]
-
-        if mm_input is not None:
-            input_embeds = self.model.get_input_embeddings(input_ids, **mm_input)
-        else:
-            if not is_gen_image:
-                input_embeds = self.model.get_input_embeddings(input_ids)
-            else:
-                if request_list[0].is_prefill:
-                    input_embeds = self.model.get_input_embeddings(input_ids)
-                else:
-                    # 在生成图片时，生成第二个 token 后
-                    input_embeds = self.model.get_gen_img_embeds(input_ids)
+        input_ids = np.concatenate(input_ids_list, axis=-1)
 
         seq_input = SeqInput(uuid_list=uuid_list, input_ids_list=input_ids_list)
-        s0 = time.perf_counter()
-        forward_result = await self.forward(input_embeds, seq_input)
-        self.logger.debug(f"decoder cost time: {time.perf_counter() - s0:.4f}s")
-        s1 = time.perf_counter()
-        if is_gen_image:
-            seq_logits: List[MIX_TENSOR] = self.model.get_gen_head(forward_result.hidden_states)
-        else:
-            seq_logits: List[MIX_TENSOR] = self.model.get_logits(forward_result.hidden_states)
+        return seq_input, input_ids, mm_input
 
-        self.logger.debug(f"logits cost time: {time.perf_counter() - s1:.4f}s")
-        assert seq_logits.shape[0] == len(request_list)
-
-        s1 = time.perf_counter()
-
+    async def process_output(self, request_list: List[SequenceRequestData], seq_logits: MIX_TENSOR, s0: float):
         # TODO: batch decode by group
         # TODO: sequence_request.sampling_params
         seq_generate_ids: List[int] = sampling_func(seq_logits)
@@ -131,6 +99,45 @@ class LLMGenerator:
                 sequence_request.ttft_cost_time = time.perf_counter() - s0
                 sequence_request.decode_start_ts = time.perf_counter()
                 sequence_request.is_prefill = False
+
+    async def generate(self, request_list: List[SequenceRequestData]):
+        """
+        @params:
+            request_list: List[SequenceRequestData]
+                Params:
+                    input_ids: List[int]
+
+        """
+        is_gen_image = any(x.is_gen_image for x in request_list)  # In Experiment
+        seq_input, input_ids, mm_input = await self.process_input(request_list)
+
+        if mm_input is not None:
+            input_embeds = self.model.get_input_embeddings(input_ids, **mm_input)
+        else:
+            if not is_gen_image:
+                input_embeds = self.model.get_input_embeddings(input_ids)
+            else:
+                if request_list[0].is_prefill:
+                    input_embeds = self.model.get_input_embeddings(input_ids)
+                else:
+                    # For Janus-Pro, 在生成图片时，生成第二个 token 后
+                    input_embeds = self.model.get_gen_img_embeds(input_ids)
+
+        s0 = time.perf_counter()
+        forward_result = await self.forward(input_embeds, seq_input)
+        self.logger.debug(f"decoder cost time: {time.perf_counter() - s0:.4f}s")
+        s1 = time.perf_counter()
+        if is_gen_image:
+            # For Janus-Pro
+            seq_logits: List[MIX_TENSOR] = self.model.get_gen_head(forward_result.hidden_states)
+        else:
+            seq_logits: List[MIX_TENSOR] = self.model.get_logits(forward_result.hidden_states)
+
+        self.logger.debug(f"logits cost time: {time.perf_counter() - s1:.4f}s")
+        assert seq_logits.shape[0] == len(request_list)
+
+        s1 = time.perf_counter()
+        await self.process_output(request_list, seq_logits, s0)
 
         fraction = forward_result.comm_cost_time / (forward_result.comm_cost_time + forward_result.calc_cost_time)
         self.logger.debug(f"de tokenizer cost time: {time.perf_counter() - s1:.4f}s")

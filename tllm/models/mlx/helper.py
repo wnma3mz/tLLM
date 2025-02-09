@@ -66,11 +66,13 @@ class MLXCacheManager(CacheManager):
         if hidden_states.dtype == mx.float16:  # float16 is much slower than bfloat16
             hidden_states = hidden_states.astype(mx.bfloat16)
 
+        attn_mask = build_mlx_mask(q_len_list, k_len_list, hit_cache_len_list)
+
         self.q_len_list = q_len_list
         self.hit_cache_len_list = hit_cache_len_list
         self.attn_data = AttentionData(
             request_cache=self.request_cache,
-            attn_mask=build_mlx_mask(q_len_list, k_len_list, hit_cache_len_list),
+            attn_mask=attn_mask if attn_mask is None else attn_mask.astype(hidden_states.dtype),
             uuid_list=seq_input.uuid_list,
         )
 
