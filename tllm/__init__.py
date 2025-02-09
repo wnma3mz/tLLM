@@ -9,7 +9,7 @@ class BackendEnum(Enum):
 
 
 ENABLE_PREFILL_CACHE = os.environ.get("TLLM_ENABLE_PREFILL_CACHE", "true").lower() == "true"
-
+ENABLE_PREFILL_CACHE = False
 if importlib.util.find_spec("mlx"):
     BACKEND = BackendEnum.MLX
 elif importlib.util.find_spec("torch"):

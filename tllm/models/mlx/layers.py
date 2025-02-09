@@ -284,7 +284,7 @@ class MLXTransformerBlock(TransformerBlock):
         r = self.self_attn(self.input_layernorm(x), mask, cache)
         h = x + r
         # no skip some begin token, and skip middle block, https://arxiv.org/abs/2404.03865
-        # if 20 <= self.layer_idx <= 24 and x.shape[0] == 1:
+        # if 24 <= self.layer_idx <= 28 and x.shape[0] == 1:
         #     return h
         r = self.mlp(self.post_attention_layernorm(h))
         out = h + r

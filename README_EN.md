@@ -73,10 +73,6 @@ For multi-machine deployment, the default part of the port will be used for runn
 - [X] Engine
   - [X] mlx
   - [X] torch
-  - [ ] tinygrad
-    - [ ] Multi-Request
-    - [ ] Jit
-    - [ ] Pipeline
 - [X] Communication
   - [X] grpc
   - [X] Auto Find Node
@@ -94,20 +90,5 @@ In Mac Mini M4
 
 |                                      | `mlx-community/Llama-3.2-1B-Instruct-4bit` | `mlx-community/Llama-3.2-1B-Instruct` | `mlx-community/Meta-Llama-3.1-8B-Instruct-4bit` | `mlx-community/Meta-Llama-3.1-8B-Instruct-bf16` |
 | ------------------------------------ | -------------------------------------------- | --------------------------------------- | ------------------------------------------------- | ------------------------------------------------- |
-| Mac Mini M4 (16G) (Engine, Baseline) | 98.10 tok/s                                 | 35.45 tok/s                             | 20.68 tok/s                                       | No Memory                                         |
 | Mac Mini M4 (16G) (Local)            | 45.36 tok/s                                 | 23.60 tok/s                             | 15.80 tok/s                                       | No Memory                                         |
-| Mac Mini M4 (16G) (Server+Client)    | 61.83 tok/s                                 | 34.54 tok/s                             | 14.91 tok/s                                       | No Memory                                         |
 | Mac Mini M4 (16G) + M3 Pro (18G)     |                                              | 16.33 tok/s                             | 11.06 tok/s                                       | 5.64 tok/s                                        |
-
-Q: Why Local is slower than Server+Client?
-
-A:
-
-- Local only has one process, which starts the HTTP Server, Engine and Model are all in one process.
-- Server+Client are two processes, Server contains HTTP Serve and Engine, as well as Embedding and LM HEAD; Client contains only Model
-
-But unclear, why `mlx-community/Meta-Llama-3.1-8B-Instruct-4bit` is not much different, temporarily attributed to memory pressure.
-
-Q: Why is the performance of Mac Mini M4 (16G) + M3 Pro (18G) slow?
-
-A: In an ideal scenario, it would be equivalent to a Mac Mini M4 (16G) (Server+Client), but due to the need for communication, the communication overhead accounts for a significant portion of the total cost. The main issue is that each token generation requires a certain amount of time, even within a local network.
