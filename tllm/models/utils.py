@@ -46,9 +46,6 @@ def default_process_mm_input(
     multi_modal_dict = {}
     multi_modal_dict["text"] = multi_modal_inputs["text"]
 
-    if multi_modal_inputs is None and len(multi_modal_inputs) == 1:
-        return multi_modal_dict
-
     images = multi_modal_inputs.get("image", None)
     videos = multi_modal_inputs.get("video", None)
 

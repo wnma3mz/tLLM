@@ -40,40 +40,6 @@
                     }
                 ]
             }
-        ],
-        [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "这张图片里面有什么？"
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "file_path": "asserts/flux_gen_image.png"
-                        }
-                    }
-                ]
-            }
-        ],
-        [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "What is shown in this image?"
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "file_path": "asserts/image-1.png"
-                        }
-                    }
-                ]
-            }
         ]
     ]
 }
