@@ -113,7 +113,7 @@ def sdap(q, k, v, scale, mask):
 
 
 class MergedAttention(nn.Module):
-    def __init__(self, args, layer_idx: int, offset: int):
+    def __init__(self, args, layer_idx: int, offset: int, qk_norm: bool = False):
         super().__init__()
 
         dim = args.hidden_size
@@ -146,6 +146,11 @@ class MergedAttention(nn.Module):
             self.head_dim, args.rope_theta, args.rope_traditional, args.rope_scaling, args.max_position_embeddings
         )
 
+        self.q_norm, self.k_norm = None, None
+        if qk_norm:
+            self.q_norm = nn.RMSNorm(head_dim, eps=args.rms_norm_eps)
+            self.k_norm = nn.RMSNorm(head_dim, eps=args.rms_norm_eps)
+
         self.max_seq_len = -1
         self._k_cache, self._v_cache = None, None
 
@@ -166,6 +171,9 @@ class MergedAttention(nn.Module):
         queries = queries.reshape(L, -1, self.head_dim)
         keys = keys.reshape(L, -1, self.head_dim)
         values = values.reshape(L, -1, self.head_dim)
+        if self.q_norm is not None and self.k_norm is not None:
+            queries = self.q_norm(queries)
+            keys = self.k_norm(keys)
 
         # must has cache, and split by uuid
         request_cache: RequestsCache = cache.request_cache
@@ -211,7 +219,7 @@ class MLXTransformerBlock(TransformerBlock):
         super(TransformerBlock).__init__()
         self.num_attention_heads = args.num_attention_heads
         self.hidden_size = args.hidden_size
-        self.self_attn = MergedAttention(args, layer_idx, offset)
+        self.self_attn = MergedAttention(args, layer_idx, offset, getattr(args, "qk_norm", False))
         self.mlp = MergedMLP(args)
         self.input_layernorm = nn.RMSNorm(args.hidden_size, eps=args.rms_norm_eps)
         self.post_attention_layernorm = nn.RMSNorm(args.hidden_size, eps=args.rms_norm_eps)

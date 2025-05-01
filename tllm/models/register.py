@@ -20,9 +20,11 @@ if BackendEnum.MLX == BACKEND:
     from tllm.models.mlx.janus_pro.janus_pro import MLXJanusProConditionalGeneration
     from tllm.models.mlx.llama import MLXLlamaForCausalLM, MLXLlamaModel
     from tllm.models.mlx.qwen2 import MLXQwen2ForCausalLM, MLXQwen2Model
+    from tllm.models.mlx.qwen3 import MLXQwen3ForCausalLM, MLXQwen3Model
 
     MODEL_REGISTER.update({"LlamaForCausalLM": (MLXLlamaForCausalLM, MLXLlamaModel)})
     MODEL_REGISTER.update({"Qwen2ForCausalLM": (MLXQwen2ForCausalLM, MLXQwen2Model)})
+    MODEL_REGISTER.update({"Qwen3ForCausalLM": (MLXQwen3ForCausalLM, MLXQwen3Model)})
     MODEL_REGISTER.update({"JanusProConditionalGeneration": (MLXJanusProConditionalGeneration, MLXLlamaModel)})
 
     if importlib.util.find_spec("mflux"):
@@ -37,7 +39,7 @@ if BackendEnum.MLX == BACKEND:
         from tllm.models.mlx.gemma3 import MLXGemma3ForConditionalGeneration, MLXGemma3Model
         from tllm.models.mlx.qwen2_vl import MLXQwen2VLForConditionalGeneration
 
-        MODEL_REGISTER.update({"Gemma3ForConditionalGeneration": (MLXGemma3ForConditionalGeneration, MLXGemma3Model)})
+        # MODEL_REGISTER.update({"Gemma3ForConditionalGeneration": (MLXGemma3ForConditionalGeneration, MLXGemma3Model)})
         MODEL_REGISTER.update({"Qwen2VLForConditionalGeneration": (MLXQwen2VLForConditionalGeneration, MLXQwen2Model)})
         MODEL_REGISTER.update(
             {"Qwen2_5_VLForConditionalGeneration": (MLXQwen2VLForConditionalGeneration, MLXQwen2Model)}

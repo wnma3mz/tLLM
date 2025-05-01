@@ -20,7 +20,7 @@ def build_config(config, model_type: str):
             depth=config.depth,
             out_hidden_size=config.out_hidden_size,
             num_heads=config.num_heads,
-            in_channels=config.in_channels,  # in_chans
+            in_channels=config.in_channels,  # in_channels
             hidden_size=config.hidden_size,
             patch_size=config.patch_size,
             spatial_merge_size=config.spatial_merge_size,
@@ -34,7 +34,7 @@ def build_config(config, model_type: str):
             depth=config.depth,
             embed_dim=config.embed_dim,
             num_heads=config.num_heads,
-            in_channels=config.in_channels,  # in_chans
+            in_channels=config.in_channels,  # in_channels
             hidden_size=config.hidden_size,
             patch_size=config.patch_size,
             spatial_merge_size=config.spatial_merge_size,
