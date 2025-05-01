@@ -33,7 +33,7 @@ This machine is running: `python3 ./run_engine.py --model_path mlx-community/Lla
   - Text to Text: `PYTHONPATH="./" python3 run_janus_pro.py --model_path wnma3mz/Janus-Pro-1B-4bit --message_type llm`
   - Image to Text: `PYTHONPATH="./" python3 run_janus_pro.py --model_path wnma3mz/Janus-Pro-1B-4bit --message_type mllm`
   - Text to Image: `PYTHONPATH="./" python3 run_janus_pro.py --model_path wnma3mz/Janus-Pro-1B-4bit --message_type image`
-- Qwen-VL: On MacOS platform, additional installation is required: `pip install mlx-vlm==0.1.12`.
+- Qwen-VL: On MacOS platform, additional installation is required: `pip install mlx-vlm==0.1.17`.
 - flux: Currently only supports MacOS platform, requires additional installation `pip install mflux=0.4.1`.
 
 ### Advanced

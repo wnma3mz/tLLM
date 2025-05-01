@@ -10,9 +10,9 @@ websockets
 pillow
 huggingface_hub
 psutil
-gradio>=5.4.0
-grpcio==1.68.1
-lz4==4.3.3
-protobuf==5.28.3
+lz4
 pydantic==2.9.2
-transformers>=4.47.1
+gradio>=5.28.0
+grpcio>=1.68.1
+protobuf>=5.28.3
+transformers>=4.51.3
