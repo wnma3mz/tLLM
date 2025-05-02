@@ -16,6 +16,7 @@ if BackendEnum.MLX == BACKEND:
     MODEL_REGISTER.update({"LlamaForCausalLM": (MLXLlamaForCausalLM, MLXLlamaModel)})
     MODEL_REGISTER.update({"Qwen2ForCausalLM": (MLXQwen2ForCausalLM, MLXQwen2Model)})
     MODEL_REGISTER.update({"Qwen3ForCausalLM": (MLXQwen3ForCausalLM, MLXQwen3Model)})
+    MODEL_REGISTER.update({"Qwen3MoeForCausalLM": (MLXQwen3ForCausalLM, MLXQwen3Model)})
     MODEL_REGISTER.update({"JanusProConditionalGeneration": (MLXJanusProConditionalGeneration, MLXLlamaModel)})
 
     if importlib.util.find_spec("mflux"):

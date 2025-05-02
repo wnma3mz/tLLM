@@ -3,6 +3,7 @@ from typing import List
 import mlx.core as mx
 import mlx.nn as nn
 from mlx_lm.models.llama import ModelArgs, TransformerBlock, initialize_rope
+from mlx_lm.models.qwen3_moe import Qwen3MoeSparseMoeBlock
 
 from tllm.commons.cache import AttentionData, RequestsCache, cat_func
 from tllm.models.mlx.parallel_layer import MergeParallelLayer, QKVParallelLayer, RowParallelLayer
@@ -167,7 +168,15 @@ class MLXTransformerBlock(TransformerBlock):
         self.num_attention_heads = args.num_attention_heads
         self.hidden_size = args.hidden_size
         self.self_attn = MergedAttention(args, layer_idx, offset, getattr(args, "qk_norm", False))
-        self.mlp = MergedMLP(args)
+
+        if (
+            hasattr(args, "mlp_only_layers")
+            and (layer_idx not in args.mlp_only_layers)
+            and (args.num_experts > 0 and (layer_idx + 1) % args.decoder_sparse_step == 0)
+        ):
+            self.mlp = Qwen3MoeSparseMoeBlock(args)
+        else:
+            self.mlp = MergedMLP(args)
         self.input_layernorm = nn.RMSNorm(args.hidden_size, eps=args.rms_norm_eps)
         self.post_attention_layernorm = nn.RMSNorm(args.hidden_size, eps=args.rms_norm_eps)
         self.args = args
@@ -194,10 +203,11 @@ class Decoder(nn.Module):
         super().__init__()
         self.vocab_size = args.vocab_size
         self.num_hidden_layers = args.num_hidden_layers
-        self.layers = [empty_func] * start_layer_idx + [
-            MLXTransformerBlock(args=args, layer_idx=layer_idx, offset=start_layer_idx, is_merge=is_merge)
-            for layer_idx in range(start_layer_idx, end_layer_idx)
-        ]
+        self.layers = []
+        for _ in range(start_layer_idx):
+            self.layers.append(empty_func)
+        for layer_idx in range(start_layer_idx, end_layer_idx):
+            self.layers.append(MLXTransformerBlock(args=args, layer_idx=layer_idx, offset=start_layer_idx))
 
     def __call__(self, h: mx.array, cache: AttentionData) -> mx.array:
         for i, layer in enumerate(self.layers):

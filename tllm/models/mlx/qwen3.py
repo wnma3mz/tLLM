@@ -3,6 +3,7 @@ from typing import Dict, Optional
 import mlx.core as mx
 import mlx.nn as nn
 from mlx_lm.models.llama import ModelArgs
+from mlx_lm.models.qwen3_moe import ModelArgs as MoEModelArgs
 import numpy as np
 from transformers import AutoConfig
 
@@ -22,15 +23,19 @@ class MLXQwen3Model(nn.Module):
         config_dict.pop("rope_scaling")  # TODO: remove this line
         comm = config.comm
         del config.comm
-        args = ModelArgs.from_dict(config_dict)
+        if "moe" in config.model_type:
+            args = MoEModelArgs.from_dict(config_dict)
+            args.rope_traditional = False
+        else:
+            args = ModelArgs.from_dict(config_dict)
 
         args.comm = comm
         self.world_size = args.comm.world_size
         self.rank = args.comm.rank
 
-        args.attention_bias = False  # for qwen3
-        args.o_proj_bias = False  # for qwen3
-        args.qk_norm = True  # for qwen3
+        args.attention_bias = False
+        args.o_proj_bias = False
+        args.qk_norm = True
         self.vocab_size = args.vocab_size
         self.config = config
         self.model = Decoder(args, config.decoder_start_layer_idx, config.decoder_end_layer_idx, is_merge)
@@ -82,7 +87,6 @@ class MLXQwen3Model(nn.Module):
                 continue
             if int(k.split("model.layers.", 1)[-1].split(".")[0]) not in range(start_idx, end_idx):
                 continue
-
             sanitized_weights[k] = v
         return sanitized_weights
 
@@ -91,8 +95,13 @@ class MLXQwen3Model(nn.Module):
             return state_dict
         layer_name_mapper = {
             "self_attn.o_proj": "self_attn.o_proj.layer",
-            "mlp.down_proj": "mlp.down_proj.layer",
         }
+        if "moe" not in config.model_type:
+            layer_name_mapper.update(
+                {
+                    "mlp.down_proj": "mlp.down_proj.layer",
+                }
+            )
         key_list = list(state_dict.keys())
         for key in key_list:
             for s_key, t_key in layer_name_mapper.items():
@@ -100,7 +109,8 @@ class MLXQwen3Model(nn.Module):
                     state_dict[key.replace(s_key, t_key)] = state_dict.pop(key)
 
         state_dict = default_merge_attn(state_dict)
-        state_dict = default_merge_mlp(state_dict)
+        if "moe" not in config.model_type:
+            state_dict = default_merge_mlp(state_dict)
         return state_dict
 
 
