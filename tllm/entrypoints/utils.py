@@ -10,7 +10,7 @@ from fastapi import FastAPI
 import uvicorn
 
 from tllm.entrypoints.helper import get_free_port, get_ips
-from tllm.singleton_logger import SingletonLogger
+from tllm.singleton_logger import LOGGING_CONFIG, SingletonLogger
 
 
 def is_local(hostname: str) -> bool:
@@ -154,7 +154,7 @@ class GRPCProcess:
 async def serve_http(app: FastAPI, grpc_process, engine, master_server, **uvicorn_kwargs: Dict):
     logger = SingletonLogger.setup_master_logger()
 
-    config = uvicorn.Config(app, **uvicorn_kwargs)
+    config = uvicorn.Config(app, log_config=LOGGING_CONFIG, **uvicorn_kwargs)
     server = uvicorn.Server(config)
 
     # asyncio.set_event_loop(loop)

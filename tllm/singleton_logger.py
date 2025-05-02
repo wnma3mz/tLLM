@@ -1,10 +1,50 @@
 import logging
-import logging.handlers
+import logging.config
 import os
 from pathlib import Path
 from typing import Literal, Optional
 
 level = logging.INFO
+
+LOGGING_CONFIG = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "default": {
+            "()": "uvicorn.logging.DefaultFormatter",
+            "fmt": "%(asctime)s,%(msecs)03d - %(levelprefix)s %(name)s - %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S",  # 添加日期格式
+            "use_colors": None,
+        },
+        "access": {
+            "()": "uvicorn.logging.AccessFormatter",
+            # 在这里修改 fmt 字符串，添加 %(asctime)s 和 %(msecs)03d
+            # 并设置 datefmt
+            "fmt": '%(asctime)s,%(msecs)03d - %(levelprefix)s %(client_addr)s - "%(request_line)s" %(status_code)s',
+            "datefmt": "%Y-%m-%d %H:%M:%S",  # 设置日期时间的基本格式
+        },
+    },
+    "handlers": {
+        "default": {
+            "formatter": "default",
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stderr",
+        },
+        "access": {
+            "formatter": "access",
+            "class": "logging.StreamHandler",
+            # 你可以将访问日志输出到 stdout 或 stderr
+            "stream": "ext://sys.stdout",
+        },
+    },
+    "loggers": {
+        "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
+        "uvicorn.error": {"level": "INFO"},
+        "uvicorn.access": {"handlers": ["access"], "level": "INFO", "propagate": False},
+        "master": {"handlers": ["default"], "level": "INFO", "propagate": False},
+        "handler": {"handlers": ["default"], "level": "INFO", "propagate": False},
+    },
+}
 
 
 class SingletonLogger:
@@ -40,44 +80,12 @@ class SingletonLogger:
         if backup_count is not None:
             cls._backup_count = backup_count
 
-        if cls.logger:
-            cls._add_file_handler(cls.logger)
-
-    @classmethod
-    def _add_file_handler(cls, logger: logging.Logger):
-        if cls._log_file:
-            log_dir = os.path.dirname(cls._log_file)
-            if log_dir:
-                Path(log_dir).mkdir(parents=True, exist_ok=True)
-
-            # 移除现有的文件处理器（如果有）
-            for handler in logger.handlers[:]:
-                if isinstance(handler, logging.handlers.RotatingFileHandler):
-                    logger.removeHandler(handler)
-
-            # 添加新的文件处理器
-            file_handler = logging.handlers.RotatingFileHandler(
-                cls._log_file, maxBytes=cls._max_bytes, backupCount=cls._backup_count, encoding="utf-8"
-            )
-            file_handler.setLevel(cls._level)
-            formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-            file_handler.setFormatter(formatter)
-            logger.addHandler(file_handler)
-
     @classmethod
     def _setup_logger(cls, name: Literal["master", "handler"]) -> logging.Logger:
         if cls.logger is None:  # 仅在第一次调用时创建logger
+            logging.config.dictConfig(LOGGING_CONFIG)
             cls.logger = logging.getLogger(name)
             cls.logger.setLevel(cls._level)
-
-            if not cls.logger.hasHandlers():  # 检查是否已经存在 handlers
-                ch = logging.StreamHandler()
-                ch.setLevel(cls._level)
-                formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-                ch.setFormatter(formatter)
-                cls.logger.addHandler(ch)
-
-            cls._add_file_handler(cls.logger)  # 始终添加文件handler
         return cls.logger
 
     @classmethod
