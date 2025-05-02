@@ -42,19 +42,15 @@ async def main(messages_list: List[List[Dict[str, Any]]], test_type: str):
     print(f"--- {test_type} ---")
 
     s1 = time.time()
-    results_async = await asyncio.gather(*[requests_func(messages) for messages in messages_list])
-    print(f"[异步并发请求结果] Time cost (async): {time.time() - s1:.4f} s")
-
-    print_output(results_async)
+    results_sync = [await requests_func(message) for message in messages_list]
+    print(f"[单独请求结果] Time cost (sync): {time.time() - s1:.4f} s")
+    print_output(results_sync)
     print("\n")
 
     s1 = time.time()
-    results_sync = []
-    for i, message in enumerate(messages_list):
-        content, status = await requests_func(message)
-        results_sync.append((content, status))
-    print(f"[单独请求结果] Time cost (sync): {time.time() - s1:.4f} s")
-    print_output(results_sync)
+    results_async = await asyncio.gather(*[requests_func(messages) for messages in messages_list])
+    print(f"[异步并发请求结果] Time cost (async): {time.time() - s1:.4f} s")
+    print_output(results_async)
     print("\n")
 
 

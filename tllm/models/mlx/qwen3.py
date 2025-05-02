@@ -10,7 +10,12 @@ from transformers import AutoConfig
 from tllm import DTYPE
 from tllm.models.mlx.helper import MLXCacheManager, quantization_func
 from tllm.models.mlx.layers import Decoder
-from tllm.models.weight_helper import default_merge_attn, default_merge_mlp, tie_word_embeddings_func
+from tllm.models.weight_helper import (
+    default_merge_attn,
+    default_merge_mlp,
+    tensor_parallel_state_dict,
+    tie_word_embeddings_func,
+)
 from tllm.schemas import SeqInput
 
 cache_manager = MLXCacheManager()
@@ -109,6 +114,7 @@ class MLXQwen3Model(nn.Module):
                 if s_key in key:
                     state_dict[key.replace(s_key, t_key)] = state_dict.pop(key)
 
+        state_dict = tensor_parallel_state_dict(state_dict, self.world_size, self.rank)
         state_dict = default_merge_attn(state_dict)
         if not self.is_moe:
             state_dict = default_merge_mlp(state_dict)

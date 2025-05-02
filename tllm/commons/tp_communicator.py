@@ -34,20 +34,47 @@ class BaseCommunicator(ABCCommunicator):
         return x
 
 
+@dataclass
+class NetworkConfig:
+    primary_host: str = "localhost"
+    primary_port: int = 29500
+    timeout: float = 30.0
+    retry_attempts: int = 3
+    buffer_size: int = 8192
+    use_quantization: bool = True
+    quantization_bits: int = 8
+    tcp_links: int = 4
+    metal_buffer_pool_size: int = 1024  # MB
+    metal_queue_depth: int = 3
+
+
 if BACKEND == BackendEnum.MLX:
     import mlx.core as mx
 
     class MLXCommunicator(ABCCommunicator):
         def __init__(self, logger) -> None:
             super().__init__(logger)
+            self._configure_metal()
             comm = mx.distributed.init()
             self.world_size = comm.size()
             self.rank = comm.rank()
+            self.config = NetworkConfig()
 
         def all_reduce(self, x: mx.array) -> mx.array:
             return mx.distributed.all_sum(x)
 
-    Communicator = BaseCommunicator
+        def _configure_metal(self):
+            """Configure Metal-specific optimizations"""
+            # Enable Metal buffer pooling
+            os.environ["MLX_BUFFER_POOL_SIZE"] = str(self.config.metal_buffer_pool_size)
+            # Set Metal command queue depth
+            os.environ["MLX_METAL_QUEUE_DEPTH"] = str(self.config.metal_queue_depth)
+            # Enable Metal graph optimization
+            os.environ["MLX_METAL_GRAPH_OPTIMIZE"] = "1"
+            os.environ["OMPI_MCA_btl_tcp_links"] = str(self.config.tcp_links)
+
+    # Communicator = BaseCommunicator
+    Communicator = MLXCommunicator
 elif BACKEND == BackendEnum.TORCH:
     import torch
     import torch.distributed as dist
