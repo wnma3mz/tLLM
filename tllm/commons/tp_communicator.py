@@ -34,6 +34,9 @@ class BaseCommunicator(ABCCommunicator):
         return x
 
 
+from dataclasses import dataclass
+
+
 @dataclass
 class NetworkConfig:
     primary_host: str = "localhost"
@@ -50,15 +53,18 @@ class NetworkConfig:
 
 if BACKEND == BackendEnum.MLX:
     import mlx.core as mx
+    from mpi4py import MPI
 
     class MLXCommunicator(ABCCommunicator):
         def __init__(self, logger) -> None:
             super().__init__(logger)
+            self.config = NetworkConfig()
             self._configure_metal()
             comm = mx.distributed.init()
             self.world_size = comm.size()
             self.rank = comm.rank()
-            self.config = NetworkConfig()
+            if self.world_size > 1:
+                MPI.Info.Set("btl_tcp_links", "4")
 
         def all_reduce(self, x: mx.array) -> mx.array:
             return mx.distributed.all_sum(x)

@@ -5,7 +5,7 @@ MASTER_URL=http://mac-mini:8022
 # export MPI_BUFFER_SIZE=1048576
 export PYTHONPATH="/Users/lujianghu/Documents/tLLM":$PYTHONPATH
 
-mpirun -np 2 \
+mpirun -np 1 \
     --hostfile mpi_hosts \
     -wdir /Users/lujianghu/Documents/tLLM \
     -x DYLD_LIBRARY_PATH=/opt/homebrew/lib/ \
