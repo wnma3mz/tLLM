@@ -19,6 +19,11 @@ if BackendEnum.MLX == BACKEND:
     MODEL_REGISTER.update({"Qwen3MoeForCausalLM": (MLXQwen3ForCausalLM, MLXQwen3Model)})
     MODEL_REGISTER.update({"JanusProConditionalGeneration": (MLXJanusProConditionalGeneration, MLXLlamaModel)})
 
+    from tllm.models.mlx.qwen2_vl import MLXQwen2VLForConditionalGeneration
+
+    MODEL_REGISTER.update({"Qwen2VLForConditionalGeneration": (MLXQwen2VLForConditionalGeneration, MLXQwen2Model)})
+    MODEL_REGISTER.update({"Qwen2_5_VLForConditionalGeneration": (MLXQwen2VLForConditionalGeneration, MLXQwen2Model)})
+
     if importlib.util.find_spec("mflux"):
         from tllm.models.mlx.flux.flux import Flux1
         from tllm.models.mlx.flux.transformer import FLUXModel
@@ -26,17 +31,6 @@ if BackendEnum.MLX == BACKEND:
         MODEL_REGISTER.update({"FLUX": (Flux1, FLUXModel)})
     else:
         DEP_MODEL_REGISTER.update({"FLUX": "mflux"})
-
-    if importlib.util.find_spec("mlx_vlm"):
-        from tllm.models.mlx.qwen2_vl import MLXQwen2VLForConditionalGeneration
-
-        MODEL_REGISTER.update({"Qwen2VLForConditionalGeneration": (MLXQwen2VLForConditionalGeneration, MLXQwen2Model)})
-        MODEL_REGISTER.update(
-            {"Qwen2_5_VLForConditionalGeneration": (MLXQwen2VLForConditionalGeneration, MLXQwen2Model)}
-        )
-    else:
-        DEP_MODEL_REGISTER.update({"Qwen2VLForConditionalGeneration": "mlx_vlm"})
-        DEP_MODEL_REGISTER.update({"Qwen2_5_VLForConditionalGeneration": "mlx_vlm"})
 
     from tllm.models.mlx.helper import greedy_decode
 

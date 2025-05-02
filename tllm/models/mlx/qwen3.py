@@ -23,7 +23,8 @@ class MLXQwen3Model(nn.Module):
         config_dict.pop("rope_scaling")  # TODO: remove this line
         comm = config.comm
         del config.comm
-        if "moe" in config.model_type:
+        self.is_moe = "moe" in config.model_type
+        if self.is_moe:
             args = MoEModelArgs.from_dict(config_dict)
             args.rope_traditional = False
         else:
@@ -96,7 +97,7 @@ class MLXQwen3Model(nn.Module):
         layer_name_mapper = {
             "self_attn.o_proj": "self_attn.o_proj.layer",
         }
-        if "moe" not in config.model_type:
+        if not self.is_moe:
             layer_name_mapper.update(
                 {
                     "mlp.down_proj": "mlp.down_proj.layer",
@@ -109,7 +110,7 @@ class MLXQwen3Model(nn.Module):
                     state_dict[key.replace(s_key, t_key)] = state_dict.pop(key)
 
         state_dict = default_merge_attn(state_dict)
-        if "moe" not in config.model_type:
+        if not self.is_moe:
             state_dict = default_merge_mlp(state_dict)
         return state_dict
 
