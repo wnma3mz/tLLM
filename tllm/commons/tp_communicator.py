@@ -55,6 +55,8 @@ if BACKEND == BackendEnum.MLX:
     import mlx.core as mx
     from mpi4py import MPI
 
+    # tensor parallelism. There is too much latency from synchronization and communication.
+    # https://github.com/ml-explore/mlx/issues/1046#issuecomment-2706544944
     class MLXCommunicator(ABCCommunicator):
         def __init__(self, logger) -> None:
             super().__init__(logger)
