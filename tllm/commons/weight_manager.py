@@ -76,6 +76,8 @@ class WeightManager:
             config = AutoConfig.from_pretrained(self.model_path, trust_remote_code=True)
             tok = TokenizerUtils(self.model_path)
             arch = config.architectures[0]
+
+        assert hasattr(config, "num_hidden_layers")
         return tok, arch, config
 
     def _gguf_read_master_weight(self):

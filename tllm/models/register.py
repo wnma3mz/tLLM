@@ -36,10 +36,8 @@ if BackendEnum.MLX == BACKEND:
         DEP_MODEL_REGISTER.update({"FLUX": "mflux"})
 
     if importlib.util.find_spec("mlx_vlm"):
-        from tllm.models.mlx.gemma3 import MLXGemma3ForConditionalGeneration, MLXGemma3Model
         from tllm.models.mlx.qwen2_vl import MLXQwen2VLForConditionalGeneration
 
-        # MODEL_REGISTER.update({"Gemma3ForConditionalGeneration": (MLXGemma3ForConditionalGeneration, MLXGemma3Model)})
         MODEL_REGISTER.update({"Qwen2VLForConditionalGeneration": (MLXQwen2VLForConditionalGeneration, MLXQwen2Model)})
         MODEL_REGISTER.update(
             {"Qwen2_5_VLForConditionalGeneration": (MLXQwen2VLForConditionalGeneration, MLXQwen2Model)}
