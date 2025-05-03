@@ -165,6 +165,7 @@ class ChatCompletionRequest(OpenAIBaseModel):
         description=("If true, the assistant will return an image base64 string. It must be supported by the model."),
     )
     # doc: end-chat-completion-extra-params
+    force_prompt: str = Field(default=None, description="Force the prompt to be used.")
 
     def to_sampling_params(
         self, tokenizer: PreTrainedTokenizer, default_max_tokens: Optional[int] = None

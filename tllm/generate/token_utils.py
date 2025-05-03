@@ -19,12 +19,18 @@ class TokenizerUtils:
             self.tokenizer = AutoTokenizer.from_pretrained(tok_path, trust_remote_code=True, use_fast=True)
 
     def preprocess(
-        self, text: str = None, messages: List[Dict[str, str]] = None, add_generation_prompt: bool = True
+        self,
+        text: str = None,
+        messages: List[Dict[str, str]] = None,
+        add_generation_prompt: bool = True,
+        force_prompt: str = None,
     ) -> TokenizerResult:
         if messages:
             text = self.tokenizer.apply_chat_template(
                 messages, tokenize=False, add_generation_prompt=add_generation_prompt
             )
+            if force_prompt:
+                text = text + force_prompt
         assert text is not None, "Either text or messages must be provided."
         input_ids = self.tokenizer.encode(text, add_special_tokens=False)
         return TokenizerResult(input_ids=input_ids, input_str=text)

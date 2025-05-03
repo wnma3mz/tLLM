@@ -72,6 +72,8 @@ class MessageProcessor:
                     raise ValueError(f"mm_input must be the same type")
         return new_messages, mm_input_dict
 
-    def preprocess(self, messages: List[Dict[str, str]], add_generation_prompt: bool) -> List[int]:
-        input_ids = self.tok.preprocess(messages=messages, add_generation_prompt=add_generation_prompt).input_ids
+    def preprocess(self, messages: List[Dict[str, str]], add_generation_prompt: bool, force_prompt: str) -> List[int]:
+        input_ids = self.tok.preprocess(
+            messages=messages, add_generation_prompt=add_generation_prompt, force_prompt=force_prompt
+        ).input_ids
         return input_ids

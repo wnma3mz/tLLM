@@ -52,7 +52,7 @@ class OpenAIServing:
     async def create_chat_completion(self, request: ChatCompletionRequest, raw_request: Request):
         request_id = f"chat-{random_uuid()}"
         messages, mm_input_dict = await self.message_processor.parse_message(request.messages)
-        input_ids = self.message_processor.preprocess(messages, request.add_generation_prompt)
+        input_ids = self.message_processor.preprocess(messages, request.add_generation_prompt, request.force_prompt)
 
         if request.temperature == 0.0:
             method = "greedy"
