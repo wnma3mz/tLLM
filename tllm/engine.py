@@ -89,14 +89,11 @@ class AsyncEngine:
                 continue
 
             if self._loop is not None:
+                # 避免被 await self.generator.generate，降低 PP Bubble
                 self._loop.create_task(self._run_generation_batch(request_data_list))
             else:
                 self.logger.error("Event loop not available for creating generation task.")
-                # Handle error appropriately, maybe notify requests with an error state
 
-            # Clear the event if both queues might be empty now,
-            # allowing the loop to wait if needed next iteration.
-            # The event will be set again if new items are added or put back.
             if self.prefill_queue.empty() and self.decoding_queue.empty():
                 self.queue_not_empty.clear()
 
