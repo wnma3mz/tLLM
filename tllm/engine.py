@@ -46,23 +46,40 @@ class AsyncEngine:
                     request_data.finish_reason_list = ["abort"]
                     async with request_data.condition:
                         request_data.condition.notify()
-                    aborting_request_ids.remove(request_data.request_id) # Avoid processing again
+                    aborting_request_ids.remove(request_data.request_id)  # Avoid processing again
                 else:
                     temp_list.append(request_data)
                     processed_count += 1
             return temp_list
 
-        # prefill 队列和 decoding 队列的调度逻辑
         request_data_list = []
-            
         # 优先从 decoding_queue 取数据
-        decoding_requests = await process_queue(self.decoding_queue)
-        request_data_list.extend(decoding_requests)
-
-        # 从 prefill_queue 中取数据，直到达到限制
-        prefill_requests = await process_queue(self.prefill_queue)
-        request_data_list.extend(prefill_requests)
+        request_data_list += await process_queue(self.decoding_queue)
+        request_data_list += await process_queue(self.prefill_queue)
         return request_data_list
+
+    async def _run_generation_batch(self, request_data_list: List[SequenceRequestData]):
+        try:
+            await self.generator.generate(request_data_list)
+
+            for request_data in request_data_list:
+                if not request_data.is_stop:
+                    self.decoding_queue.put_nowait(request_data)
+                    self.queue_not_empty.set()  # Ensure the loop wakes up if it was waiting
+
+        except (asyncio.CancelledError, asyncio.TimeoutError) as e:
+            self.logger.error(f"{type(e).__name__}")
+            for request_data in request_data_list:
+                request_data.is_normal_process = False
+            traceback.print_exc()
+        except Exception as e:
+            self.logger.error(f"Error processing prefill_queue data: {repr(e)}")
+            self.logger.error(f"Error request_id: {','.join(x.request_id for x in request_data_list)}")
+            traceback.print_exc()
+        finally:
+            for request_data in request_data_list:
+                async with request_data.condition:
+                    request_data.condition.notify()
 
     async def _generate(self):
         while True:
@@ -70,29 +87,18 @@ class AsyncEngine:
             if not request_data_list:
                 await self.queue_not_empty.wait()
                 continue
-            try:
-                await self.generator.generate(request_data_list)
 
-                for request_data in request_data_list:
-                    if not request_data.is_stop:
-                        self.decoding_queue.put_nowait(request_data)
+            if self._loop is not None:
+                self._loop.create_task(self._run_generation_batch(request_data_list))
+            else:
+                self.logger.error("Event loop not available for creating generation task.")
+                # Handle error appropriately, maybe notify requests with an error state
 
-            except (asyncio.CancelledError, asyncio.TimeoutError) as e:
-                self.logger.error(f"{type(e).__name__}")
-                for request_data in request_data_list:
-                    request_data.is_normal_process = False
-                traceback.print_exc()
-            except Exception as e:
-                self.logger.error(f"Error processing prefill_queue data: {repr(e)}")
-                self.logger.error(f"Error request_id: {','.join(x.request_id for x in request_data_list)}")
-                traceback.print_exc()
-            finally:
-                for request_data in request_data_list:
-                    async with request_data.condition:
-                        request_data.condition.notify()
-                if self.prefill_queue.empty():
-                    self.queue_not_empty.clear()
-                await asyncio.sleep(self.sleep_time)
+            # Clear the event if both queues might be empty now,
+            # allowing the loop to wait if needed next iteration.
+            # The event will be set again if new items are added or put back.
+            if self.prefill_queue.empty() and self.decoding_queue.empty():
+                self.queue_not_empty.clear()
 
     async def generate_stream(self, request_data: SequenceRequestData):
         self.prefill_queue.put_nowait(request_data)
