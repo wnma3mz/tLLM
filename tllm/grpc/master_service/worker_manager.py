@@ -109,7 +109,7 @@ class WorkerRPCManager:
         await asyncio.sleep(0)
         try:
             output = await asyncio.wait_for(forward_future, timeout=PP_TIMEOUT)
-        except asyncio.CancelledError:
+        except asyncio.TimeoutError:
             logger.error("Client Timeout Error")
             raise asyncio.CancelledError
 

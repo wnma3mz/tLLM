@@ -13,7 +13,7 @@ async def requests_func(messages: List[Dict[str, Any]]):
         "messages": messages,
         "model": "tt",
         "stream": False,
-        "max_tokens": 200,
+        "max_tokens": 2,
     }
     time.sleep(random.random() * 2)
     try:
@@ -41,12 +41,12 @@ def print_output(results_async: List[Any]):
 async def main(messages_list: List[List[Dict[str, Any]]], test_type: str):
     print(f"--- {test_type} ---")
 
-    s1 = time.time()
-    results_async = await asyncio.gather(*[requests_func(messages) for messages in messages_list])
-    print(f"[异步并发请求结果] Time cost (async): {time.time() - s1:.4f} s")
+    # s1 = time.time()
+    # results_async = await asyncio.gather(*[requests_func(messages) for messages in messages_list])
+    # print(f"[异步并发请求结果] Time cost (async): {time.time() - s1:.4f} s")
 
-    print_output(results_async)
-    print("\n")
+    # print_output(results_async)
+    # print("\n")
 
     s1 = time.time()
     results_sync = []

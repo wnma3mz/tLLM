@@ -80,15 +80,14 @@ class AsyncEngine:
                     if not request_data.is_stop:
                         self.decoding_queue.put_nowait(request_data)
 
-            except asyncio.CancelledError:
-                # LLM Generate Error or Server Cancel Engine
+            except (asyncio.CancelledError, asyncio.TimeoutError) as e:
                 for request_data in request_data_list:
                     request_data.is_normal_process = False
-                self.logger.error("CancelledError")
+                self.logger.error(f"{type(e).__name__}")
                 traceback.print_exc()
             except Exception as e:
-                self.logger.error(f"Error input_ids: {'\n'.join(x.input_ids for x in request_data_list)}")
-                self.logger.error(f"Error processing prefill_queue data: {str(e)}")
+                self.logger.error(f"Error processing prefill_queue data: {repr(e)}")
+                self.logger.error(f"Error request_id: {','.join(x.request_id for x in request_data_list)}")
                 traceback.print_exc()
             except BaseException as e:
                 self.logger.error(f"BaseException Error processing prefill_queue data: {str(e)}")
