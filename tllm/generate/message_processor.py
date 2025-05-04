@@ -3,7 +3,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 from PIL import Image
 from PIL.ImageFile import ImageFile
 
-from tllm.img_helper import base64_to_pil_image
+from tllm.img_helper import base64_to_pil_image, resize_image_if_needed
 from tllm.schemas import MESSAGES, MultiModalContent, UrlItem
 from tllm.singleton_logger import SingletonLogger
 
@@ -26,7 +26,7 @@ class MessageProcessor:
         if image.url is not None:
             if image.url.startswith("http"):
                 raise NotImplementedError("url is not supported")
-            return Image.open(base64_to_pil_image(image.url.split("data:image/png;base64,")[-1]))
+            return Image.open(base64_to_pil_image(image.url.split("base64,", 1)[-1]))
         if image.file_path is not None:
             return Image.open(image.file_path)
         raise ValueError("image must have url or file_path or base64")
@@ -38,6 +38,7 @@ class MessageProcessor:
                 text = content.text
             elif content.type == "image_url":
                 mm_input["image"] = await self.read_image(content.image_url)
+                mm_input["image"] = resize_image_if_needed(mm_input["image"])
         return text, mm_input
 
     async def parse_message(self, messages: MESSAGES) -> Tuple[List[Dict[str, str]], Dict[str, ImageFile]]:
