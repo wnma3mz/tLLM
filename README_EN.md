@@ -33,7 +33,7 @@ This machine is running: `python3 ./run_engine.py --model_path mlx-community/Qwe
   - Text to Text: `PYTHONPATH="./" python3 run_janus_pro.py --model_path wnma3mz/Janus-Pro-1B-4bit --message_type llm`
   - Image to Text: `PYTHONPATH="./" python3 run_janus_pro.py --model_path wnma3mz/Janus-Pro-1B-4bit --message_type mllm`
   - Text to Image: `PYTHONPATH="./" python3 run_janus_pro.py --model_path wnma3mz/Janus-Pro-1B-4bit --message_type image`
-- Qwen-VL: On MacOS platform, additional installation is required: `pip install mlx-vlm==0.1.17`.
+- Qwen-VL: On MacOS platform, additional installation is required: `pip install -r requirements/mlx.txt`.
 - flux: Currently only supports MacOS platform, requires additional installation `pip install mflux=0.4.1`.
 
 ### Advanced
@@ -87,12 +87,13 @@ For multi-machine deployment, the default part of the port will be used for runn
 ### Performance
 
 |                                                  | `Qwen3-0.6B-4bit` | `Qwen3-8B-4bit` | `Qwen3-30B-A3B-4bit` |
-| ------------------------------------------------ | ----------------- | -------------- -| -------------------- |
+| ------------------------------------------------ | ----------------- | --------------- | -------------------- |
 | Mac Mini M4 (16G) (Local)                        | 115.95 tok/s      | 19.31 tok/s     | No Memory            |
 | Mac Mini M4 (16G) + M3 Pro (18G) by Thunderbolt5 | -                 | 13.26 tok/s     | 18.66 tok/s          |
 | Mac Mini M4 (16G) + M3 Pro (18G) by LAN          | -                 | 11.34 tok/s     | Failed               |
 
-|                                                  | `Qwen3-VL-4B-Instruct-3bit` | `Qwen3-VL-8B-Instruct-3bit` | `Qwen3-VL-30B-A3B-Instruct-3bit`|
-| ------------------------------------------------ | --------------------------- | --------------------------- | ------------------------------- |
-| Mac Mini M4 (16G) (Local)                        | 31.40 tok/s                 | 22.76 tok/s                 | No Memory                       |
-| M3 Pro (18G) + Mac Mini M4 (16G) by Thunderbolt5 | -                           | 18.25 tok/s                 | 28.51 tok/s                     |
+
+|                                                  | `Qwen3-VL-4B-Instruct-3bit` | `Qwen3-VL-8B-Instruct-3bit` | `Qwen3-VL-30B-A3B-Instruct-3bit` |
+| ------------------------------------------------ | --------------------------- | --------------------------- | -------------------------------- |
+| Mac Mini M4 (16G) (Local)                        | 31.40 tok/s                 | 22.76 tok/s                 | No Memory                        |
+| M3 Pro (18G) + Mac Mini M4 (16G) by Thunderbolt5 | -                           | 18.25 tok/s                 | 28.51 tok/s                      |
