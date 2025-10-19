@@ -11,14 +11,14 @@
 - 在 MacOS （Apple silicon）:  `pip install -U -e ".[mlx]"`
 - 其他平台（NVIDIA）: `pip install -e ".[torch]"`
 
-本机运行：`PYTHONPATH="./" python3 ./run_engine.py --model_path mlx-community/Llama-3.2-1B-Instruct-4bit`
+本机运行：`PYTHONPATH="./" python3 ./run_engine.py --model_path mlx-community/Qwen3-0.6B-4bit`
 
 2. 启动 HTTP 服务
 
-- 单机: `tllm.server --model_path mlx-community/Llama-3.2-1B-Instruct-4bit`
+- 单机: `tllm.server --model_path mlx-community/Qwen3-0.6B-4bit`
 
 - 多机:
-  - 在一个终端启动服务端: `tllm.server --model_path mlx-community/Llama-3.2-1B-Instruct-4bit --hostname $YOUR_IP`
+  - 在一个终端启动服务端: `tllm.server --model_path mlx-community/Qwen3-0.6B-4bit --hostname $YOUR_IP`
   - 在另一个终端启动客户端 `tllm.client --hostname http://$YOUR_IP:8022`
 
 3. 测试 HTTP 服务

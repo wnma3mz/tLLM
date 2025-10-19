@@ -10,6 +10,7 @@ from mlx_vlm.models.qwen3_vl import (
     VisionConfig as Qwen3VisionConfig,
     VisionModel as Qwen3VisionModel,
 )
+from mlx_vlm.models.qwen3_vl_moe import VisionConfig as Qwen3MoEVisionConfig, VisionModel as Qwen3MoEVisionModel
 import numpy as np
 from transformers import AutoProcessor
 
@@ -26,14 +27,18 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
         self.hidden_size = getattr(config, "hidden_size", None) or read_from_text_config(config, "hidden_size")
         self.rms_norm_eps = getattr(config, "rms_norm_eps", None) or read_from_text_config(config, "rms_norm_eps")
 
-        if config.model_type == "qwen2_5_vl":
-            self.vision_tower = Qwen2_5VisionModel(Qwen2_5VisionConfig.from_dict(config.vision_config.to_dict()))
-            self.get_input_embeddings = self.get_input_embeddings_qwen2
-        elif config.model_type == "qwen2_vl":
-            self.vision_tower = Qwen2VisionModel(Qwen2VisionConfig.from_dict(config.vision_config.to_dict()))
+        if config.model_type == "qwen2_5_vl" or config.model_type == "qwen2_vl":
+            if config.model_type == "qwen2_5_vl":
+                self.vision_tower = Qwen2_5VisionModel(Qwen2_5VisionConfig.from_dict(config.vision_config.to_dict()))
+            else:
+                self.vision_tower = Qwen2VisionModel(Qwen2VisionConfig.from_dict(config.vision_config.to_dict()))
             self.get_input_embeddings = self.get_input_embeddings_qwen2
         elif config.model_type == "qwen3_vl" or config.model_type == "qwen3_vl_moe":
-            self.vision_tower = Qwen3VisionModel(Qwen3VisionConfig.from_dict(config.vision_config.to_dict()))
+            if config.model_type == "qwen3_vl_moe":
+                self.vision_tower = Qwen3MoEVisionModel(Qwen3MoEVisionConfig.from_dict(config.vision_config.to_dict()))
+            else:
+                self.vision_tower = Qwen3VisionModel(Qwen3VisionConfig.from_dict(config.vision_config.to_dict()))
+
             self.get_input_embeddings = self.get_input_embeddings_qwen3
 
             # patch mlx_vlm func for qwen3_vl
@@ -91,8 +96,6 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
 
             if k.startswith("model."):
                 k = k.replace("model.", "")
-            # if k.startswith("vision_tower."):
-            #     k = k.replace("vision_tower.", "visual.")
 
             if k == "vision_tower.patch_embed.proj.weight":
                 # [out_ch, in_ch, n, h, w] -> [out_ch, n, h, w, in_ch]
