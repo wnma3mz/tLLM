@@ -11,14 +11,14 @@ Cross-Machine Inference LLM Framework
 - On macOS (Apple silicon): `pip install -U -e ".[mlx]"`
 - Other platforms (NVIDIA): `pip install -e ".[torch]"`
 
-This machine is running: `python3 ./run_engine.py --model_path mlx-community/Llama-3.2-1B-Instruct-4bit`
+This machine is running: `python3 ./run_engine.py --model_path mlx-community/Qwen3-0.6B-4bit`
 
 2. Start HTTP service
 
-- Single machine: `tllm.server --model_path mlx-community/Llama-3.2-1B-Instruct-4bit`
+- Single machine: `tllm.server --model_path mlx-community/Qwen3-0.6B-4bit`
 
 - Multi-machine:
-  - Start a server in a terminal: `tllm.server --model_path mlx-community/Llama-3.2-1B-Instruct-4bit --hostname $YOUR_IP`
+  - Start a server in a terminal: `tllm.server --model_path mlx-community/Qwen3-0.6B-4bit --hostname $YOUR_IP`
   - Start a client on another terminal `tllm.client --hostname http://$YOUR_IP:8022`
 
 3. Test HTTP service
@@ -87,7 +87,12 @@ For multi-machine deployment, the default part of the port will be used for runn
 ### Performance
 
 |                                                  | `Qwen3-0.6B-4bit` | `Qwen3-8B-4bit` | `Qwen3-30B-A3B-4bit` |
-| ------------------------------------------------ | ------------------| ----------------| ---------------------|
-| Mac Mini M4 (16G) (Local)                        | 113.57 tok/s      | 19.31 tok/s     | No Memory            |
+| ------------------------------------------------ | ----------------- | -------------- -| -------------------- |
+| Mac Mini M4 (16G) (Local)                        | 115.95 tok/s      | 19.31 tok/s     | No Memory            |
 | Mac Mini M4 (16G) + M3 Pro (18G) by Thunderbolt5 | -                 | 13.26 tok/s     | 18.66 tok/s          |
 | Mac Mini M4 (16G) + M3 Pro (18G) by LAN          | -                 | 11.34 tok/s     | Failed               |
+
+|                                                  | `Qwen3-VL-4B-Instruct-3bit` | `Qwen3-VL-8B-Instruct-3bit` | `Qwen3-VL-30B-A3B-Instruct-3bit`|
+| ------------------------------------------------ | --------------------------- | --------------------------- | ------------------------------- |
+| Mac Mini M4 (16G) (Local)                        | 31.40 tok/s                 | 22.76 tok/s                 | No Memory                       |
+| M3 Pro (18G) + Mac Mini M4 (16G) by Thunderbolt5 | -                           | 18.25 tok/s                 | 28.51 tok/s                     |
