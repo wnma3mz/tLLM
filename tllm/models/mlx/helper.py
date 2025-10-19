@@ -95,18 +95,56 @@ class MLXCacheManager(CacheManager):
         return hidden_states
 
 
+def skip_multimodal_module(path: str) -> bool:
+    """
+    Check if a multimodal module (vision/audio) should skip quantization.
+
+    Args:
+        path: The module path to check
+
+    Returns:
+        bool: True if the module is multimodal and should skip quantization, False otherwise
+    """
+    return "vision_model" in path or "vision_tower" in path or "audio_model" in path or "audio_tower" in path
+
+
 def quantization_func(config, model, state_dict):
     if getattr(config, "quantization", None) is not None:
         # Handle legacy models which may not have everything quantized
-        def class_predicate(p, m):
+        # def class_predicate(p, m):
+        #     if not hasattr(m, "to_quantized"):
+        #         return False
+        #     return f"{p}.scales" in state_dict
+
+        # nn.quantize(
+        #     model,
+        #     **config.quantization,
+        #     class_predicate=class_predicate,
+        # )
+        config = config.to_dict()
+        quantization = config["quantization"]
+        skip_vision = config.get("vision_config", {}).get("skip_vision", False)
+
+        def get_class_predicate(p, m):
+            # Always skip vision and audio models
+            if skip_multimodal_module(p) and skip_vision:
+                return False
+            # Handle custom per layer quantization
+            if p in config["quantization"]:
+                return config["quantization"][p]
             if not hasattr(m, "to_quantized"):
                 return False
+            # Skip layers not divisible by 64
+            if hasattr(m, "weight") and m.weight.size % 64 != 0:
+                return False
+            # Handle legacy models which may not have everything quantized
             return f"{p}.scales" in state_dict
 
         nn.quantize(
             model,
-            **config.quantization,
-            class_predicate=class_predicate,
+            group_size=quantization["group_size"],
+            bits=quantization["bits"],
+            class_predicate=get_class_predicate,
         )
     else:
         model.set_dtype(DTYPE)

@@ -71,3 +71,10 @@ def default_process_mm_input(
         multi_modal_dict["text"] = image_input_text + multi_modal_dict["text"]
         multi_modal_dict.update({"video": video_inputs})
     return multi_modal_dict
+
+
+def read_from_text_config(config, attr_name: str):
+    text_config = getattr(config, "text_config", None)
+    if text_config is None:
+        text_config = config
+    return getattr(text_config, attr_name)

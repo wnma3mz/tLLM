@@ -3,64 +3,50 @@ from typing import Dict, Optional
 
 import mlx.core as mx
 import mlx.nn as nn
-from mlx_vlm.models.qwen2_5_vl.vision import VisionConfig as Qwen2_5VisionConfig, VisionModel as Qwen2_5VisionModel
-from mlx_vlm.models.qwen2_vl.vision import VisionConfig as Qwen2VisionConfig, VisionModel as Qwen2VisionModel
+from mlx_vlm.models.qwen2_5_vl import VisionConfig as Qwen2_5VisionConfig, VisionModel as Qwen2_5VisionModel
+from mlx_vlm.models.qwen2_vl import VisionConfig as Qwen2VisionConfig, VisionModel as Qwen2VisionModel
+from mlx_vlm.models.qwen3_vl import (
+    Model as qwen3_vl_model,
+    VisionConfig as Qwen3VisionConfig,
+    VisionModel as Qwen3VisionModel,
+)
 import numpy as np
 from transformers import AutoProcessor
 
 from tllm import DTYPE
 from tllm.models.mlx.helper import quantization_func
-from tllm.models.utils import default_process_mm_input, merge_mm_input
+from tllm.models.utils import default_process_mm_input, merge_mm_input, read_from_text_config
 from tllm.models.weight_helper import tie_word_embeddings_func
-
-
-def build_config(config, model_type: str):
-    if model_type == "qwen2_5_vl":
-        return Qwen2_5VisionConfig(
-            depth=config.depth,
-            out_hidden_size=config.out_hidden_size,
-            num_heads=config.num_heads,
-            in_channels=config.in_channels,  # in_channels
-            hidden_size=config.hidden_size,
-            patch_size=config.patch_size,
-            spatial_merge_size=config.spatial_merge_size,
-            spatial_patch_size=config.spatial_patch_size,
-            temporal_patch_size=config.temporal_patch_size,
-            window_size=config.window_size,
-            intermediate_size=getattr(config, "intermediate_size", None),
-        )
-    elif model_type == "qwen2_vl":
-        return Qwen2VisionConfig(
-            depth=config.depth,
-            embed_dim=config.embed_dim,
-            num_heads=config.num_heads,
-            in_channels=config.in_channels,  # in_channels
-            hidden_size=config.hidden_size,
-            patch_size=config.patch_size,
-            spatial_merge_size=config.spatial_merge_size,
-            spatial_patch_size=config.spatial_patch_size,
-            temporal_patch_size=config.temporal_patch_size,
-            mlp_ratio=config.mlp_ratio,
-        )
-    else:
-        raise ValueError(f"Unsupported model type: {model_type}")
 
 
 class MLXQwen2VLForConditionalGeneration(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.vocab_size = config.vocab_size
+        self.vocab_size = getattr(config, "vocab_size", None) or read_from_text_config(config, "vocab_size")
+        self.hidden_size = getattr(config, "hidden_size", None) or read_from_text_config(config, "hidden_size")
+        self.rms_norm_eps = getattr(config, "rms_norm_eps", None) or read_from_text_config(config, "rms_norm_eps")
 
-        vision_config = build_config(config.vision_config, config.model_type)
         if config.model_type == "qwen2_5_vl":
-            self.visual = Qwen2_5VisionModel(vision_config)
+            self.vision_tower = Qwen2_5VisionModel(Qwen2_5VisionConfig.from_dict(config.vision_config.to_dict()))
+            self.get_input_embeddings = self.get_input_embeddings_qwen2
         elif config.model_type == "qwen2_vl":
-            self.visual = Qwen2VisionModel(vision_config)
+            self.vision_tower = Qwen2VisionModel(Qwen2VisionConfig.from_dict(config.vision_config.to_dict()))
+            self.get_input_embeddings = self.get_input_embeddings_qwen2
+        elif config.model_type == "qwen3_vl" or config.model_type == "qwen3_vl_moe":
+            self.vision_tower = Qwen3VisionModel(Qwen3VisionConfig.from_dict(config.vision_config.to_dict()))
+            self.get_input_embeddings = self.get_input_embeddings_qwen3
+
+            # patch mlx_vlm func for qwen3_vl
+            self.language_model = type("obj", (object,), {})
+            self.language_model.model = type("obj", (object,), {})
+            self.language_model.model.embed_tokens = None
+            self.merge_input_ids_with_image_features = qwen3_vl_model.merge_input_ids_with_image_features
+            self.qwen3_vl_get_input_embeddings = qwen3_vl_model.get_input_embeddings
         else:
             raise ValueError(f"Unsupported model type: {config.model_type}")
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.embed_tokens = nn.Embedding(self.vocab_size, self.hidden_size)
+        self.lm_head = nn.Linear(self.hidden_size, self.vocab_size, bias=False)
+        self.norm = nn.RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
 
         self.merge_mm_input = merge_mm_input
 
@@ -73,13 +59,19 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
         model.process_mm_input = partial(default_process_mm_input, image_processor=processor.image_processor)
 
         cls.config = config
-        cls.num_layers = config.num_hidden_layers
+        cls.config.image_token_index = config.image_token_id
+        cls.config.video_token_index = config.video_token_id
+        cls.num_layers = getattr(config, "num_hidden_layers", None) or read_from_text_config(
+            config, "num_hidden_layers"
+        )
 
         state_dict = tie_word_embeddings_func(config, state_dict)
         state_dict = model.sanitize(state_dict)
         model = quantization_func(config, model, state_dict)
         model.load_weights(list(state_dict.items()))
 
+        if hasattr(model, "language_model"):
+            model.language_model.model.embed_tokens = model.embed_tokens
         mx.eval(model.parameters())
         model.eval()
         return model
@@ -99,10 +91,10 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
 
             if k.startswith("model."):
                 k = k.replace("model.", "")
-            if k.startswith("vision_tower."):
-                k = k.replace("vision_tower.", "visual.")
+            # if k.startswith("vision_tower."):
+            #     k = k.replace("vision_tower.", "visual.")
 
-            if k == "visual.patch_embed.proj.weight":
+            if k == "vision_tower.patch_embed.proj.weight":
                 # [out_ch, in_ch, n, h, w] -> [out_ch, n, h, w, in_ch]
                 if v.shape[3] == v.shape[4]:
                     v = v.transpose(0, 2, 3, 4, 1)
@@ -110,7 +102,7 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
             sanitized_weights[k] = v
         return sanitized_weights
 
-    def get_input_embeddings(
+    def get_input_embeddings_qwen2(
         self,
         input_ids: np.ndarray,
         pixel_values: Optional[np.ndarray] = None,
@@ -123,7 +115,7 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
 
         if pixel_values is not None:
             pixel_values = mx.array(pixel_values).astype(DTYPE)
-            image_embeds = self.visual(pixel_values, grid_thw=mx.array(image_grid_thw))
+            image_embeds = self.vision_tower(pixel_values, grid_thw=mx.array(image_grid_thw))
             # image_embeds: token_nums x hidden_size
             n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
             n_image_features = image_embeds.shape[0]
@@ -139,7 +131,7 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
 
         if pixel_values_videos is not None:
             pixel_values_videos = mx.array(pixel_values_videos).astype(DTYPE)
-            video_embeds = self.visual(pixel_values_videos, grid_thw=mx.array(video_grid_thw))
+            video_embeds = self.vision_tower(pixel_values_videos, grid_thw=mx.array(video_grid_thw))
             n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
             n_video_features = video_embeds.shape[0]
             if n_video_tokens != n_video_features:
@@ -152,6 +144,23 @@ class MLXQwen2VLForConditionalGeneration(nn.Module):
             video_embeds = video_embeds.astype(inputs_embeds.dtype)
             inputs_embeds[video_mask_ind] = video_embeds  # mlx not support bool mask
 
+        return inputs_embeds
+
+    def get_input_embeddings_qwen3(
+        self,
+        input_ids: np.ndarray,
+        pixel_values: Optional[np.ndarray] = None,
+        pixel_values_videos: Optional[np.ndarray] = None,
+        image_grid_thw: Optional[np.ndarray] = None,
+        video_grid_thw: Optional[np.ndarray] = None,
+    ) -> mx.array:
+        grid_thw = image_grid_thw if image_grid_thw is not None else video_grid_thw
+        if pixel_values is not None:
+            pixel_values = mx.array(pixel_values)
+        if grid_thw is not None:
+            grid_thw = mx.array(grid_thw)
+
+        inputs_embeds, _, _ = self.qwen3_vl_get_input_embeddings(self, mx.array(input_ids), pixel_values, grid_thw)
         return inputs_embeds
 
     def get_logits(self, hidden_states: mx.array) -> mx.array:

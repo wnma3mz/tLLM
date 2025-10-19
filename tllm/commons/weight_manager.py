@@ -6,6 +6,7 @@ from transformers import AutoConfig
 from tllm.commons.tp_communicator import BaseCommunicator
 from tllm.models.file_helper import get_model_path
 from tllm.models.register import DEP_MODEL_REGISTER, MODEL_REGISTER
+from tllm.models.utils import read_from_text_config
 from tllm.models.weight_helper import load_gguf_weight, read_from_safetensors
 
 
@@ -77,7 +78,7 @@ class WeightManager:
             tok = TokenizerUtils(self.model_path)
             arch = config.architectures[0]
 
-        assert hasattr(config, "num_hidden_layers")
+        assert hasattr(config, "num_hidden_layers") or hasattr(getattr(config, "text_config"), "num_hidden_layers")
         return tok, arch, config
 
     def _gguf_read_master_weight(self):
@@ -126,7 +127,15 @@ def load_client_model(start_idx: int, end_idx: int, comm: BaseCommunicator, mode
     weight_manager = WeightManager(model_path)
     config = weight_manager.config
 
-    end_idx = min(end_idx, config.num_hidden_layers)
+    if getattr(config, "num_hidden_layers", None) is None:
+        num_hidden_layers = read_from_text_config(config, "num_hidden_layers")
+        quantization = getattr(config, "quantization", None)
+        config = config.text_config
+        config.quantization = quantization
+    else:
+        num_hidden_layers = config.num_hidden_layers
+
+    end_idx = min(end_idx, num_hidden_layers)
 
     state_dict = weight_manager.read_client_weight()
     if weight_manager.arch not in MODEL_REGISTER:

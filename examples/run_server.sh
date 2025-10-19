@@ -1,5 +1,4 @@
 #!/bin/bash
-# MODEL_PATH=Qwen/Qwen2-VL-2B-Instruct
 # MODEL_PATH=mlx-community/Qwen3-30B-A3B-4bit
 MODEL_PATH=mlx-community/Qwen3-8B-4bit
 MASTER_HOSTNAME=mac-mini

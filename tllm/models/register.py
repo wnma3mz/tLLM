@@ -23,6 +23,7 @@ if BackendEnum.MLX == BACKEND:
 
     MODEL_REGISTER.update({"Qwen2VLForConditionalGeneration": (MLXQwen2VLForConditionalGeneration, MLXQwen2Model)})
     MODEL_REGISTER.update({"Qwen2_5_VLForConditionalGeneration": (MLXQwen2VLForConditionalGeneration, MLXQwen2Model)})
+    MODEL_REGISTER.update({"Qwen3VLForConditionalGeneration": (MLXQwen2VLForConditionalGeneration, MLXQwen3Model)})
 
     if importlib.util.find_spec("mflux"):
         from tllm.models.mlx.flux.flux import Flux1
