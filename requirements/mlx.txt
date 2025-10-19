@@ -1,3 +1,4 @@
-mlx==0.25.1
-mlx-lm==0.24.0
-mlx-vlm==0.1.25
+mlx==0.26.5
+mlx-metal==0.26.5
+mlx-lm==0.26.4
+mlx-vlm==0.3.4

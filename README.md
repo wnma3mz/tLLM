@@ -89,6 +89,11 @@
 
 |                                                  | `Qwen3-0.6B-4bit` | `Qwen3-8B-4bit` | `Qwen3-30B-A3B-4bit` |
 | ------------------------------------------------ | ------------------| ----------------| ---------------------|
-| Mac Mini M4 (16G) (Local)                        | 113.57 tok/s      | 19.31 tok/s     | No Memory            |
+| Mac Mini M4 (16G) (Local)                        | 115.95 tok/s      | 19.31 tok/s     | No Memory            |
 | Mac Mini M4 (16G) + M3 Pro (18G) by Thunderbolt5 | -                 | 13.26 tok/s     | 18.66 tok/s          |
 | Mac Mini M4 (16G) + M3 Pro (18G) by LAN          | -                 | 11.34 tok/s     | Failed               |
+
+|                                                  | `Qwen3-VL-4B-Instruct-3bit` | `Qwen3-VL-8B-Instruct-3bit` | `Qwen3-VL-30B-A3B-Instruct-3bit`|
+| ------------------------------------------------ | ------------------| ----------------| ---------------------|
+| Mac Mini M4 (16G) (Local)                        | -      | -     | No Memory           |
+| Mac Mini M4 (16G) + M3 Pro (18G) by Thunderbolt5 | -      | -     | -          |
