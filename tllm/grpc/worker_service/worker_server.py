@@ -179,7 +179,7 @@ async def run(args):
     SingletonLogger.set_level("DEBUG" if args.is_debug else "INFO")
     args, ip_addr_list = update_handler_args(args)
 
-    logger = SingletonLogger.setup_handler_logger(f"handler-{args.grpc_port}")
+    logger = SingletonLogger.setup_handler_logger()
     comm = Communicator(logger)
     logger.info(f"[{Communicator.__name__}] Rank: {comm.rank}; World Size: {comm.world_size}")
 

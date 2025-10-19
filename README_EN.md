@@ -86,9 +86,8 @@ For multi-machine deployment, the default part of the port will be used for runn
 
 ### Performance
 
-In Mac Mini M4
-
-|                                      | `mlx-community/Llama-3.2-1B-Instruct-4bit` | `mlx-community/Llama-3.2-1B-Instruct` | `mlx-community/Meta-Llama-3.1-8B-Instruct-4bit` | `mlx-community/Meta-Llama-3.1-8B-Instruct-bf16` |
-| ------------------------------------ | -------------------------------------------- | --------------------------------------- | ------------------------------------------------- | ------------------------------------------------- |
-| Mac Mini M4 (16G) (Local)            | 45.36 tok/s                                 | 23.60 tok/s                             | 15.80 tok/s                                       | No Memory                                         |
-| Mac Mini M4 (16G) + M3 Pro (18G)     |                                              | 16.33 tok/s                             | 11.06 tok/s                                       | 5.64 tok/s                                        |
+|                                                  | `Qwen3-0.6B-4bit` | `Qwen3-8B-4bit` | `Qwen3-30B-A3B-4bit` |
+| ------------------------------------------------ | ------------------| ----------------| ---------------------|
+| Mac Mini M4 (16G) (Local)                        | 113.57 tok/s      | 19.31 tok/s     | No Memory            |
+| Mac Mini M4 (16G) + M3 Pro (18G) by Thunderbolt5 | -                 | 13.26 tok/s     | 18.66 tok/s          |
+| Mac Mini M4 (16G) + M3 Pro (18G) by LAN          | -                 | 11.34 tok/s     | Failed               |

@@ -94,6 +94,6 @@ class SingletonLogger:
         return cls._setup_logger("master")
 
     @classmethod
-    def setup_handler_logger(cls, name: Optional[str]) -> logging.Logger:
+    def setup_handler_logger(cls) -> logging.Logger:
         cls.set_log_file("handler.log")
-        return cls._setup_logger("handler" if name is None else name)
+        return cls._setup_logger("handler")
