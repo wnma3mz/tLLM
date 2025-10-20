@@ -101,7 +101,7 @@ async def health(background_tasks: BackgroundTasks):
         ws_manager.unset_connect_clients(health_status["last_check_result"])
         background_tasks.add_task(update_model_url)
 
-    return Response(status_code=200)
+    return JSONResponse(content={"status": "ok"}, status_code=200)
 
 
 @app.get("/v1/models")

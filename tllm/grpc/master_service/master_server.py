@@ -30,7 +30,7 @@ class MasterServer(schemas_pb2_grpc.RPCServiceServicer):
                 await self.server.stop(grace=5)
                 await self.server.wait_for_termination()
             except (Exception, asyncio.CancelledError) as e:
-                self.logger.info("master handler error", str(e))
+                self.logger.info("master handler error" + str(e))
 
     async def Forward(
         self, request: schemas_pb2.ForwardRequest, context: grpc.ServicerContext
