@@ -1,3 +1,4 @@
+# coding: utf-8
 import glob
 import os
 
@@ -15,52 +16,13 @@ class WeightManager:
         self.model_path = get_model_path(model_path)
         self.state_dict = None
 
-        if "flux" in str(self.model_path).lower():
-            from mflux import ModelConfig
-
-            print("load flux model weight")
-            self.read_master_weight = self._read_flux_master_weight
-            self.read_client_weight = self._read_flux_client_weight
-
-            if "schnell" in str(self.model_path).lower():
-                config = ModelConfig.from_alias("schnell")
-            elif "dev" in str(self.model_path).lower():
-                config = ModelConfig.from_alias("dev")
-            else:
-                raise ValueError("ModelConfig not found")
-
-            config.num_hidden_layers = 38
-            config.model_name = str(self.model_path)
-            self.config = config
-
-            self.tok, self.arch = None, "FLUX"
+        if str(self.model_path).endswith(".gguf"):
+            self.read_master_weight = self._gguf_read_master_weight
+            self.read_client_weight = self._gguf_read_client_weight
         else:
-            if str(self.model_path).endswith(".gguf"):
-                self.read_master_weight = self._gguf_read_master_weight
-                self.read_client_weight = self._gguf_read_client_weight
-            else:
-                self.read_master_weight = self._hf_read_weight
-                self.read_client_weight = self._hf_read_weight
-            self.tok, self.arch, self.config = self._post_init()
-
-    def _read_flux_master_weight(self):
-        from mflux.weights.weight_handler import WeightHandler
-
-        weights = WeightHandler(local_path=self.model_path, lora_paths=None, lora_scales=None)
-
-        self.config.quantization_level = weights.quantization_level
-        return weights
-
-    def _read_flux_client_weight(self, start_idx: int, end_idx: int):
-        from mflux.weights.weight_handler import WeightHandler
-
-        weights, self.config.quantization_level = WeightHandler.load_transformer(root_path=self.model_path)
-
-        class TransformerWeightHandler:
-            def __init__(self, weights):
-                self.transformer = weights
-
-        return TransformerWeightHandler(weights)
+            self.read_master_weight = self._hf_read_weight
+            self.read_client_weight = self._hf_read_weight
+        self.tok, self.arch, self.config = self._post_init()
 
     def _post_init(self):
         from tllm.generate import TokenizerUtils
@@ -148,9 +110,6 @@ def load_client_model(start_idx: int, end_idx: int, comm: BaseCommunicator, mode
     _, MY_MODEL_CLASS = MODEL_REGISTER[weight_manager.arch]
 
     kwargs = {}
-    if weight_manager.arch == "FLUX":
-        kwargs.update({"quantization_level": weight_manager.config.quantization_level})
-
     model = MY_MODEL_CLASS.from_pretrained(config, state_dict, **kwargs)
     return model
 
@@ -169,8 +128,6 @@ def load_master_model(model_path: str):
 
     kwargs = {}
     kwargs.update({"model_path": weight_manager.model_path})
-    if weight_manager.arch == "FLUX":
-        kwargs.update({"quantization_level": weight_manager.config.quantization_level})
 
     model = MY_CausalLM_CLASS.from_pretrained(weight_manager.config, state_dict, **kwargs)
     model.tok = weight_manager.tok

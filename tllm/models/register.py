@@ -1,3 +1,4 @@
+# coding: utf-8
 import importlib.util
 
 from tllm import BACKEND, BackendEnum
@@ -25,14 +26,6 @@ if BackendEnum.MLX == BACKEND:
     MODEL_REGISTER.update({"Qwen2_5_VLForConditionalGeneration": (MLXQwen2VLForConditionalGeneration, MLXQwen2Model)})
     MODEL_REGISTER.update({"Qwen3VLForConditionalGeneration": (MLXQwen2VLForConditionalGeneration, MLXQwen3Model)})
     MODEL_REGISTER.update({"Qwen3VLMoeForConditionalGeneration": (MLXQwen2VLForConditionalGeneration, MLXQwen3Model)})
-
-    if importlib.util.find_spec("mflux"):
-        from tllm.models.mlx.flux.flux import Flux1
-        from tllm.models.mlx.flux.transformer import FLUXModel
-
-        MODEL_REGISTER.update({"FLUX": (Flux1, FLUXModel)})
-    else:
-        DEP_MODEL_REGISTER.update({"FLUX": "mflux"})
 
     from tllm.models.mlx.helper import greedy_decode
 
