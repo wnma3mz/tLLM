@@ -8,32 +8,28 @@
 
 1. 安装依赖
 
-- 在 MacOS （Apple silicon）:  `pip install -U -e ".[mlx]"`
-- 其他平台（NVIDIA）: `pip install -e ".[torch]"`
+- 安装 uv（如果尚未安装）：`curl -LsSf https://astral.sh/uv/install.sh | sh`
+- 安装依赖（仅 MLX）：`uv sync --extra mlx`
 
-本机运行：`PYTHONPATH="./" python3 ./run_engine.py --model_path mlx-community/Qwen3-0.6B-4bit`
+本机运行：`uv run python ./run_engine.py --model_path mlx-community/Qwen3.5-0.8B-4bit`
 
 2. 启动 HTTP 服务
 
-- 单机: `tllm.server --model_path mlx-community/Qwen3-0.6B-4bit`
+- 单机: `uv run tllm.server --model_path mlx-community/Qwen3.5-0.8B-4bit`
 
 - 多机:
-  - 在一个终端启动服务端: `tllm.server --model_path mlx-community/Qwen3-0.6B-4bit --hostname $YOUR_IP`
-  - 在另一个终端启动客户端 `tllm.client --hostname http://$YOUR_IP:8022`
+  - 在一个终端启动服务端: `uv run tllm.server --model_path mlx-community/Qwen3.5-0.8B-4bit --hostname $YOUR_IP`
+  - 在另一个终端启动客户端 `uv run tllm.client --hostname http://$YOUR_IP:8022`
 
 3. 测试 HTTP 服务
 
-- `python3 benchmarks/run_async_requests.py`
+- `uv run python benchmarks/run_async_requests.py`
 
 ### 支持模型
 
-- llama
-- qwen
-- qwen-vl
-- janus_pro: 暂只支持 MacOS 平台
-  - Text to Text: `PYTHONPATH="./" python3 run_janus_pro.py --model_path wnma3mz/Janus-Pro-1B-4bit --message_type llm`
-  - Image to Text: `PYTHONPATH="./" python3 run_janus_pro.py --model_path wnma3mz/Janus-Pro-1B-4bit --message_type mllm`
-  - Text to Image: `PYTHONPATH="./" python3 run_janus_pro.py --model_path wnma3mz/Janus-Pro-1B-4bit --message_type image`
+- Qwen3.5（MLX）
+  - Text: `uv run python run_engine.py --model_path mlx-community/Qwen3.5-0.8B-4bit --message_type llm`
+  - VLM: `uv run python run_engine.py --model_path mlx-community/Qwen3.5-0.8B-4bit --message_type vlm`
 
 
 ### 进阶功能
@@ -72,7 +68,6 @@
 - [X] Support Multi-Requests
 - [X] Engine
   - [X] mlx
-  - [X] torch
 - [X] Communication
   - [X] grpc
   - [X] Auto Find Node
@@ -86,14 +81,8 @@
 
 ### Performance
 
-|                                                  | `Qwen3-0.6B-4bit` | `Qwen3-8B-4bit` | `Qwen3-30B-A3B-4bit` |
-| ------------------------------------------------ | ----------------- | --------------- | -------------------- |
-| Mac Mini M4 (16G) (Local)                        | 115.95 tok/s      | 19.31 tok/s     | No Memory            |
-| Mac Mini M4 (16G) + M3 Pro (18G) by Thunderbolt5 | -                 | 13.26 tok/s     | 18.66 tok/s          |
-| Mac Mini M4 (16G) + M3 Pro (18G) by LAN          | -                 | 11.34 tok/s     | Failed               |
-
-
-|                                                  | `Qwen3-VL-4B-Instruct-3bit` | `Qwen3-VL-8B-Instruct-3bit` | `Qwen3-VL-30B-A3B-Instruct-3bit` |
-| ------------------------------------------------ | --------------------------- | --------------------------- | -------------------------------- |
-| Mac Mini M4 (16G) (Local)                        | 39.07 tok/s                 | 22.76 tok/s                 | No Memory                        |
-| M3 Pro (18G) + Mac Mini M4 (16G) by Thunderbolt5 | -                           | 18.25 tok/s                 | 28.51 tok/s                      |
+|                                                  | `mlx-community/Qwen3.5-0.8B-4bit` | `mlx-community/Qwen3.5-9B-4bit` | `mlx-community/Qwen3.5-35A3-4bit` |
+| ------------------------------------------------ | --------------------------------- | ------------------------------- | ---------------------------------- |
+| Mac Mini M4 (16G) (Local)                        | 94.86 tok/s                       | 16.58 tok/s                     | -                                  |
+| Mac Mini M4 (16G) + M3 Pro (18G) by Thunderbolt5 | -                                 | -                               | -                                  |
+| Mac Mini M4 (16G) + M3 Pro (18G) by LAN          | -                                 | -                               | -                                  |

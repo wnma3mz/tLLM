@@ -28,7 +28,7 @@ if BACKEND == BackendEnum.MLX:
     CONVERT_DTYPE = mx.float16
     DES_DTYPE = np.float16
     DEVICE = None
-    from tllm.models.mlx import *
+    from tllm.models.backend_mlx import *
 elif BACKEND == BackendEnum.TORCH:
     ENABLE_PREFILL_CACHE = False
     import torch

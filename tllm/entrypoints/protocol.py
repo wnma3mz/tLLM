@@ -104,7 +104,7 @@ class ChatCompletionRequest(OpenAIBaseModel):
     logit_bias: Optional[Dict[str, float]] = None
     logprobs: Optional[bool] = False
     top_logprobs: Optional[int] = 0
-    max_tokens: Optional[int] = 16
+    max_tokens: Optional[int] = 4096
     n: Optional[int] = 1
     presence_penalty: Optional[float] = 0.0
     response_format: Optional[ResponseFormat] = None
@@ -116,6 +116,14 @@ class ChatCompletionRequest(OpenAIBaseModel):
     tools: Optional[List[ChatCompletionToolsParam]] = None
     tool_choice: Optional[Union[Literal["none"], ChatCompletionNamedToolChoiceParam]] = "none"
     user: Optional[str] = None
+
+    thinking: Optional[dict] = None
+    tool_choice: Optional[str] = None
+    tools: Optional[Any] = None
+    lang: Optional[Any] = None
+    max_completion_tokens: Optional[int] = None
+    reasoning_effort: Optional[str] = None
+    parallel_tool_calls: bool = False
 
     # doc: begin-chat-completion-sampling-params
     best_of: Optional[int] = None
@@ -196,15 +204,15 @@ class ChatCompletionRequest(OpenAIBaseModel):
             raise ValueError("stream_options can only be set if stream is true")
         return values
 
-    @model_validator(mode="before")
-    @classmethod
-    def check_tool_choice(cls, data):
-        if "tool_choice" in data and data["tool_choice"] != "none":
-            if not isinstance(data["tool_choice"], dict):
-                raise ValueError("Currently only named tools are supported.")
-            if "tools" not in data or data["tools"] is None:
-                raise ValueError("When using `tool_choice`, `tools` must be set.")
-        return data
+    # @model_validator(mode="before")
+    # @classmethod
+    # def check_tool_choice(cls, data):
+    #     if "tool_choice" in data and data["tool_choice"] != "none":
+    #         if not isinstance(data["tool_choice"], dict):
+    #             raise ValueError("Currently only named tools are supported.")
+    #         if "tools" not in data or data["tools"] is None:
+    #             raise ValueError("When using `tool_choice`, `tools` must be set.")
+    #     return data
 
     @model_validator(mode="before")
     @classmethod

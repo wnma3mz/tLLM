@@ -1,12 +1,7 @@
-# Copyright © 2023 Apple Inc.
-# Modified by https://github.com/ml-explore/mlx-examples/blob/main/llms/gguf_llm/models.py
-
 from dataclasses import dataclass
 import inspect
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Union
 
-from huggingface_hub import snapshot_download
 import mlx.core as mx
 
 
@@ -28,14 +23,6 @@ class ModelArgs:
     def __post_init__(self):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
-
-        if self.rope_scaling:
-            required_keys = {"factor", "type"}
-            if not all(key in self.rope_scaling for key in required_keys):
-                raise ValueError(f"rope_scaling must contain keys {required_keys}")
-
-            if self.rope_scaling["type"] != "linear":
-                raise ValueError("rope_scaling 'type' currently only supports 'linear'")
 
     @classmethod
     def from_dict(cls, params):
@@ -64,9 +51,7 @@ class GGUFConfig:
         return {k: v for k, v in self.__dict__.items()}
 
 
-arch_mapper = {
-    "llama": "LlamaForCausalLM",
-}
+arch_mapper = {"llama": "LlamaForCausalLM"}
 
 
 def get_config(metadata: dict) -> GGUFConfig:
@@ -104,22 +89,15 @@ def translate_weight_names(name):
 
 
 def load_gguf_weight(gguf_file: str, repo: str = None):
-    # If the gguf_file exists, try to load model from it.
-    # Otherwise try to download and cache from the HF repo
     print(f"[INFO] Loading model from {gguf_file}")
     weights, metadata = mx.load(gguf_file, return_metadata=True)
     gguf_ft = metadata["general.file_type"]
     if gguf_ft == 0 or gguf_ft == 1:
-        # ALL_F32 or MOSTLY_F16
         quantization = None
-        pass
     elif gguf_ft == 2 or gguf_ft == 3:
-        # MOSTLY_Q4_0 or MOSTLY_Q4_1
         quantization = {"group_size": 32, "bits": 4}
-        # print bits value
         print(f"{quantization['bits']} bits quantized model")
     elif gguf_ft == 7:
-        # MOSTLY_Q8_0 = 7
         quantization = {"group_size": 32, "bits": 8}
         print(f"{quantization['bits']} bits quantized model")
     else:

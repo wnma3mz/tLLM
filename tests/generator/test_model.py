@@ -2,7 +2,6 @@ import mlx.core as mx
 
 from tllm.commons.tp_communicator import BaseCommunicator
 from tllm.commons.weight_manager import load_client_model, load_master_model
-from tllm.models.mlx.qwen3 import MLXQwen3ForCausalLM, MLXQwen3Model
 from tllm.schemas import SeqInput
 from tllm.singleton_logger import SingletonLogger
 
@@ -18,7 +17,7 @@ def load_messages():
 
 
 if __name__ == "__main__":
-    model_path: str = "mlx-community/Qwen3-0.6B-4bit"
+    model_path: str = "mlx-community/Qwen3.5-0.8B-4bit"
     comm = BaseCommunicator(logger)
     client_model = load_client_model(0, 999, comm, model_path)
     master_model = load_master_model(model_path)

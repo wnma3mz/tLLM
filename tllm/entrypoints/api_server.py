@@ -30,7 +30,6 @@ worker_rpc_manager: WorkerRPCManager = None
 logger = SingletonLogger.setup_master_logger()
 app = FastAPI()
 
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # 在生产环境中应该设置具体的域名

@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import json
 import random
@@ -56,6 +57,7 @@ async def main(messages_list: List[List[Dict[str, Any]]], test_type: str):
     print(f"[单独请求结果] Time cost (sync): {time.time() - s1:.4f} s")
     print_output(results_sync)
     print("\n")
+    return all(status == 200 for _, status in results_async + results_sync)
 
 
 def load_message():
@@ -65,7 +67,22 @@ def load_message():
 
 
 if __name__ == "__main__":
-    messages_dict = load_message()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--mode",
+        choices=["all", "llm", "vlm"],
+        default="all",
+        help="Select which benchmark case to run.",
+    )
+    args = parser.parse_args()
 
-    asyncio.run(main(messages_dict["llm"], "纯文本输入测试"))
-    asyncio.run(main(messages_dict["mllm"], "图片混合文本输入测试"))
+    messages_dict = load_message()
+    all_success = True
+
+    if args.mode in {"all", "llm"}:
+        all_success = asyncio.run(main(messages_dict["llm"], "纯文本输入测试")) and all_success
+    if args.mode in {"all", "vlm"}:
+        all_success = asyncio.run(main(messages_dict["vlm"], "图片混合文本输入测试")) and all_success
+
+    if not all_success:
+        raise SystemExit(1)

@@ -1,5 +1,7 @@
 __pycache__
 .vscode
+.venv
+uv.lock
 *.log
 *.pyc
 *.pkl

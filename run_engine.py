@@ -20,7 +20,7 @@ def parse_args():
         help="Attention backend if backend is TORCH",
     )
     parser.add_argument("--model_path", type=str, default="Qwen/Qwen2-VL-2B-Instruct")
-    parser.add_argument("--message_type", type=str, default="llm", choices=["llm", "mllm", "image"])
+    parser.add_argument("--message_type", type=str, default="llm", choices=["llm", "vlm", "image"])
     return parser.parse_args()
 
 
@@ -123,8 +123,8 @@ if __name__ == "__main__":
     messages_dict = load_message()
     if args.message_type == "llm":
         asyncio.run(llm_generate(args, messages_dict["llm"][0]))
-    elif args.message_type == "mllm":
-        asyncio.run(llm_generate(args, messages_dict["mllm"][0]))
+    elif args.message_type == "vlm":
+        asyncio.run(llm_generate(args, messages_dict["vlm"][0]))
     elif args.message_type == "image":
         asyncio.run(image_generate(args))
     else:

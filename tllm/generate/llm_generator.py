@@ -7,7 +7,7 @@ import numpy as np
 from tllm.generate.token_utils import TokenizerUtils
 from tllm.grpc.master_service.worker_manager import WorkerRPCManager
 from tllm.models.register import sampling_func
-from tllm.models.utils import is_generate_end
+from tllm.models.text_utils import is_generate_end
 from tllm.schemas import MIX_TENSOR, ForwardResult, SeqInput, SequenceRequestData
 from tllm.singleton_logger import SingletonLogger
 

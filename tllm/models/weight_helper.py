@@ -7,8 +7,8 @@ from tllm.schemas import MIX_TENSOR
 if BACKEND == BackendEnum.MLX:
     import mlx.core as mx
 
-    from tllm.models.mlx.gguf_utils import load_gguf_weight
-    from tllm.models.mlx.helper import read_from_safetensors
+    from tllm.models.backend_mlx.gguf_utils import load_gguf_weight
+    from tllm.models.backend_mlx.helper import read_from_safetensors
 
     cat_func = lambda tensors: mx.concat(tensors, axis=0)
 elif BACKEND == BackendEnum.TORCH:

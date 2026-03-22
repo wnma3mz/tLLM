@@ -1,18 +1,8 @@
-from typing import Dict, List, Optional, Set, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from tllm.schemas import MIX_TENSOR, GenerateEnd
-
-
-def is_generate_end(output_ids: List[int], eos_token_ids: Set[int], max_tokens: int) -> GenerateEnd:
-    if len(output_ids) >= max_tokens:
-        return GenerateEnd(finish_reason="length", is_end=True)
-
-    if output_ids[-1] in eos_token_ids:
-        return GenerateEnd(finish_reason="stop", is_end=True)
-
-    return GenerateEnd(finish_reason=None, is_end=False)
+from tllm.schemas import MIX_TENSOR
 
 
 def merge_mm_input(mm_input_list: List[Dict[str, List[np.ndarray]]]) -> Optional[Dict[str, List[MIX_TENSOR]]]:
@@ -50,7 +40,7 @@ def default_process_mm_input(
     videos = multi_modal_inputs.get("video", None)
 
     if images:
-        image_inputs = image_processor(images=images, videos=None)
+        image_inputs = image_processor(images=images)
         image_grid_thw = image_inputs["image_grid_thw"]
         merge_length = image_processor.merge_size**2
         # 全部放到开头
@@ -61,7 +51,7 @@ def default_process_mm_input(
         multi_modal_dict["text"] = image_input_text + multi_modal_dict["text"]
         multi_modal_dict.update({"image": image_inputs})
     if videos:
-        video_inputs = image_processor(images=None, videos=videos)
+        video_inputs = image_processor(videos=videos)
         video_grid_thw = video_inputs["image_grid_thw"]
         merge_length = image_processor.merge_size**2
         image_input_text = ""
@@ -71,10 +61,3 @@ def default_process_mm_input(
         multi_modal_dict["text"] = image_input_text + multi_modal_dict["text"]
         multi_modal_dict.update({"video": video_inputs})
     return multi_modal_dict
-
-
-def read_from_text_config(config, attr_name: str):
-    text_config = getattr(config, "text_config", None)
-    if text_config is None:
-        text_config = config
-    return getattr(text_config, attr_name)

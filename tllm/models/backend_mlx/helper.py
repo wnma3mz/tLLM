@@ -110,34 +110,19 @@ def skip_multimodal_module(path: str) -> bool:
 
 def quantization_func(config, model, state_dict):
     if getattr(config, "quantization", None) is not None:
-        # Handle legacy models which may not have everything quantized
-        # def class_predicate(p, m):
-        #     if not hasattr(m, "to_quantized"):
-        #         return False
-        #     return f"{p}.scales" in state_dict
-
-        # nn.quantize(
-        #     model,
-        #     **config.quantization,
-        #     class_predicate=class_predicate,
-        # )
         config = config.to_dict()
         quantization = config["quantization"]
         skip_vision = config.get("vision_config", {}).get("skip_vision", False)
 
         def get_class_predicate(p, m):
-            # Always skip vision and audio models
             if skip_multimodal_module(p) and skip_vision:
                 return False
-            # Handle custom per layer quantization
             if p in config["quantization"]:
                 return config["quantization"][p]
             if not hasattr(m, "to_quantized"):
                 return False
-            # Skip layers not divisible by 64
             if hasattr(m, "weight") and m.weight.size % 64 != 0:
                 return False
-            # Handle legacy models which may not have everything quantized
             return f"{p}.scales" in state_dict
 
         nn.quantize(
@@ -157,15 +142,6 @@ def read_from_safetensors(file_path: str) -> Dict[str, mx.array]:
 
 
 def dict_to_dataclass(data: dict, name: str):
-    """将字典转换为 dataclass
-
-    Args:
-        data: 字典数据
-        name: dataclass 名称
-
-    Returns:
-        dataclass 对象
-    """
     fields = [(key, type(value)) for key, value in data.items()]
     DataClass = make_dataclass(name, fields)
     return DataClass(**data)

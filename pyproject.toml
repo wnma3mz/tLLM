@@ -1,6 +1,61 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tllm"
+version = "0.1.1"
+description = "Cross-machine inference LLM framework"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "aiohttp",
+    "fastapi",
+    "numpy",
+    "requests",
+    "tabulate",
+    "tqdm",
+    "typing_extensions",
+    "uvicorn",
+    "websockets",
+    "pillow",
+    "huggingface_hub",
+    "psutil",
+    "lz4",
+    "pydantic==2.9.2",
+    "gradio>=5.28.0",
+    "grpcio>=1.68.1",
+    "protobuf>=5.28.3",
+    "transformers>=4.57.1",
+]
+
+[project.optional-dependencies]
+mlx = [
+    "mlx==0.31.1",
+    "mlx-metal==0.31.1",
+    "mlx-lm==0.31.1",
+    "mlx-vlm==0.4.1",
+]
+torch = ["vllm"]
+all = [
+    "mlx==0.31.1",
+    "mlx-metal==0.31.1",
+    "mlx-lm==0.31.1",
+    "mlx-vlm==0.4.1",
+    "vllm",
+]
+dev = ["black", "isort"]
+
+[project.scripts]
+"tllm.server" = "tllm.entrypoints.api_server:main"
+"tllm.client" = "tllm.grpc.worker_service.worker_server:main"
+
+[tool.setuptools.packages.find]
+include = ["tllm*"]
+
 [tool.black]
 line-length = 120
-target-version = ['py38']
+target-version = ['py310']
 exclude = '''
 /(
     .eggs
