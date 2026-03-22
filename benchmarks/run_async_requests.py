@@ -25,7 +25,7 @@ async def requests_func(messages: List[Dict[str, Any]]):
                     return response_data["choices"][0]["message"]["content"], response.status
                 else:
                     return None, response.status
-    except Exception as e:
+    except Exception:
         return None, 500  # 或者返回一个特定的错误码
 
 

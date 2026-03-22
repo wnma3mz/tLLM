@@ -4,21 +4,17 @@ import os
 
 
 class BackendEnum(Enum):
-    TORCH = 1
-    MLX = 2
+    MLX = 1
 
 
-ENABLE_PREFILL_CACHE = os.environ.get("TLLM_ENABLE_PREFILL_CACHE", "true").lower() == "true"
 ENABLE_PREFILL_CACHE = False
 if importlib.util.find_spec("mlx"):
     BACKEND = BackendEnum.MLX
-elif importlib.util.find_spec("torch"):
-    BACKEND = BackendEnum.TORCH
 else:
-    raise ImportError("No backend found")
+    raise ImportError("MLX backend is required")
 
-if os.environ.get("TLLM_BACKEND", None):
-    BACKEND = BackendEnum[os.environ["TLLM_BACKEND"]]
+if os.environ.get("TLLM_BACKEND", None) and os.environ["TLLM_BACKEND"] != "MLX":
+    raise ValueError("Only MLX backend is supported")
 
 if BACKEND == BackendEnum.MLX:
     import mlx.core as mx
@@ -29,20 +25,6 @@ if BACKEND == BackendEnum.MLX:
     DES_DTYPE = np.float16
     DEVICE = None
     from tllm.models.backend_mlx import *
-elif BACKEND == BackendEnum.TORCH:
-    ENABLE_PREFILL_CACHE = False
-    import torch
-
-    DTYPE = torch.float16
-    CONVERT_DTYPE = torch.float16
-    DES_DTYPE = torch.float16
-    if torch.cuda.is_available():
-        DEVICE = "cuda:0"
-        DTYPE = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-    else:
-        DEVICE = "cpu"
-
-    from tllm.models.torch import *
 else:
     raise ValueError("Invalid backend")
 

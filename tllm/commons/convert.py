@@ -1,26 +1,17 @@
 from typing import List
 
 import lz4.frame
+import mlx.core as mx
 import numpy as np
 
-from tllm import BACKEND, CONVERT_DTYPE, DES_DTYPE, DTYPE, BackendEnum
-from tllm.grpc.proto import schemas_pb2, schemas_pb2_grpc
+from tllm import CONVERT_DTYPE, DES_DTYPE
+from tllm.grpc.proto import schemas_pb2
 from tllm.schemas import MIX_TENSOR
 
-if BACKEND == BackendEnum.MLX:
-    import mlx.core as mx
-
-    serialize_func = lambda tensor, dtype: bytes(tensor.astype(dtype))
-    deserialize_func = lambda proto, x, dtype, des_dtype: mx.array(
-        np.frombuffer(x, dtype=des_dtype), dtype=dtype
-    ).reshape(*proto.shape)
-else:
-    import torch
-
-    serialize_func = lambda tensor, tensor_dtype: tensor.to(tensor_dtype).detach().cpu().numpy().tobytes()
-    deserialize_func = (
-        lambda proto, x, dtype, des_dtype: torch.frombuffer(np.copy(x), dtype=des_dtype).to(dtype).view(*proto.shape)
-    )
+serialize_func = lambda tensor, dtype: bytes(tensor.astype(dtype))
+deserialize_func = lambda proto, x, dtype, des_dtype: mx.array(np.frombuffer(x, dtype=des_dtype), dtype=dtype).reshape(
+    *proto.shape
+)
 
 
 def protobuf_to_list(proto_message):

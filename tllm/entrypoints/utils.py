@@ -55,11 +55,6 @@ def parse_master_args():
         action="store_true",
         help="A boolean flag used to turn on or off the debug mode. If this parameter is specified, the program will print more logs",
     )
-    parser.add_argument(
-        "--is_image",
-        action="store_true",
-        help="A boolean flag. The specific meaning start the Vincennes Diagram service",
-    )
     return parser.parse_args()
 
 

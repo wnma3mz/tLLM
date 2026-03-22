@@ -1,15 +1,15 @@
 import asyncio
 import time
 import traceback
-from typing import Callable, List, Optional, Union
+from typing import Callable, List, Optional
 
-from tllm.generate import ImageGenerator, LLMGenerator
+from tllm.generate import LLMGenerator
 from tllm.schemas import SequenceRequestData
 from tllm.singleton_logger import SingletonLogger
 
 
 class AsyncEngine:
-    def __init__(self, generator: Union[LLMGenerator, ImageGenerator], sleep_time: float = 0.0, limit_size: int = 5):
+    def __init__(self, generator: LLMGenerator, sleep_time: float = 0.0, limit_size: int = 5):
         self.generator = generator
         self.prefill_queue: asyncio.Queue = asyncio.Queue()
         self.decoding_queue: asyncio.Queue = asyncio.Queue()
@@ -116,7 +116,7 @@ class AsyncEngine:
                     )
                 # Need it?
                 yield request_data.to_request_output()
-        except Exception as e:
+        except Exception:
             traceback.print_exc()
             raise asyncio.CancelledError("UnknownException")
 

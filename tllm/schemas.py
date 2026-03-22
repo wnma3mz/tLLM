@@ -1,17 +1,20 @@
 import asyncio
 from dataclasses import dataclass, field
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Tuple, Union
 
 from PIL import Image
 import numpy as np
 from pydantic import BaseModel
 
-from tllm.grpc.proto import schemas_pb2, schemas_pb2_grpc
+from tllm.grpc.proto import schemas_pb2
+
+if TYPE_CHECKING:
+    import mlx.core as mx
 
 finish_reason_type = Literal["length", "stop", None]
 modal_type = Literal["text", "image_url"]
 
-MIX_TENSOR = Union[np.ndarray, "torch.Tensor", "mx.array"]
+MIX_TENSOR = Union[np.ndarray, "mx.array"]
 
 
 class UrlItem(BaseModel):
@@ -135,35 +138,6 @@ class ForwardResult:
     hidden_states: MIX_TENSOR
     comm_cost_time: float
     calc_cost_time: float
-
-
-@dataclass
-class ImageResponseOutput:
-    outputs: List[str]
-
-
-@dataclass
-class ImageRequestData:
-    request_id: str
-
-    prompt: str
-    config: "ImageGenerationConfig"
-    seed: int
-    generate_iter: int = 0
-    input_embeds: Optional["EmbeddingResult"] = None
-    runtime_config = None
-
-    is_stop: bool = False
-    finish_reason_list: Optional[List[str]] = None
-    condition: asyncio.Condition = field(default_factory=asyncio.Condition)
-    timeout: int = 100000  # 请求的总超时时间
-    start_time: Optional[float] = None
-
-    output_base64: str = ""
-
-    def to_request_output(self) -> RequestOutput:
-        # TODO: streaming support
-        return ImageResponseOutput([self.output_base64])
 
 
 @dataclass

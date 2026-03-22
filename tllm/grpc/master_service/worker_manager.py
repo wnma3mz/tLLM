@@ -15,26 +15,6 @@ from tllm.singleton_logger import SingletonLogger
 logger = SingletonLogger.setup_master_logger()
 
 
-async def rpc_image_forward(
-    stub,
-    request_id: str,
-    hidden_states: schemas_pb2.BFloat16Tensor,
-    text_embeddings: schemas_pb2.BFloat16Tensor,
-    seq_len: int,
-    height: int,
-    width: int,
-):
-    forward_request = {
-        "uuid": request_id,
-        "hidden_states": hidden_states,
-        "text_embeddings": text_embeddings,
-        "seq_len": seq_len,
-        "height": height,
-        "width": width,
-    }
-    stub.ImageForward(schemas_pb2.ImageForwardRequest(**forward_request))
-
-
 async def rpc_forward(stub, seq_input: SeqInput, hidden_states: schemas_pb2.BFloat16Tensor):
     forward_request = seq_input.to_dict()
     forward_request["hidden_states"] = hidden_states
@@ -85,7 +65,7 @@ class WorkerRPCManager:
             try:
                 await rpc_health_check(self.stub_list[index][0])  # 只需要检查一个
                 return (index, True)
-            except Exception as e:
+            except Exception:
                 return (index, False)
 
         tasks = [check_single_client(i) for i in range(self.client_size)]
@@ -117,37 +97,6 @@ class WorkerRPCManager:
             logger.error("Client Forward Error")
             raise asyncio.CancelledError
 
-        return convertor.deserialize(output), await asyncio.wait_for(status_future, timeout=PP_TIMEOUT)
-
-    async def image_forward(
-        self,
-        hidden_states: MIX_TENSOR,
-        text_embeddings: MIX_TENSOR,
-        seq_len: int,
-        height: int,
-        width: int,
-        request_id: str,
-    ) -> Tuple[MIX_TENSOR, List[float]]:
-        import mlx.core as mx
-        import numpy as np
-
-        convertor = Convertor(mx.float32, np.float32, mx.float32)
-
-        hidden_states = convertor.serialize(hidden_states)
-        text_embeddings = convertor.serialize(text_embeddings)
-        forward_future, status_future = self.pending_requests.add_request(
-            "-".join(x for x in [request_id]), self.client_size
-        )
-
-        for stub in self.stub_list[0]:
-            asyncio.create_task(
-                rpc_image_forward(stub, [request_id], hidden_states, text_embeddings, seq_len, height, width)
-            )
-        await asyncio.sleep(0)
-        try:
-            output = await asyncio.wait_for(forward_future, timeout=PP_TIMEOUT)
-        except asyncio.CancelledError:
-            raise asyncio.CancelledError
         return convertor.deserialize(output), await asyncio.wait_for(status_future, timeout=PP_TIMEOUT)
 
     async def start_health_check(self, interval: float = 10):

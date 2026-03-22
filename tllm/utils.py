@@ -1,16 +1,13 @@
 from typing import Tuple
 
-from tllm import BACKEND, BackendEnum
 from tllm.grpc.master_service.master_server import MasterServer
 from tllm.grpc.master_service.pending_requests import PendingRequests
 from tllm.grpc.master_service.worker_manager import WorkerRPCManager
 
 
 def setup_seed(seed: int = 42):
-    if BACKEND == BackendEnum.TORCH:
-        import torch
-
-        torch.manual_seed(seed)
+    # MLX runtime currently relies on global default seed behavior.
+    return None
 
 
 def init_grpc_service(client_size: int) -> Tuple[WorkerRPCManager, MasterServer]:

@@ -41,9 +41,9 @@ class MasterServer(schemas_pb2_grpc.RPCServiceServicer):
 
         try:
             self.pending_requests.complete_forward_request(request_id, request.hidden_states)
-        except Exception as e:
+        except Exception:
             self.logger.debug("error")
-        except BaseException as e:
+        except BaseException:
             self.logger.debug("base error")
         finally:
             return schemas_pb2.ForwardResponse(msg="Forward Completed", status=200)
@@ -56,9 +56,9 @@ class MasterServer(schemas_pb2_grpc.RPCServiceServicer):
 
         try:
             self.pending_requests.complete_forward_request(request_id, request.hidden_states)
-        except Exception as e:
+        except Exception:
             self.logger.debug("error")
-        except BaseException as e:
+        except BaseException:
             self.logger.debug("base error")
         finally:
             return schemas_pb2.ForwardResponse(msg="Forward Completed", status=200)
@@ -70,9 +70,9 @@ class MasterServer(schemas_pb2_grpc.RPCServiceServicer):
 
         try:
             self.pending_requests.complete_status_request(request_id, (int(request.pp_idx), request.cost_time))
-        except Exception as e:
+        except Exception:
             self.logger.debug("error")
-        except BaseException as e:
+        except BaseException:
             self.logger.debug("base error")
         finally:
             return schemas_pb2.StatusResponse(msg="Successful", status=200)

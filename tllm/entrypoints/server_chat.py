@@ -54,11 +54,6 @@ class OpenAIServing:
         messages, mm_input_dict = await self.message_processor.parse_message(request.messages)
         input_ids = self.message_processor.preprocess(messages, request.add_generation_prompt, request.force_prompt)
 
-        if request.temperature == 0.0:
-            method = "greedy"
-        else:
-            method = "sampling"
-
         sequence_data = SequenceRequestData(
             request_id=request_id,
             sampling_params=request.to_sampling_params(self.engine.tok.tokenizer),

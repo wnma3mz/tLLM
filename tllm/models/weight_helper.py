@@ -11,13 +11,10 @@ if BACKEND == BackendEnum.MLX:
     from tllm.models.backend_mlx.helper import read_from_safetensors
 
     cat_func = lambda tensors: mx.concat(tensors, axis=0)
-elif BACKEND == BackendEnum.TORCH:
-    import torch
+else:
+    raise ValueError(f"Unsupported backend: {BACKEND}")
 
-    from tllm.models.torch.helper import read_from_safetensors
-
-    cat_func = lambda tensors: torch.cat(tensors, dim=0)
-    load_gguf_weight = lambda x: None, None, None
+__all__ = ["load_gguf_weight", "read_from_safetensors", "tie_word_embeddings_func"]
 
 
 def common_sanitize(weights):

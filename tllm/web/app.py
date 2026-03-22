@@ -1,6 +1,4 @@
 import argparse
-import base64
-from io import BytesIO
 import json
 import time
 from typing import Any, Dict, Generator, List, Optional, Tuple, Union

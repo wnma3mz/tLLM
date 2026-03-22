@@ -6,25 +6,22 @@ from typing import List
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
 from tllm import CLIENT_SOCKET_PATH, MASTER_SOCKET_PATH
 from tllm.commons.weight_manager import load_master_model
 from tllm.engine import AsyncEngine
-from tllm.entrypoints.image_server.image_protocol import Text2ImageRequest, Text2ImageResponse
-from tllm.entrypoints.image_server.server_image import ImageServing
 from tllm.entrypoints.protocol import ChatCompletionRequest, ChatCompletionResponse
 from tllm.entrypoints.server_chat import OpenAIServing
 from tllm.entrypoints.utils import GRPCProcess, is_local, parse_master_args, serve_http, update_master_args
 from tllm.entrypoints.websocket_manager import WebsocketManager
-from tllm.generate import ImageGenerator, LLMGenerator
+from tllm.generate import LLMGenerator
 from tllm.grpc.master_service.worker_manager import WorkerRPCManager
 from tllm.schemas import InitModelRequest, InitModelResponse, RegisterClientRequest, RegisterClientResponse
 from tllm.singleton_logger import SingletonLogger
 from tllm.utils import init_grpc_service, setup_seed
 
 openai_serving_chat: OpenAIServing = None
-image_serving: ImageServing = None
 ws_manager: WebsocketManager = None
 worker_rpc_manager: WorkerRPCManager = None
 logger = SingletonLogger.setup_master_logger()
@@ -69,24 +66,6 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     except Exception as e:
         logger.error(f"Unknown Exception: {str(e)}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
-
-
-@app.post("/v1/create_image")
-async def create_image(request: Text2ImageRequest, raw_request: Request) -> Text2ImageResponse:
-    if not ws_manager.has_full_model:
-        raise ValueError("No available Full Node to process the request")
-    if image_serving is None:
-        raise ValueError("ImageServing instance is not initialized")
-    try:
-        generator = await image_serving.create_image(request, raw_request)
-        if request.stream:
-            return StreamingResponse(content=generator, media_type="text/event-stream")
-        else:
-            assert isinstance(generator, Text2ImageResponse)
-            return JSONResponse(content=generator.model_dump())
-    except Exception as e:
-        logger.error(f"Error processing request: {str(e)}")
-        return JSONResponse(content={"error": str(e)}, status_code=499)
 
 
 @app.get("/health")
@@ -172,12 +151,9 @@ async def init_model_func(
 
 
 async def init_app(engine: AsyncEngine, args):
-    global app, openai_serving_chat, image_serving
+    global app, openai_serving_chat
     logger.info("Master Args: %s", args)
-    if args.is_image:
-        image_serving = ImageServing(engine, args)
-    else:
-        openai_serving_chat = OpenAIServing(engine, args)
+    openai_serving_chat = OpenAIServing(engine, args)
     return app
 
 
@@ -193,10 +169,7 @@ async def init_engine(args):
     ws_manager = WebsocketManager(total_layers, args.model_path, client_size=args.client_size)
     worker_rpc_manager, master_server = init_grpc_service(ws_manager.client_size)
     logger.info(f"Engine Init Cost Time: {time.time() - s1:.4f}s. Total Layers: {total_layers}")
-    if args.is_image:
-        generator = ImageGenerator(worker_rpc_manager, model)
-    else:
-        generator = LLMGenerator(worker_rpc_manager, model)
+    generator = LLMGenerator(worker_rpc_manager, model)
     engine = AsyncEngine(generator)
 
     await master_server.start(args.grpc_port)

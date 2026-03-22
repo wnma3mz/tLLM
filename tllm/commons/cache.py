@@ -1,27 +1,18 @@
 # coding: utf-8
-import copy
 from dataclasses import dataclass
 import time
 from typing import Dict, Generic, List, Optional, TypeVar
 
-from tllm import BACKEND, DEVICE, DTYPE, ENABLE_PREFILL_CACHE, BackendEnum
+import mlx.core as mx
+
+from tllm import DTYPE, ENABLE_PREFILL_CACHE
 from tllm.commons.radix_tree import RadixTree
 from tllm.schemas import MIX_TENSOR, SeqInput
 
-if BACKEND == BackendEnum.MLX:
-    import mlx.core as mx
-
-    cat_func = lambda tensors: mx.concat(tensors, axis=0)
-    zeros_func = lambda x0, x1, x2: mx.zeros(shape=(x0, x1, x2), dtype=DTYPE)
-    array_func = lambda x: mx.array([x], dtype=mx.int32)
-    arange_func = lambda x: mx.arange(0, x, dtype=mx.int32)
-else:
-    import torch
-
-    cat_func = lambda tensors: torch.cat(tensors, dim=0)
-    zeros_func = lambda x0, x1, x2: torch.zeros(size=(x0, x1, x2), dtype=DTYPE, device=DEVICE)
-    array_func = lambda x: torch.tensor([x], dtype=torch.long)
-    arange_func = lambda x: torch.arange(0, x, dtype=torch.long)
+cat_func = lambda tensors: mx.concat(tensors, axis=0)
+zeros_func = lambda x0, x1, x2: mx.zeros(shape=(x0, x1, x2), dtype=DTYPE)
+array_func = lambda x: mx.array([x], dtype=mx.int32)
+arange_func = lambda x: mx.arange(0, x, dtype=mx.int32)
 
 
 T = TypeVar("T")

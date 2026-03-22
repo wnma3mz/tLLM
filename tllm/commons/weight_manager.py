@@ -8,7 +8,7 @@ from tllm.commons.tp_communicator import BaseCommunicator
 from tllm.models.file_helper import get_model_path
 from tllm.models.register import DEP_MODEL_REGISTER, MODEL_REGISTER
 from tllm.models.text_utils import read_from_text_config
-from tllm.models.weight_helper import load_gguf_weight, read_from_safetensors
+from tllm.models.weight_helper import read_from_safetensors
 
 
 class WeightManager:

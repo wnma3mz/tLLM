@@ -29,8 +29,6 @@ def test_stream(response):
                 time_elapsed = current_time - start_time
                 if tokens_generated == 1:
                     start_time = time.time()
-                elif tokens_generated == 0:
-                    ttft = time_elapsed
 
                 if tokens_generated > 1:
                     tokens_per_second = (tokens_generated - 1) / time_elapsed

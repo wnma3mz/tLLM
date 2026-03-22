@@ -36,14 +36,7 @@ mlx = [
     "mlx-lm==0.31.1",
     "mlx-vlm==0.4.1",
 ]
-torch = ["vllm"]
-all = [
-    "mlx==0.31.1",
-    "mlx-metal==0.31.1",
-    "mlx-lm==0.31.1",
-    "mlx-vlm==0.4.1",
-    "vllm",
-]
+all = ["mlx==0.31.1", "mlx-metal==0.31.1", "mlx-lm==0.31.1", "mlx-vlm==0.4.1"]
 dev = ["black", "isort"]
 
 [project.scripts]
@@ -77,3 +70,6 @@ multi_line_output = 3
 include_trailing_comma = true
 combine_as_imports = true
 force_sort_within_sections = true
+
+[tool.ruff.lint.per-file-ignores]
+"tllm/grpc/proto/schemas_pb2_grpc.py" = ["F401"]

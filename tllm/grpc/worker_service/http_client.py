@@ -37,7 +37,7 @@ class HTTPClient:
                         self.last_ping_time = datetime.now()
                         return True
                     return False
-        except Exception as e:
+        except Exception:
             self.logger.error(f"Ping failed")
             return False
 
