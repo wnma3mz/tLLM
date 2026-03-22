@@ -38,12 +38,19 @@ class TokenizerUtils:
     def decode(
         self, token_ids: List[int], cache_token_ids: List[Optional[List[int]]]
     ) -> Tuple[List[str], List[Optional[List[int]]]]:
-        for i, cache_token_id in enumerate(cache_token_ids):
+        normalized_token_ids: List[List[int]] = []
+        for i, token_id in enumerate(token_ids):
+            cur_token_ids = token_id if isinstance(token_id, list) else [token_id]
+            cache_token_id = cache_token_ids[i]
             if cache_token_id is not None:
-                token_ids[i] = cache_token_id + [token_ids[i]]
+                cur_token_ids = cache_token_id + cur_token_ids
+            normalized_token_ids.append(cur_token_ids)
 
-        decode_str_list = self.tokenizer.batch_decode(token_ids, skip_special_tokens=True)
-        for i, (token_id, decode_str) in enumerate(zip(token_ids, decode_str_list)):
+        decode_str_list = self.tokenizer.batch_decode(normalized_token_ids, skip_special_tokens=True)
+        if len(decode_str_list) < len(normalized_token_ids):
+            decode_str_list.extend([""] * (len(normalized_token_ids) - len(decode_str_list)))
+
+        for i, (token_id, decode_str) in enumerate(zip(normalized_token_ids, decode_str_list)):
             # BPE 解码失败，返回 token_ids, 提供给下次解码
             if decode_str.endswith("�"):
                 cache_token_ids[i] = token_id if isinstance(token_id, list) else [token_id]

@@ -181,6 +181,8 @@ class SequenceRequestData:
             self.is_stop = True
             return None
         if not self.is_stop:
+            if len(self.output_ids) == 0:
+                return None
             return RequestOutput(
                 self.request_id,
                 None,

@@ -1,8 +1,5 @@
 #!/bin/bash
-# MODEL_PATH=mlx-community/Qwen3-30B-A3B-4bit
-MODEL_PATH=mlx-community/Qwen3-8B-4bit
-MODEL_PATH=mlx-community/Qwen3-VL-30B-A3B-Instruct-3bit
-# MODEL_PATH=mlx-community/Qwen3-VL-8B-Instruct-3bit
+MODEL_PATH=mlx-community/Qwen3.5-0.8B-4bit
 MASTER_HOSTNAME=mac-mini
 
 tllm.server --model_path $MODEL_PATH --hostname $MASTER_HOSTNAME --client_size 2
