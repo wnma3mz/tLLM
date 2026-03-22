@@ -82,6 +82,6 @@ For multi-machine deployment, the default part of the port will be used for runn
 
 |                                                  | `mlx-community/Qwen3.5-0.8B-4bit` | `mlx-community/Qwen3.5-9B-4bit` | `mlx-community/Qwen3.5-35A3-4bit` |
 | ------------------------------------------------ | --------------------------------- | ------------------------------- | ---------------------------------- |
-| Mac Mini M4 (16G) (Local)                        | 94.86 tok/s                       | 16.58 tok/s                     | -                                  |
+| Mac Mini M4 (16G) (Local)                        | 89.73 tok/s                       | 16.22 tok/s                     | -                                  |
 | Mac Mini M4 (16G) + M3 Pro (18G) by Thunderbolt5 | -                                 | -                               | -                                  |
 | Mac Mini M4 (16G) + M3 Pro (18G) by LAN          | -                                 | -                               | -                                  |
