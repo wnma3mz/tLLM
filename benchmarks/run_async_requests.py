@@ -1,15 +1,20 @@
 import argparse
 import asyncio
 import json
+import os
+from pathlib import Path
 import random
 import time
 from typing import Any, Dict, List
 
 import aiohttp
 
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_BENCHMARK_BASE = os.environ.get("TLLM_BENCHMARK_BASE", "http://localhost:8022").rstrip("/")
+
 
 async def requests_func(messages: List[Dict[str, Any]]):
-    url = "http://localhost:8022/v1/chat/completions"
+    url = f"{_BENCHMARK_BASE}/v1/chat/completions"
     data = {
         "messages": messages,
         "model": "tt",
@@ -51,7 +56,7 @@ async def main(messages_list: List[List[Dict[str, Any]]], test_type: str):
 
     s1 = time.time()
     results_sync = []
-    for i, message in enumerate(messages_list):
+    for message in messages_list:
         content, status = await requests_func(message)
         results_sync.append((content, status))
     print(f"[单独请求结果] Time cost (sync): {time.time() - s1:.4f} s")
@@ -61,7 +66,8 @@ async def main(messages_list: List[List[Dict[str, Any]]], test_type: str):
 
 
 def load_message():
-    with open("asserts/messages.json", "r") as f:
+    path = _REPO_ROOT / "asserts" / "messages.json"
+    with open(path, "r") as f:
         messages_dict = json.load(f)
     return messages_dict
 

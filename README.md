@@ -84,5 +84,5 @@
 |                                                  | `mlx-community/Qwen3.5-0.8B-4bit` | `mlx-community/Qwen3.5-9B-4bit` | `mlx-community/Qwen3.5-35A3-4bit` |
 | ------------------------------------------------ | --------------------------------- | ------------------------------- | ---------------------------------- |
 | Mac Mini M4 (16G)（本地）                        | 89.73 tok/s                       | 16.22 tok/s                     | -                                  |
-| Mac Mini M4 (16G) + M3 Pro (18G)（Thunderbolt5） | -                                 | -                               | -                                  |
+| Mac Mini M4 (16G) + M3 Pro (18G)（Thunderbolt5） | -                       | -                     | -                                  |
 | Mac Mini M4 (16G) + M3 Pro (18G)（局域网）       | -                                 | -                               | -                                  |
